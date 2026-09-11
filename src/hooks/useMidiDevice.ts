@@ -317,10 +317,8 @@ export function useMidiDevice(): UseMidiDeviceReturn {
   // localStorage cache key for this device's slot names (deviceType + port name),
   // computed during the handshake. null until connected / storage unavailable.
   const cacheKeyRef        = useRef<string | null>(null);
-  // Whether the fast name-only read (sub=0x20, documented for fw 1.8.0) works
-  // on this device. null = untested; probed once per connection, then either
-  // used for every slot or permanently bypassed in favor of full reads.
-  const fastNameReadRef    = useRef<boolean | null>(null);
+  // (fastNameReadRef removed — the sub=0x20 fast name read was unreliable
+  // on hardware; requestSlotName now always uses the proven 7-chunk full read.)
   // While a flash push bounces the device across slots (park → write →
   // return), the device echoes each hop as a preset-change frame. Acting on
   // those would pull the park slot into the editor mid-save; ignore echoes
@@ -701,15 +699,15 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     setCurrentPreset(null);
     setUserIrNames([]);
     setDeviceState(null);
-    fastNameReadRef.current = null;
   }, []);
 
   /** Abort background name loading and wait for it to stop */
   const pauseNameLoading = useCallback(async () => {
     if (namesLoadRunningRef.current) {
       namesLoadAbortRef.current = true;
-      // Wait for the running loop to finish (max ~600ms for one in-flight request)
-      for (let i = 0; i < 20 && namesLoadRunningRef.current; i++) {
+      // Each in-flight name request now collects 7 chunks (up to ~1500ms);
+      // give it up to 2000ms to see the abort flag and exit.
+      for (let i = 0; i < 40 && namesLoadRunningRef.current; i++) {
         await new Promise(r => setTimeout(r, 50));
       }
     }
@@ -952,12 +950,15 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     setCurrentSlot(slot); currentSlotRef.current = slot;
   }, [pauseNameLoading, persistNames]);
 
-  /** Request one slot's name. Fast path (sub=0x20 name-only read, fw 1.8.0)
-   *  when useFast; full 7-chunk read request otherwise. Either way the
-   *  first sub=0x18 chunk with offset 0 carries the name. */
+  /** Request one slot's name by issuing a full 7-chunk read (sub=0x18),
+   *  exactly like pullPreset does. Collects all 7 response chunks, then
+   *  calls parseReadChunks → parsePresetFromDecoded to extract the name.
+   *  The previous fast-path (sub=0x20 name-only read) was unreliable on
+   *  hardware and has been removed. */
   const requestSlotName = useCallback(
-    (slot: number, useFast: boolean, timeoutMs: number): Promise<string | null> => {
+    (slot: number, timeoutMs: number): Promise<string | null> => {
       return new Promise<string | null>((resolve) => {
+        const chunks: Uint8Array[] = [];
         const timer = setTimeout(() => {
           if (inputRef.current) inputRef.current.onmidimessage = onMidiMessage;
           resolve(null);
@@ -967,18 +968,21 @@ export function useMidiDevice(): UseMidiDeviceReturn {
             const data = getBytes(event.data);
             onMidiMessage(event);
             if (isSysEx(data, 0x12, 0x18)) {
-              const off = data[11] | (data[12] << 8);
-              if (off === 0) {
+              chunks.push(new Uint8Array(data));
+              if (chunks.length === 7) {
                 clearTimeout(timer);
                 if (inputRef.current) inputRef.current.onmidimessage = onMidiMessage;
-                resolve(SysExCodec.parsePresetName(data));
+                try {
+                  const preset = SysExCodec.parseReadChunks(chunks);
+                  resolve(preset.patchName ?? null);
+                } catch {
+                  resolve(null);
+                }
               }
             }
           };
         }
-        let req: Uint8Array;
-        if (useFast) req = SysExCodec.buildNameReadRequest(slot);
-        else req = SysExCodec.buildReadRequest(slot);
+        const req = SysExCodec.buildReadRequest(slot);
         outputRef.current!.send(req);
       });
     },
@@ -990,9 +994,10 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     if (namesLoadRunningRef.current) return; // already running
     namesLoadRunningRef.current = true;
     namesLoadAbortRef.current = false;
-    const FULL_TIMEOUT = 500; // device responds in ~20ms normally
-    const FAST_TIMEOUT = 250; // single-chunk response, fail over quickly
-    const BATCH_SIZE = 8;     // Update UI every 8 slots instead of every slot
+    // 7-chunk full read; device typically replies in <100ms per slot but give
+    // generous headroom (1500ms) so a busy device still succeeds.
+    const READ_NAME_TIMEOUT = 1500;
+    const BATCH_SIZE = 8; // update UI every 8 slots to avoid excessive re-renders
 
     for (let s = 0; s < 256; s++) {
       if (namesLoadAbortRef.current) break;
@@ -1000,22 +1005,7 @@ export function useMidiDevice(): UseMidiDeviceReturn {
         setNamesLoadProgress(s + 1);
         continue;
       }
-      let name: string | null = null;
-      if (fastNameReadRef.current !== false) {
-        name = await requestSlotName(s, true, FAST_TIMEOUT);
-        if (name !== null) {
-          fastNameReadRef.current = true;
-        } else if (fastNameReadRef.current === null && !namesLoadAbortRef.current) {
-          // Probe failed on first use; the firmware may not support the
-          // name-only read. Retry this slot with a full read; if THAT works
-          // the fast path is dead for this connection, not the device.
-          const fallback = await requestSlotName(s, false, FULL_TIMEOUT);
-          if (fallback !== null) fastNameReadRef.current = false;
-          name = fallback;
-        }
-      } else {
-        name = await requestSlotName(s, false, FULL_TIMEOUT);
-      }
+      const name = await requestSlotName(s, READ_NAME_TIMEOUT);
       if (namesLoadAbortRef.current) break;
       presetNamesRef.current[s] = name;
       // Batch UI updates: only re-render every BATCH_SIZE slots or on the last slot
@@ -1044,25 +1034,12 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     namesLoadRunningRef.current = true;
     namesLoadAbortRef.current = false;
     setNamesSyncing(true);
-    const FULL_TIMEOUT = 500;
-    const FAST_TIMEOUT = 250;
+    const READ_NAME_TIMEOUT = 1500;
     let changed = false;
 
     for (let s = 0; s < 256; s++) {
       if (namesLoadAbortRef.current) break;
-      let name: string | null = null;
-      if (fastNameReadRef.current !== false) {
-        name = await requestSlotName(s, true, FAST_TIMEOUT);
-        if (name !== null) {
-          fastNameReadRef.current = true;
-        } else if (fastNameReadRef.current === null && !namesLoadAbortRef.current) {
-          const fallback = await requestSlotName(s, false, FULL_TIMEOUT);
-          if (fallback !== null) fastNameReadRef.current = false;
-          name = fallback;
-        }
-      } else {
-        name = await requestSlotName(s, false, FULL_TIMEOUT);
-      }
+      const name = await requestSlotName(s, READ_NAME_TIMEOUT);
       if (namesLoadAbortRef.current) break;
       // A null read is a transient miss (timeout), so keep the cached value rather
       // than blanking a slot we already have a good name for.

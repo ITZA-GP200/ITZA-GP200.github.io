@@ -180,7 +180,14 @@ function App() {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [slotBrowserMode, setSlotBrowserMode] = useState<'pull' | 'push' | null>(null);
-  const [clipboard, setClipboard] = useState<{ preset: GP200Preset; label: string } | null>(null);
+  // Multi-patch clipboard: source slot indices + full preset data for each.
+  // Legacy single-slot operations read clipboard.items[0] where needed.
+  const [clipboard, setClipboard] = useState<{
+    source: number[];
+    items: GP200Preset[];
+    label: string;
+    count: number;
+  } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [firmwareWarningDismissed, setFirmwareWarningDismissed] = useState(false);
@@ -598,29 +605,272 @@ function App() {
     }
   }
 
-  // In-app patch clipboard, for copy/paste and swap in the patch manager.
+  // ── In-app patch clipboard ────────────────────────────────────────────────
   // Built on pullPreset/pushPreset — the same proven read and flash-upload
   // path the per-slot EXPORT and IMPORT buttons already use — rather than the
   // device's own patch-move message, which is decoded but not hardware-verified
   // and would reshuffle all 256 slots if it turned out to be wrong.
-  async function handleCopySlot(slot: number) {
+
+  /** Human-readable range label for a set of slot indices. */
+  function slotsRangeLabel(slots: number[]): string {
+    const sorted = [...slots].sort((a, b) => a - b);
+    if (sorted.length === 0) return '';
+    if (sorted.length === 1) return SysExCodec.slotToLabel(sorted[0]);
+    const span = sorted[sorted.length - 1] - sorted[0];
+    const contiguous = span === sorted.length - 1;
+    if (contiguous) return `${SysExCodec.slotToLabel(sorted[0])}–${SysExCodec.slotToLabel(sorted[sorted.length - 1])}`;
+    if (sorted.length <= 4) return sorted.map(s => SysExCodec.slotToLabel(s)).join(', ');
+    return sorted.slice(0, 3).map(s => SysExCodec.slotToLabel(s)).join(', ') + ` +${sorted.length - 3}`;
+  }
+
+  /**
+   * Copy one or more slots to the clipboard.
+   * Reads each slot sequentially from the device (MIDI-safe).
+   */
+  async function handleCopySlots(slots: number[]) {
+    const sorted = [...slots].sort((a, b) => a - b);
     try {
-      const pulled = await midiDevice.pullPreset(slot);
-      setClipboard({ preset: pulled, label: SysExCodec.slotToLabel(slot) });
+      const items: GP200Preset[] = [];
+      for (const s of sorted) items.push(await midiDevice.pullPreset(s));
+      setClipboard({ source: sorted, items, label: slotsRangeLabel(sorted), count: items.length });
       setLoadError(null);
     } catch {
-      setLoadError(`Failed to copy ${SysExCodec.slotToLabel(slot)} from device`);
+      setLoadError(`Failed to copy ${slotsRangeLabel(sorted)} from device`);
     }
   }
 
+  /** Legacy single-slot copy (used by existing buttons). */
+  async function handleCopySlot(slot: number) {
+    return handleCopySlots([slot]);
+  }
+
+  /**
+   * Paste clipboard content starting at `slot`, overwriting in place.
+   * Uses only the first item for legacy single-slot callers.
+   */
   async function handlePasteToSlot(slot: number) {
     if (!clipboard) return;
+    // Legacy single-slot: use first item in the multi-preset clipboard.
+    const item = clipboard.items[0];
+    if (!item) return;
     try {
-      await midiDevice.pushPreset({ ...clipboard.preset, slotIndex: slot }, slot);
+      await midiDevice.pushPreset({ ...item, slotIndex: slot }, slot);
       setLoadError(null);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       setLoadError(`Failed to paste into ${SysExCodec.slotToLabel(slot)}: ${detail}`);
+    }
+  }
+
+  /**
+   * Paste clipboard content starting at `targetSlot`, overwriting in place.
+   * Handles multi-patch clipboard.
+   */
+  async function handlePasteOverwrite(targetSlot: number) {
+    if (!clipboard || bulkProgress) return;
+    const { items } = clipboard;
+    bulkCancelRef.current = false;
+    setBulkProgress({ done: 0, total: items.length, phase: 'Pasting…' });
+    try {
+      for (let i = 0; i < items.length; i++) {
+        if (bulkCancelRef.current) return;
+        const dest = targetSlot + i;
+        if (dest >= 256) break;
+        await midiDevice.pushPreset({ ...items[i], slotIndex: dest }, dest);
+        setBulkProgress({ done: i + 1, total: items.length, phase: 'Pasting…' });
+      }
+      setLoadError(null);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      setLoadError(`Failed to paste: ${detail}`);
+    } finally {
+      setBulkProgress(null);
+      if (midiDevice.status === 'connected') void midiDevice.loadPresetNames();
+    }
+  }
+
+  /**
+   * Paste clipboard content by INSERT at `targetSlot`:
+   * shifts slots target..lastOccupied down by N; last N patches are lost.
+   */
+  async function handlePasteInsert(targetSlot: number) {
+    if (!clipboard || bulkProgress) return;
+    const { items } = clipboard;
+    const n = items.length;
+    const last = Math.min(lastOccupiedSlot(255 - n), 255 - n);
+    if (targetSlot > last) { await handlePasteOverwrite(targetSlot); return; }
+    const shiftCount = last - targetSlot + 1;
+    const total = shiftCount * 2 + n;
+    bulkCancelRef.current = false;
+    setBulkProgress({ done: 0, total, phase: 'Reading…' });
+    try {
+      const affected: GP200Preset[] = [];
+      for (let s = targetSlot; s <= last; s++) {
+        if (bulkCancelRef.current) return;
+        affected.push(await midiDevice.pullPreset(s));
+        setBulkProgress({ done: affected.length, total, phase: 'Reading…' });
+      }
+      for (let i = affected.length - 1; i >= 0; i--) {
+        if (bulkCancelRef.current) return;
+        const dest = targetSlot + n + i;
+        if (dest <= 255) await midiDevice.pushPreset({ ...affected[i], slotIndex: dest }, dest);
+        setBulkProgress({ done: shiftCount + (affected.length - i), total, phase: 'Shifting…' });
+      }
+      for (let i = 0; i < n; i++) {
+        if (bulkCancelRef.current) return;
+        const dest = targetSlot + i;
+        await midiDevice.pushPreset({ ...items[i], slotIndex: dest }, dest);
+        setBulkProgress({ done: shiftCount * 2 + i + 1, total, phase: 'Inserting…' });
+      }
+      setLoadError(null);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      setLoadError(`Failed to insert-paste: ${detail}`);
+    } finally {
+      setBulkProgress(null);
+      if (midiDevice.status === 'connected') void midiDevice.loadPresetNames();
+    }
+  }
+
+  /**
+   * Paste via SWAP: clipboard goes to target..target+N-1; whatever was there
+   * moves back to the original clipboard source slots.  Nothing lost.
+   */
+  async function handlePasteSwap(targetSlot: number) {
+    if (!clipboard || bulkProgress) return;
+    const { source, items } = clipboard;
+    const n = items.length;
+    const total = n * 4;
+    bulkCancelRef.current = false;
+    setBulkProgress({ done: 0, total, phase: 'Reading…' });
+    try {
+      // Read target slots (what will be displaced)
+      const displaced: GP200Preset[] = [];
+      for (let i = 0; i < n; i++) {
+        if (bulkCancelRef.current) return;
+        displaced.push(await midiDevice.pullPreset(targetSlot + i));
+        setBulkProgress({ done: displaced.length, total, phase: 'Reading…' });
+      }
+      // Write clipboard items to target
+      for (let i = 0; i < n; i++) {
+        if (bulkCancelRef.current) return;
+        const dest = targetSlot + i;
+        await midiDevice.pushPreset({ ...items[i], slotIndex: dest }, dest);
+        setBulkProgress({ done: n + i + 1, total, phase: 'Writing clipboard…' });
+      }
+      // Write displaced items back to original source slots
+      for (let i = 0; i < Math.min(displaced.length, source.length); i++) {
+        if (bulkCancelRef.current) return;
+        const dest = source[i];
+        await midiDevice.pushPreset({ ...displaced[i], slotIndex: dest }, dest);
+        setBulkProgress({ done: n * 2 + n + i + 1, total, phase: 'Writing displaced…' });
+      }
+      // Clipboard becomes what was displaced (standard "swap clears clipboard" behavior)
+      setClipboard(null);
+      setLoadError(null);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      setLoadError(`Failed to swap-paste: ${detail}`);
+    } finally {
+      setBulkProgress(null);
+      if (midiDevice.status === 'connected') void midiDevice.loadPresetNames();
+    }
+  }
+
+  /**
+   * Context menu PASTE dispatcher — routes to the correct sub-operation.
+   */
+  async function handleContextPaste(targetSlot: number, method: 'overwrite' | 'insert' | 'swap') {
+    if (method === 'overwrite') await handlePasteOverwrite(targetSlot);
+    else if (method === 'insert') await handlePasteInsert(targetSlot);
+    else await handlePasteSwap(targetSlot);
+  }
+
+  /**
+   * Context menu INSERT dispatcher — inserts N blank or clipboard patches.
+   */
+  async function handleContextInsert(
+    targetSlot: number,
+    mode: 'default' | 'clipboard',
+    count: number,
+  ) {
+    if (bulkProgress) return;
+    const last = Math.min(lastOccupiedSlot(255 - count), 255 - count);
+    const shiftCount = targetSlot <= last ? last - targetSlot + 1 : 0;
+    const total = shiftCount * 2 + count;
+    bulkCancelRef.current = false;
+    setBulkProgress({ done: 0, total, phase: 'Reading…' });
+    try {
+      const affected: GP200Preset[] = [];
+      for (let s = targetSlot; s <= last; s++) {
+        if (bulkCancelRef.current) return;
+        affected.push(await midiDevice.pullPreset(s));
+        setBulkProgress({ done: affected.length, total, phase: 'Reading…' });
+      }
+      for (let i = affected.length - 1; i >= 0; i--) {
+        if (bulkCancelRef.current) return;
+        const dest = targetSlot + count + i;
+        if (dest <= 255) await midiDevice.pushPreset({ ...affected[i], slotIndex: dest }, dest);
+        setBulkProgress({ done: shiftCount + (affected.length - i), total, phase: 'Shifting…' });
+      }
+      // Build the insert items
+      const insertItems: GP200Preset[] = [];
+      if (mode === 'default') {
+        for (let k = 0; k < count; k++) insertItems.push(createDefaultPreset());
+      } else {
+        if (!clipboard) return;
+        for (let k = 0; k < count; k++) insertItems.push(clipboard.items[k % clipboard.items.length]);
+      }
+      for (let i = 0; i < insertItems.length; i++) {
+        if (bulkCancelRef.current) return;
+        const dest = targetSlot + i;
+        await midiDevice.pushPreset({ ...insertItems[i], slotIndex: dest }, dest);
+        setBulkProgress({ done: shiftCount * 2 + i + 1, total, phase: 'Inserting…' });
+      }
+      setLoadError(null);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      setLoadError(`Failed to insert: ${detail}`);
+    } finally {
+      setBulkProgress(null);
+      if (midiDevice.status === 'connected') void midiDevice.loadPresetNames();
+    }
+  }
+
+  /**
+   * Context menu RESET — overwrites selected slots with factory-default preset.
+   */
+  async function handleResetSlots(slots: number[]) {
+    if (bulkProgress) return;
+    bulkCancelRef.current = false;
+    setBulkProgress({ done: 0, total: slots.length, phase: 'Resetting…' });
+    try {
+      for (let i = 0; i < slots.length; i++) {
+        if (bulkCancelRef.current) return;
+        const blank = createDefaultPreset();
+        await midiDevice.pushPreset({ ...blank, slotIndex: slots[i], patchName: "It's GP-200" }, slots[i]);
+        setBulkProgress({ done: i + 1, total: slots.length, phase: 'Resetting…' });
+      }
+      setLoadError(null);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      setLoadError(`Failed to reset: ${detail}`);
+    } finally {
+      setBulkProgress(null);
+      if (midiDevice.status === 'connected') void midiDevice.loadPresetNames();
+    }
+  }
+
+  /**
+   * Context menu CUT — copy selected slots to clipboard then remove+shift them.
+   */
+  async function handleCutSlots(slots: number[]) {
+    if (bulkProgress) return;
+    await handleCopySlots(slots);
+    // Remove each slot by shift-up, highest first to preserve lower indices
+    const sorted = [...slots].sort((a, b) => b - a);
+    for (const slot of sorted) {
+      await handleRemoveShift(slot);
     }
   }
 
@@ -643,6 +893,135 @@ function App() {
     } finally {
       if (midiDevice.status === 'connected') midiDevice.loadPresetNames();
     }
+  }
+
+  /**
+   * Returns the highest slot index that has a non-null name, capped at `cap`.
+   * Used by insert/remove to know where the occupied region ends so we don't
+   * cascade blank reads across the entire 256-slot space.
+   */
+  function lastOccupiedSlot(cap: number): number {
+    const names = midiDevice.presetNames;
+    for (let s = cap; s >= 0; s--) {
+      if (names[s] !== null && names[s] !== undefined && names[s] !== '') return s;
+    }
+    return 0;
+  }
+
+  /**
+   * Insert the clipboard patch BEFORE `slot`, shifting every patch from
+   * slot..lastOccupied down by one position.  Read all affected patches first
+   * so a failed read aborts before any writes touch the device.
+   */
+  async function handleInsertBefore(slot: number) {
+    if (!clipboard || bulkProgress) return;
+    const last = Math.min(lastOccupiedSlot(254), 254); // cap: 255 gets overwritten, not lost
+    if (slot > last) {
+      // Beyond occupied range — just paste directly (no shifting needed).
+      await handlePasteToSlot(slot);
+      return;
+    }
+    const count = last - slot + 1; // patches that need to shift
+    bulkCancelRef.current = false;
+    setBulkProgress({ done: 0, total: count * 2 + 1, phase: 'Inserting…' });
+    try {
+      // Phase 1: read all patches that will shift (fail-safe before any writes).
+      const affected: GP200Preset[] = [];
+      for (let s = slot; s <= last; s++) {
+        if (bulkCancelRef.current) return;
+        affected.push(await midiDevice.pullPreset(s));
+        setBulkProgress({ done: affected.length, total: count * 2 + 1, phase: 'Reading…' });
+      }
+      // Phase 2: write shifted patches from the bottom up (avoids clobbering unread slots).
+      for (let i = affected.length - 1; i >= 0; i--) {
+        if (bulkCancelRef.current) return;
+        const targetSlot = slot + i + 1;
+        if (targetSlot <= 255) {
+          await midiDevice.pushPreset({ ...affected[i], slotIndex: targetSlot }, targetSlot);
+        }
+        setBulkProgress({ done: count + (affected.length - i), total: count * 2 + 1, phase: 'Shifting…' });
+      }
+      // Phase 3: write clipboard to the freed slot.
+      if (!bulkCancelRef.current) {
+        await midiDevice.pushPreset({ ...clipboard.preset, slotIndex: slot }, slot);
+      }
+      setLoadError(null);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      setLoadError(`Failed to insert before ${SysExCodec.slotToLabel(slot)}: ${detail}`);
+    } finally {
+      setBulkProgress(null);
+      if (midiDevice.status === 'connected') void midiDevice.loadPresetNames();
+    }
+  }
+
+  /**
+   * Remove the patch at `slot` and shift every patch from slot+1..lastOccupied
+   * up by one.  The final occupied slot is overwritten with an init preset so
+   * it no longer shows as occupied after a name refresh.
+   */
+  async function handleRemoveShift(slot: number) {
+    if (bulkProgress) return;
+    const last = lastOccupiedSlot(255);
+    if (slot >= last) {
+      // Last (or only) occupied slot — just clear it directly.
+      const blank = createDefaultPreset();
+      try {
+        await midiDevice.pushPreset({ ...blank, slotIndex: slot, patchName: '' }, slot);
+        setLoadError(null);
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        setLoadError(`Failed to clear ${SysExCodec.slotToLabel(slot)}: ${detail}`);
+      } finally {
+        if (midiDevice.status === 'connected') void midiDevice.loadPresetNames();
+      }
+      return;
+    }
+    const count = last - slot; // number of patches shifting up
+    bulkCancelRef.current = false;
+    setBulkProgress({ done: 0, total: count * 2 + 1, phase: 'Removing…' });
+    try {
+      // Phase 1: read patches that will shift up (slot+1..last).
+      const affected: GP200Preset[] = [];
+      for (let s = slot + 1; s <= last; s++) {
+        if (bulkCancelRef.current) return;
+        affected.push(await midiDevice.pullPreset(s));
+        setBulkProgress({ done: affected.length, total: count * 2 + 1, phase: 'Reading…' });
+      }
+      // Phase 2: write each patch one position earlier.
+      for (let i = 0; i < affected.length; i++) {
+        if (bulkCancelRef.current) return;
+        const targetSlot = slot + i;
+        await midiDevice.pushPreset({ ...affected[i], slotIndex: targetSlot }, targetSlot);
+        setBulkProgress({ done: count + i + 1, total: count * 2 + 1, phase: 'Shifting…' });
+      }
+      // Phase 3: clear the (now-duplicate) last slot with an init patch.
+      if (!bulkCancelRef.current) {
+        const blank = createDefaultPreset();
+        await midiDevice.pushPreset({ ...blank, slotIndex: last, patchName: '' }, last);
+      }
+      setLoadError(null);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      setLoadError(`Failed to remove ${SysExCodec.slotToLabel(slot)}: ${detail}`);
+    } finally {
+      setBulkProgress(null);
+      if (midiDevice.status === 'connected') void midiDevice.loadPresetNames();
+    }
+  }
+
+  /**
+   * Cut: copy the patch to the clipboard and then remove + shift it.
+   * Equivalent to COPY → REMOVE+SHIFT so the user can then PASTE INSERT elsewhere.
+   */
+  async function handleCutSlot(slot: number) {
+    if (bulkProgress) return;
+    try {
+      await handleCopySlot(slot);
+    } catch {
+      return; // handleCopySlot already sets loadError
+    }
+    await handleRemoveShift(slot);
   }
 
   async function handleRenameSlot(slot: number, name: string) {
@@ -1054,11 +1433,20 @@ function App() {
         onPasteToSlot={handlePasteToSlot}
         onSwapSlots={handleSwapSlots}
         clipboardLabel={clipboard?.label ?? null}
+        onInsertBefore={handleInsertBefore}
+        onRemoveShift={handleRemoveShift}
+        onCutSlot={handleCutSlot}
         onRenameSlot={handleRenameSlot}
         onRefreshNames={() => void midiDevice.refreshNames()}
         onImportFile={handleFile}
         onExportRequest={() => setShowExportDialog(true)}
         userIrNames={midiDevice.userIrNames}
+        clipboardForMenu={clipboard ? { source: clipboard.source, label: clipboard.label, count: clipboard.count } : null}
+        onCopySlots={handleCopySlots}
+        onCutSlots={handleCutSlots}
+        onContextPaste={handleContextPaste}
+        onContextInsert={handleContextInsert}
+        onResetSlots={handleResetSlots}
       />
 
       {slotBrowserMode && (

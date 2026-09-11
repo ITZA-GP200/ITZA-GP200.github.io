@@ -14,6 +14,8 @@ export interface PatchPickerProps {
   onSelect: (slot: number, modifiers?: { shift: boolean; toggle: boolean }) => void;
   /** double-click / Enter confirm */
   onActivate?: (slot: number) => void;
+  /** right-click / ⋯ context menu (pixel coordinates of the trigger point) */
+  onContextMenu?: (slot: number, x: number, y: number) => void;
 }
 
 interface PatchRow {
@@ -100,6 +102,7 @@ export function PatchPicker({
   multiSelected,
   onSelect,
   onActivate,
+  onContextMenu,
 }: PatchPickerProps) {
   const rows = useMemo(() => buildRows(presetNames), [presetNames]);
   const categories = useMemo(() => buildBankCategories(rows), [rows]);
@@ -217,6 +220,11 @@ export function PatchPicker({
                       toggle: event.ctrlKey || event.metaKey,
                     })}
                     onDoubleClick={() => handleActivate(row.slot)}
+                    onContextMenu={(event) => {
+                      if (!onContextMenu) return;
+                      event.preventDefault();
+                      onContextMenu(row.slot, event.clientX, event.clientY);
+                    }}
                   >
                     <span className="pp-badge">{row.label}</span>
                     <span className="pp-name">{slotName(row.name, namesLoadProgress)}</span>

@@ -2,6 +2,12 @@ import { useRef, useState } from 'react';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
 import { PatchPicker } from './PatchPicker';
+import {
+  PatchContextMenu,
+  type ContextMenuClipboard,
+  type InsertMode,
+  type PasteMethod,
+} from './PatchContextMenu';
 import { SysExCodec } from '@/core/SysExCodec';
 import {
   EMPTY_SELECTION,
@@ -15,6 +21,8 @@ import {
 export interface BulkExportProgress {
   done: number;
   total: number;
+  /** Optional label shown before the X/Y counter (e.g. "Inserting…" or "Shifting…"). */
+  phase?: string;
 }
 
 export interface PatchManagerSheetProps {
@@ -41,6 +49,20 @@ export interface PatchManagerSheetProps {
   onSwapSlots: (first: number, second: number) => Promise<void>;
   /** Label of whatever is on the clipboard, or null when it is empty. */
   clipboardLabel: string | null;
+  /**
+   * Insert the clipboard patch BEFORE this slot, shifting slots slot..254
+   * down to slot+1..255.  No-op when clipboard is empty.
+   */
+  onInsertBefore: (slot: number) => Promise<void>;
+  /**
+   * Remove the patch at this slot and shift slots slot+1..255 up by one,
+   * leaving the last occupied slot with a blank init patch.
+   */
+  onRemoveShift: (slot: number) => Promise<void>;
+  /**
+   * Copy the patch to the clipboard and then remove+shift it (Cut semantics).
+   */
+  onCutSlot: (slot: number) => Promise<void>;
   onRenameSlot: (slot: number, name: string) => Promise<void>;
   onRefreshNames: () => void;
   /** Load a .prst into the editor buffer (pushes + saves when connected). */
@@ -49,6 +71,19 @@ export interface PatchManagerSheetProps {
   onExportRequest: () => void;
   /** User-IR slot names enumerated at connect (30 entries; empty offline). */
   userIrNames: string[];
+  // ── Context-menu operations ───────────────────────────────────────────────
+  /** Display-safe clipboard info for the context menu (no preset data). */
+  clipboardForMenu: ContextMenuClipboard | null;
+  /** Copy selected slots to clipboard. */
+  onCopySlots: (slots: number[]) => Promise<void>;
+  /** Cut (copy + remove+shift) selected slots. */
+  onCutSlots: (slots: number[]) => Promise<void>;
+  /** Paste clipboard at target slot using the specified method. */
+  onContextPaste: (targetSlot: number, method: PasteMethod) => Promise<void>;
+  /** Insert blank/clipboard patches at target slot. */
+  onContextInsert: (targetSlot: number, mode: InsertMode, count: number) => Promise<void>;
+  /** Overwrite selected slots with factory init. */
+  onResetSlots: (slots: number[]) => Promise<void>;
 }
 
 function bankSlotsOf(slot: number): number[] {
@@ -84,11 +119,20 @@ export function PatchManagerSheet({
   onPasteToSlot,
   onSwapSlots,
   clipboardLabel,
+  onInsertBefore,
+  onRemoveShift,
+  onCutSlot,
   onRenameSlot,
   onRefreshNames,
   onImportFile,
   onExportRequest,
   userIrNames,
+  clipboardForMenu,
+  onCopySlots,
+  onCutSlots,
+  onContextPaste,
+  onContextInsert,
+  onResetSlots,
 }: PatchManagerSheetProps) {
   // Anchor + extras. The anchor is what every single-slot action acts on, so
   // multi-select sits on top of those buttons without changing them.
@@ -102,6 +146,7 @@ export function PatchManagerSheet({
   const pendingImportRef = useRef<Uint8Array | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editorFileInputRef = useRef<HTMLInputElement>(null);
+  const [ctxMenuPos, setCtxMenuPos] = useState<{ x: number; y: number } | null>(null);
 
   const namesLoading = namesLoadProgress < 256;
   const bulkRunning = bulkProgress !== null;
@@ -126,6 +171,19 @@ export function PatchManagerSheet({
 
   function clearSelection() {
     setSelection(collapseToAnchor);
+  }
+
+  /**
+   * Called when the user right-clicks a patch row (or clicks its ⋯ button).
+   * If the clicked slot is not in the current selection, collapse to it first
+   * (standard OS context-menu behavior), then open the menu.
+   */
+  function handleRowContextMenu(slot: number, x: number, y: number) {
+    const currentSlots = slotsOf(selection);
+    if (!currentSlots.includes(slot)) {
+      setSelection(selectSlot(EMPTY_SELECTION, slot));
+    }
+    setCtxMenuPos({ x, y });
   }
 
   function handleActivateFromPicker(slot: number) {
@@ -199,6 +257,7 @@ export function PatchManagerSheet({
   }
 
   return (
+    <>
     <Dialog
       open={open}
       onClose={onClose}
@@ -384,6 +443,7 @@ export function PatchManagerSheet({
           multiSelected={selection.extra}
           onSelect={handleSelect}
           onActivate={handleActivateFromPicker}
+          onContextMenu={handleRowContextMenu}
         />
       </div>
 
@@ -511,6 +571,17 @@ export function PatchManagerSheet({
           <Button
             size="sm"
             variant="ghost"
+            disabled={actionsDisabled}
+            onClick={() => {
+              if (selected !== null) void runBusy(() => onCutSlot(selected));
+            }}
+            title={`Copy ${selectedLabel} to clipboard then remove it and shift everything above up (Cut)`}
+          >
+            CUT
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
             disabled={actionsDisabled || clipboardLabel === null}
             onClick={() => {
               if (selected !== null) void runBusy(() => onPasteToSlot(selected));
@@ -519,7 +590,31 @@ export function PatchManagerSheet({
               ? `Overwrite ${selectedLabel} with the copied patch (${clipboardLabel})`
               : 'Copy a patch first'}
           >
-            PASTE{clipboardLabel ? ` (${clipboardLabel})` : ''}
+            PASTE OVER{clipboardLabel ? ` (${clipboardLabel})` : ''}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={actionsDisabled || clipboardLabel === null}
+            onClick={() => {
+              if (selected !== null) void runBusy(() => onInsertBefore(selected));
+            }}
+            title={clipboardLabel
+              ? `Insert ${clipboardLabel} BEFORE ${selectedLabel}, shifting ${selectedLabel} and everything below it down one slot`
+              : 'Copy a patch first, then Insert will place it here and shift the rest down'}
+          >
+            PASTE▸INSERT↑{clipboardLabel ? ` (${clipboardLabel})` : ''}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={actionsDisabled}
+            onClick={() => {
+              if (selected !== null) void runBusy(() => onRemoveShift(selected));
+            }}
+            title={`Remove ${selectedLabel} and shift everything below it up one slot (the last occupied slot is cleared to init)`}
+          >
+            DELETE▸SHIFT↑
           </Button>
           <Button
             size="sm"
@@ -610,7 +705,7 @@ export function PatchManagerSheet({
               role="status"
               aria-live="polite"
             >
-              {bulkProgress.done}/{bulkProgress.total}
+              {bulkProgress.phase ? `${bulkProgress.phase} ` : ''}{bulkProgress.done}/{bulkProgress.total}
               <button
                 type="button"
                 onClick={onCancelBulk}
@@ -665,5 +760,41 @@ export function PatchManagerSheet({
         </div>
       )}
     </Dialog>
+
+    {/* Context menu — rendered as a portal, outside the Dialog, so it
+        escapes the Dialog's overflow and stacking context. */}
+    <PatchContextMenu
+      position={ctxMenuPos}
+      selection={slotsOf(selection)}
+      clipboard={clipboardForMenu}
+      onClose={() => setCtxMenuPos(null)}
+      onCopy={() => {
+        void onCopySlots(slotsOf(selection));
+        setCtxMenuPos(null);
+      }}
+      onCut={() => {
+        void onCutSlots(slotsOf(selection));
+        setCtxMenuPos(null);
+      }}
+      onPaste={(method) => {
+        const slots = slotsOf(selection);
+        if (slots.length === 0) return;
+        void onContextPaste(slots[0], method);
+        setCtxMenuPos(null);
+      }}
+      onInsert={(mode, count) => {
+        const slots = slotsOf(selection);
+        if (slots.length === 0) return;
+        void onContextInsert(slots[0], mode, count);
+        setCtxMenuPos(null);
+      }}
+      onReset={() => {
+        void onResetSlots(slotsOf(selection));
+        setCtxMenuPos(null);
+      }}
+      onUndo={() => { /* phase 2 */ setCtxMenuPos(null); }}
+      onRedo={() => { /* phase 2 */ setCtxMenuPos(null); }}
+    />
+    </>
   );
 }
