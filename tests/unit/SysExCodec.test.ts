@@ -311,6 +311,29 @@ describe.skipIf(!HAS_UPLOAD_FIXTURE)('SysExCodec: flash upload (buildUploadImage
   });
 });
 
+describe('SysExCodec: flash upload slot addressing', () => {
+  // Addressing doesn't depend on patch content, so a blank image will do.
+  const image = new Uint8Array(400);
+
+  it('puts slots up to MAX_UPLOAD_SLOT in the chunk header unchanged', () => {
+    for (const chunk of SysExCodec.buildUploadChunks(image, 127)) {
+      expect(chunk[10]).toBe(127);
+    }
+  });
+
+  it('refuses slots it cannot address instead of wrapping them (63C must not land on 31C)', () => {
+    expect(SysExCodec.MAX_UPLOAD_SLOT).toBe(127);
+    expect(() => SysExCodec.buildUploadChunks(image, 128)).toThrow(RangeError);
+    expect(() => SysExCodec.buildUploadChunks(image, 250)).toThrow(RangeError);
+    expect(() => SysExCodec.buildUploadChunks(image, -1)).toThrow(RangeError);
+  });
+
+  it('names the refused slot in the user-facing message', () => {
+    expect(SysExCodec.describeUnwritableSlot(250)).toContain('63C');
+    expect(SysExCodec.slotToLabel(128)).toBe('33A');
+  });
+});
+
 describe('SysExCodec: handshake builders', () => {
   it('buildIdentityQuery returns exact 22-byte message', () => {
     const msg = SysExCodec.buildIdentityQuery();

@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { usePreset } from '@/hooks/usePreset';
 import { applyFxScenario, findFxScenario } from '@/core/fxScenarios';
 import { patchStyleName } from '@/core/patchStyles';
-import { useMidiDevice } from '@/hooks/useMidiDevice';
+import { SlotWriteError, useMidiDevice } from '@/hooks/useMidiDevice';
 import { useLooper } from '@/hooks/useLooper';
 import { useDrumMachine } from '@/hooks/useDrumMachine';
 import { useAudioEngine } from '@/components/AudioEngineProvider';
@@ -588,13 +588,48 @@ function App() {
     }
   }
 
+  /**
+   * Flash-upload one slot and mirror the result into the editor. pushPreset
+   * leaves the pedal sitting on `slot` and reads it back, so loading that
+   * readback keeps the top bar on what the pedal actually plays, including
+   * when the write was refused and the slot still holds its old patch.
+   */
+  async function writeSlot(source: GP200Preset, slot: number): Promise<void> {
+    try {
+      loadPreset(await midiDevice.pushPreset({ ...source, slotIndex: slot }, slot));
+    } catch (err) {
+      if (err instanceof SlotWriteError && err.readback) loadPreset(err.readback);
+      throw err;
+    }
+  }
+
+  /** Every slot from `first` to `last`, inclusive. */
+  function slotSpan(first: number, last: number): number[] {
+    const slots: number[] = [];
+    for (let slot = first; slot <= last; slot++) slots.push(slot);
+    return slots;
+  }
+
+  /**
+   * Refuse a job before it touches the pedal when any slot it would write is
+   * past SysExCodec.MAX_UPLOAD_SLOT. pushPreset refuses those slots too, but
+   * only one write at a time: a shift stopped halfway leaves duplicates.
+   */
+  function refuseUnwritable(slots: number[]): boolean {
+    const blocked = slots.filter((slot) => slot > SysExCodec.MAX_UPLOAD_SLOT);
+    if (blocked.length === 0) return false;
+    setLoadError(SysExCodec.describeUnwritableSlot(Math.min(...blocked)));
+    return true;
+  }
+
   async function handleImportToSlot(slot: number, bytes: Uint8Array) {
+    if (refuseUnwritable([slot])) return;
     try {
       const decoded = new PRSTDecoder(bytes).decode();
       // Flash-upload path (chunked 0x12/0x20, mirrors the official editor):
       // full fidelity including the CTRL/EXP controls tail, and much faster
       // than the per-parameter writePresetToSlot fallback.
-      await midiDevice.pushPreset(decoded, slot);
+      await writeSlot(decoded, slot);
       setLoadError(null);
       track('preset_import', { target: 'slot', ok: true });
     } catch (err) {
@@ -653,8 +688,9 @@ function App() {
     // Legacy single-slot: use first item in the multi-preset clipboard.
     const item = clipboard.items[0];
     if (!item) return;
+    if (refuseUnwritable([slot])) return;
     try {
-      await midiDevice.pushPreset({ ...item, slotIndex: slot }, slot);
+      await writeSlot(item, slot);
       setLoadError(null);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
@@ -669,6 +705,7 @@ function App() {
   async function handlePasteOverwrite(targetSlot: number) {
     if (!clipboard || bulkProgress) return;
     const { items } = clipboard;
+    if (refuseUnwritable(slotSpan(targetSlot, Math.min(targetSlot + items.length - 1, 255)))) return;
     bulkCancelRef.current = false;
     setBulkProgress({ done: 0, total: items.length, phase: 'Pasting…' });
     try {
@@ -676,7 +713,7 @@ function App() {
         if (bulkCancelRef.current) return;
         const dest = targetSlot + i;
         if (dest >= 256) break;
-        await midiDevice.pushPreset({ ...items[i], slotIndex: dest }, dest);
+        await writeSlot(items[i], dest);
         setBulkProgress({ done: i + 1, total: items.length, phase: 'Pasting…' });
       }
       setLoadError(null);
@@ -699,6 +736,7 @@ function App() {
     const n = items.length;
     const last = Math.min(lastOccupiedSlot(255 - n), 255 - n);
     if (targetSlot > last) { await handlePasteOverwrite(targetSlot); return; }
+    if (refuseUnwritable(slotSpan(targetSlot, last + n))) return;
     const shiftCount = last - targetSlot + 1;
     const total = shiftCount * 2 + n;
     bulkCancelRef.current = false;
@@ -713,13 +751,13 @@ function App() {
       for (let i = affected.length - 1; i >= 0; i--) {
         if (bulkCancelRef.current) return;
         const dest = targetSlot + n + i;
-        if (dest <= 255) await midiDevice.pushPreset({ ...affected[i], slotIndex: dest }, dest);
+        if (dest <= 255) await writeSlot(affected[i], dest);
         setBulkProgress({ done: shiftCount + (affected.length - i), total, phase: 'Shifting…' });
       }
       for (let i = 0; i < n; i++) {
         if (bulkCancelRef.current) return;
         const dest = targetSlot + i;
-        await midiDevice.pushPreset({ ...items[i], slotIndex: dest }, dest);
+        await writeSlot(items[i], dest);
         setBulkProgress({ done: shiftCount * 2 + i + 1, total, phase: 'Inserting…' });
       }
       setLoadError(null);
@@ -741,6 +779,7 @@ function App() {
     const { source, items } = clipboard;
     const n = items.length;
     const total = n * 4;
+    if (refuseUnwritable([...slotSpan(targetSlot, targetSlot + n - 1), ...source])) return;
     bulkCancelRef.current = false;
     setBulkProgress({ done: 0, total, phase: 'Reading…' });
     try {
@@ -755,14 +794,14 @@ function App() {
       for (let i = 0; i < n; i++) {
         if (bulkCancelRef.current) return;
         const dest = targetSlot + i;
-        await midiDevice.pushPreset({ ...items[i], slotIndex: dest }, dest);
+        await writeSlot(items[i], dest);
         setBulkProgress({ done: n + i + 1, total, phase: 'Writing clipboard…' });
       }
       // Write displaced items back to original source slots
       for (let i = 0; i < Math.min(displaced.length, source.length); i++) {
         if (bulkCancelRef.current) return;
         const dest = source[i];
-        await midiDevice.pushPreset({ ...displaced[i], slotIndex: dest }, dest);
+        await writeSlot(displaced[i], dest);
         setBulkProgress({ done: n * 2 + n + i + 1, total, phase: 'Writing displaced…' });
       }
       // Clipboard becomes what was displaced (standard "swap clears clipboard" behavior)
@@ -798,6 +837,7 @@ function App() {
     const last = Math.min(lastOccupiedSlot(255 - count), 255 - count);
     const shiftCount = targetSlot <= last ? last - targetSlot + 1 : 0;
     const total = shiftCount * 2 + count;
+    if (refuseUnwritable(slotSpan(targetSlot, shiftCount > 0 ? last + count : targetSlot + count - 1))) return;
     bulkCancelRef.current = false;
     setBulkProgress({ done: 0, total, phase: 'Reading…' });
     try {
@@ -810,7 +850,7 @@ function App() {
       for (let i = affected.length - 1; i >= 0; i--) {
         if (bulkCancelRef.current) return;
         const dest = targetSlot + count + i;
-        if (dest <= 255) await midiDevice.pushPreset({ ...affected[i], slotIndex: dest }, dest);
+        if (dest <= 255) await writeSlot(affected[i], dest);
         setBulkProgress({ done: shiftCount + (affected.length - i), total, phase: 'Shifting…' });
       }
       // Build the insert items
@@ -824,7 +864,7 @@ function App() {
       for (let i = 0; i < insertItems.length; i++) {
         if (bulkCancelRef.current) return;
         const dest = targetSlot + i;
-        await midiDevice.pushPreset({ ...insertItems[i], slotIndex: dest }, dest);
+        await writeSlot(insertItems[i], dest);
         setBulkProgress({ done: shiftCount * 2 + i + 1, total, phase: 'Inserting…' });
       }
       setLoadError(null);
@@ -842,13 +882,14 @@ function App() {
    */
   async function handleResetSlots(slots: number[]) {
     if (bulkProgress) return;
+    if (refuseUnwritable(slots)) return;
     bulkCancelRef.current = false;
     setBulkProgress({ done: 0, total: slots.length, phase: 'Resetting…' });
     try {
       for (let i = 0; i < slots.length; i++) {
         if (bulkCancelRef.current) return;
         const blank = createDefaultPreset();
-        await midiDevice.pushPreset({ ...blank, slotIndex: slots[i], patchName: "It's GP-200" }, slots[i]);
+        await writeSlot({ ...blank, patchName: "It's GP-200" }, slots[i]);
         setBulkProgress({ done: i + 1, total: slots.length, phase: 'Resetting…' });
       }
       setLoadError(null);
@@ -865,7 +906,9 @@ function App() {
    * Context menu CUT — copy selected slots to clipboard then remove+shift them.
    */
   async function handleCutSlots(slots: number[]) {
-    if (bulkProgress) return;
+    if (bulkProgress || slots.length === 0) return;
+    // Each removal rewrites everything from the cut slot to the last occupied one.
+    if (refuseUnwritable(slotSpan(Math.min(...slots), Math.max(lastOccupiedSlot(255), ...slots)))) return;
     await handleCopySlots(slots);
     // Remove each slot by shift-up, highest first to preserve lower indices
     const sorted = [...slots].sort((a, b) => b - a);
@@ -876,13 +919,14 @@ function App() {
 
   async function handleSwapSlots(first: number, second: number) {
     if (first === second) return;
+    if (refuseUnwritable([first, second])) return;
     try {
       // Read both before writing either: a failed read then leaves the pedal
       // untouched instead of half-swapped.
       const a = await midiDevice.pullPreset(first);
       const b = await midiDevice.pullPreset(second);
-      await midiDevice.pushPreset({ ...b, slotIndex: first }, first);
-      await midiDevice.pushPreset({ ...a, slotIndex: second }, second);
+      await writeSlot(b, first);
+      await writeSlot(a, second);
       setLoadError(null);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
@@ -921,6 +965,7 @@ function App() {
       await handlePasteToSlot(slot);
       return;
     }
+    if (refuseUnwritable(slotSpan(slot, last + 1))) return;
     const count = last - slot + 1; // patches that need to shift
     bulkCancelRef.current = false;
     setBulkProgress({ done: 0, total: count * 2 + 1, phase: 'Inserting…' });
@@ -937,13 +982,13 @@ function App() {
         if (bulkCancelRef.current) return;
         const targetSlot = slot + i + 1;
         if (targetSlot <= 255) {
-          await midiDevice.pushPreset({ ...affected[i], slotIndex: targetSlot }, targetSlot);
+          await writeSlot(affected[i], targetSlot);
         }
         setBulkProgress({ done: count + (affected.length - i), total: count * 2 + 1, phase: 'Shifting…' });
       }
       // Phase 3: write clipboard to the freed slot.
       if (!bulkCancelRef.current) {
-        await midiDevice.pushPreset({ ...clipboard.preset, slotIndex: slot }, slot);
+        await writeSlot(clipboard.items[0], slot);
       }
       setLoadError(null);
     } catch (err) {
@@ -965,9 +1010,10 @@ function App() {
     const last = lastOccupiedSlot(255);
     if (slot >= last) {
       // Last (or only) occupied slot — just clear it directly.
+      if (refuseUnwritable([slot])) return;
       const blank = createDefaultPreset();
       try {
-        await midiDevice.pushPreset({ ...blank, slotIndex: slot, patchName: '' }, slot);
+        await writeSlot({ ...blank, patchName: '' }, slot);
         setLoadError(null);
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
@@ -977,6 +1023,7 @@ function App() {
       }
       return;
     }
+    if (refuseUnwritable(slotSpan(slot, last))) return;
     const count = last - slot; // number of patches shifting up
     bulkCancelRef.current = false;
     setBulkProgress({ done: 0, total: count * 2 + 1, phase: 'Removing…' });
@@ -992,13 +1039,13 @@ function App() {
       for (let i = 0; i < affected.length; i++) {
         if (bulkCancelRef.current) return;
         const targetSlot = slot + i;
-        await midiDevice.pushPreset({ ...affected[i], slotIndex: targetSlot }, targetSlot);
+        await writeSlot(affected[i], targetSlot);
         setBulkProgress({ done: count + i + 1, total: count * 2 + 1, phase: 'Shifting…' });
       }
       // Phase 3: clear the (now-duplicate) last slot with an init patch.
       if (!bulkCancelRef.current) {
         const blank = createDefaultPreset();
-        await midiDevice.pushPreset({ ...blank, slotIndex: last, patchName: '' }, last);
+        await writeSlot({ ...blank, patchName: '' }, last);
       }
       setLoadError(null);
     } catch (err) {
@@ -1016,6 +1063,8 @@ function App() {
    */
   async function handleCutSlot(slot: number) {
     if (bulkProgress) return;
+    // The removal rewrites everything from here to the last occupied slot.
+    if (refuseUnwritable(slotSpan(slot, Math.max(lastOccupiedSlot(255), slot)))) return;
     try {
       await handleCopySlot(slot);
     } catch {
@@ -1028,8 +1077,9 @@ function App() {
     try {
       await midiDevice.renameSlot(slot, name);
       setLoadError(null);
-    } catch {
-      setLoadError(`Failed to rename ${SysExCodec.slotToLabel(slot)}`);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      setLoadError(`Failed to rename ${SysExCodec.slotToLabel(slot)}: ${detail}`);
     }
   }
 
@@ -1079,11 +1129,18 @@ function App() {
 
   async function handlePushConfirm(slot: number) {
     if (!preset) return;
+    if (refuseUnwritable([slot])) {
+      setSlotBrowserMode(null);
+      return;
+    }
     try {
+      // pushPreset, not writeSlot: the editor already holds this patch, and
+      // loading a refused slot's old content would throw the user's work away.
       await midiDevice.pushPreset(preset, slot);
       setLoadError(null);
-    } catch {
-      setLoadError('Failed to save to device');
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      setLoadError(`Failed to save to ${SysExCodec.slotToLabel(slot)}: ${detail}`);
     } finally {
       setSlotBrowserMode(null);
     }
@@ -1447,6 +1504,8 @@ function App() {
         onContextPaste={handleContextPaste}
         onContextInsert={handleContextInsert}
         onResetSlots={handleResetSlots}
+        errorMessage={loadError}
+        onDismissError={() => setLoadError(null)}
       />
 
       {slotBrowserMode && (

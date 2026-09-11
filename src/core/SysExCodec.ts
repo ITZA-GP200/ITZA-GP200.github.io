@@ -320,6 +320,13 @@ export const SysExCodec = {
    * save-commit follows (hardware-verified: survives power-cycle).
    */
   buildUploadChunks(image: Uint8Array, slot: number): Uint8Array[] {
+    // The header has one 7-bit byte for the slot. Refuse what it can't hold:
+    // masking used to wrap 63C (250) onto 31C (122) and overwrite that patch.
+    if (!Number.isInteger(slot) || slot < 0 || slot > this.MAX_UPLOAD_SLOT) {
+      throw new RangeError(
+        `buildUploadChunks: slot ${slot} is outside the addressable 0-${this.MAX_UPLOAD_SLOT}`,
+      );
+    }
     const CHUNK_RAW = 183;
     const chunks: Uint8Array[] = [];
     for (let off = 0; off < image.length; off += CHUNK_RAW) {
@@ -327,7 +334,7 @@ export const SysExCodec = {
       const nibble = this.nibbleEncode(raw);
       const msg = new Uint8Array(13 + nibble.length + 1);
       msg.set([0xF0, 0x21, 0x25, 0x7E, 0x47, 0x50, 0x2D, 0x32, 0x12, 0x20]);
-      msg[10] = slot & 0x7F;
+      msg[10] = slot;
       msg[11] = off & 0x7F;
       msg[12] = (off >> 7) & 0x7F;
       msg.set(nibble, 13);
@@ -335,6 +342,20 @@ export const SysExCodec = {
       chunks.push(msg);
     }
     return chunks;
+  },
+
+  /**
+   * Highest slot a flash upload can target. Every upload capture so far
+   * writes to slot 9 or 0 (dumps/patch-upload.pcapng; phash/gp200editor), so
+   * how the pedal expects slots 128-255 (banks 33-64) to be addressed is
+   * unknown until the official editor is captured writing to a high slot.
+   */
+  MAX_UPLOAD_SLOT: 127,
+
+  /** User-facing reason a write to `slot` is refused. */
+  describeUnwritableSlot(slot: number): string {
+    return `This would write to ${this.slotToLabel(slot)}, but writing to banks 33–64 `
+      + 'is disabled until the pedal’s addressing for them is confirmed.';
   },
 
   buildIdentityQuery(): Uint8Array {

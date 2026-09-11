@@ -122,6 +122,23 @@ describe('PatchManagerSheet', () => {
   });
 });
 
+describe('PatchManagerSheet: errors', () => {
+  it('shows slot write errors inside the sheet with a dismiss control', () => {
+    const { props } = renderSheet({
+      errorMessage: 'The pedal didn’t accept the write to 1C: it still reads "Durango"',
+      onDismissError: vi.fn(),
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent('it still reads "Durango"');
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss error' }));
+    expect(props.onDismissError).toHaveBeenCalled();
+  });
+
+  it('renders no alert when there is no error', () => {
+    renderSheet();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
 describe('PatchManagerSheet: selection and arrange', () => {
   it('shift-clicking a second row selects the range between them', () => {
     renderSheet();
@@ -156,13 +173,13 @@ describe('PatchManagerSheet: selection and arrange', () => {
   it('PASTE stays disabled until something has been copied', () => {
     renderSheet();
     fireEvent.click(screen.getByText('Clean'));
-    expect(screen.getByRole('button', { name: /^PASTE/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^PASTE OVER/ })).toBeDisabled();
   });
 
   it('PASTE targets the selected slot once the clipboard has a patch', () => {
     const { props } = renderSheet({ clipboardLabel: '01-A' });
     fireEvent.click(screen.getByText('Crunch'));
-    fireEvent.click(screen.getByRole('button', { name: /^PASTE/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^PASTE OVER/ }));
     expect(props.onPasteToSlot).toHaveBeenCalledWith(1);
   });
 

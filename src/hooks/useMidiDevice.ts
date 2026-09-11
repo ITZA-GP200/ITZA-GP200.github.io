@@ -23,6 +23,24 @@ import { useMidiSend } from './useMidiSend';
 
 const READ_TIMEOUT_MS = 3000;
 
+/** A slot write the pedal refused, or one that couldn't be confirmed.
+ *  `readback` is what the slot holds afterwards when the read-back worked,
+ *  so callers can show the pedal's truth rather than what was sent. */
+export class SlotWriteError extends Error {
+  readonly readback: GP200Preset | null;
+
+  constructor(message: string, readback: GP200Preset | null = null) {
+    super(message);
+    this.name = 'SlotWriteError';
+    this.readback = readback;
+  }
+}
+
+/** Slot names are a 16-byte field that reads back trimmed; compare them that way. */
+function sameSlotName(first: string, second: string): boolean {
+  return first.slice(0, 16).trim() === second.slice(0, 16).trim();
+}
+
 function isSysEx(data: Uint8Array, cmd: number, sub: number): boolean {
   return (
     data.length > 10 &&
@@ -160,7 +178,9 @@ export interface UseMidiDeviceReturn {
   /** Clear cached names (except the already-pulled current bank) and re-enumerate. */
   refreshNames: () => Promise<void>;
   pullPreset: (slot: number) => Promise<GP200Preset>;
-  pushPreset: (preset: GP200Preset, slot: number) => Promise<void>;
+  /** Flash-upload a patch, then read the slot back. Resolves with what the
+   *  pedal holds; throws SlotWriteError when it refused or couldn't confirm. */
+  pushPreset: (preset: GP200Preset, slot: number) => Promise<GP200Preset>;
   writePresetToSlot: (preset: GP200Preset, slot: number) => Promise<void>;
   saveToSlot: (presetName: string, slot?: number) => Promise<void>;
   /** Rename a slot without touching its effect data. Briefly switches the
@@ -744,6 +764,15 @@ export function useMidiDevice(): UseMidiDeviceReturn {
             console.log('[GP-200] pull rx:', Array.from(data).map(b => b.toString(16).padStart(2,'0')).join(' '));
             onMidiMessage(event);
             if (isSysEx(data, 0x12, 0x18)) {
+              // Logged, not enforced: nobody has confirmed how the pedal labels
+              // slots above 127 in this header byte, so rejecting on a mismatch
+              // could break reads that work today. The log is the evidence
+              // needed before enforcing it (and for addressing high-slot writes).
+              if (chunks.length === 0 && data[10] !== slot) {
+                const note = `[GP-200] pull ${SysExCodec.slotToLabel(slot)}: reply header slot byte ${data[10]}`;
+                if (slot > SysExCodec.MAX_UPLOAD_SLOT) console.log(note);
+                else console.warn(`${note}, expected ${slot}`);
+              }
               chunks.push(data);
               if (chunks.length === 7) {
                 clearTimeout(timer);
@@ -764,7 +793,13 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     });
   }, [onMidiMessage, pauseNameLoading]);
 
-  const pushPreset = useCallback(async (preset: GP200Preset, slot: number): Promise<void> => {
+  const pushPreset = useCallback(async (preset: GP200Preset, slot: number): Promise<GP200Preset> => {
+    const label = SysExCodec.slotToLabel(slot);
+    // Refuse before anything reaches the pedal: the upload header can't
+    // address this slot, and guessing overwrote a patch in another bank.
+    if (slot < 0 || slot > SysExCodec.MAX_UPLOAD_SLOT) {
+      throw new SlotWriteError(SysExCodec.describeUnwritableSlot(slot));
+    }
     await pauseNameLoading();
     if (!outputRef.current) throw new Error('Not connected');
     console.log(`[GP-200] push: slot=${slot} (${SysExCodec.slotToLabel(slot)}) name="${preset.patchName}"`);
@@ -834,38 +869,53 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     }
     console.log(`[GP-200] push preset-change: slot=${slot}`);
     outputRef.current.send(SysExCodec.buildPresetChange(slot));
-
-    // Update local state
-    presetNamesRef.current[slot] = preset.patchName;
-    setPresetNames([...presetNamesRef.current]);
-    persistNames();
     setCurrentSlot(slot); currentSlotRef.current = slot;
 
-    // Read the slot back and compare, so a discarded write is loud in the
-    // console instead of silently reverting on the next pull.
+    // Read the slot back and let only the pedal's answer reach the name list
+    // and its cache. Recording the name we sent, before this check, is what
+    // let the Patch Manager show a patch the pedal never stored.
     await new Promise(r => setTimeout(r, 400));
+    let readback: GP200Preset;
     try {
-      const readback = await pullPreset(slot);
-      const nameOk = readback.patchName === preset.patchName;
-      const masksOf = (candidate: GP200Preset) =>
-        candidate.ctrlAssignments?.map((assignment) => assignment.blockMask).join(',') ?? null;
-      const wantMasks = masksOf(preset);
-      const gotMasks = masksOf(readback);
-      const ctrlOk = wantMasks === null || wantMasks === gotMasks;
-      if (nameOk && ctrlOk) {
-        console.log('[GP-200] push verify: OK (readback matches pushed name + CTRL masks)');
-      } else {
-        console.warn(
-          `[GP-200] push verify: MISMATCH , name "${readback.patchName}" vs pushed ` +
-          `"${preset.patchName}", ctrlMasks [${gotMasks}] vs pushed [${wantMasks}]. ` +
-          'The device likely discarded the flash write.',
-        );
-      }
+      readback = await pullPreset(slot);
     } catch (err) {
       console.warn('[GP-200] push verify: readback failed', err);
+      // Outcome unknown: forget the name so the next scan re-reads the slot.
+      presetNamesRef.current[slot] = null;
+      setPresetNames([...presetNamesRef.current]);
+      persistNames();
+      throw new SlotWriteError(`Couldn't read ${label} back to confirm the write`);
+    }
+    presetNamesRef.current[slot] = readback.patchName;
+    setPresetNames([...presetNamesRef.current]);
+    persistNames();
+
+    const masksOf = (candidate: GP200Preset) =>
+      candidate.ctrlAssignments?.map((assignment) => assignment.blockMask).join(',') ?? null;
+    const wantMasks = masksOf(preset);
+    const gotMasks = masksOf(readback);
+    if (!sameSlotName(readback.patchName, preset.patchName)) {
+      console.warn(
+        `[GP-200] push verify: MISMATCH , name "${readback.patchName}" vs pushed ` +
+        `"${preset.patchName}", ctrlMasks [${gotMasks}] vs pushed [${wantMasks}]. ` +
+        'The device likely discarded the flash write.',
+      );
+      throw new SlotWriteError(
+        `The pedal didn’t accept the write to ${label}: it still reads "${readback.patchName}"`,
+        readback,
+      );
+    }
+    // A CTRL-mask difference alone stays a console warning: the name is the
+    // discard signal hardware runs have shown, and failing writes on masks
+    // would be a new rule nobody has checked against the pedal.
+    if (wantMasks === null || wantMasks === gotMasks) {
+      console.log('[GP-200] push verify: OK (readback matches pushed name + CTRL masks)');
+    } else {
+      console.warn(`[GP-200] push verify: name OK but ctrlMasks [${gotMasks}] vs pushed [${wantMasks}]`);
     }
 
     console.log('[GP-200] push complete');
+    return readback;
     // suppressFxFor is a plain per-render function, but unlike onMidiMessage
     // nothing depends on pushPreset's identity, so listing it is harmless.
   }, [pauseNameLoading, persistNames, suppressFxFor, pullPreset]);
@@ -1092,16 +1142,33 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     }
     output.send(SysExCodec.buildSaveCommit(name, slot));
     await new Promise(r => setTimeout(r, 300));
-    presetNamesRef.current[slot] = name;
-    setPresetNames([...presetNamesRef.current]);
-    persistNames();
     setCurrentSlot(slot); currentSlotRef.current = slot;
+    // Read the slot back before touching the list: the device has been seen
+    // ignoring the name in save-commit (Gap C above), and recording the name
+    // we asked for would show a rename the pedal never kept.
+    let readback: GP200Preset | null = null;
+    try {
+      readback = await pullPreset(slot);
+    } catch (err) {
+      console.warn('[GP-200] rename verify: readback failed', err);
+    }
     if (previousSlot !== null && previousSlot !== slot) {
       output.send(SysExCodec.buildPresetChange(previousSlot));
       await new Promise(r => setTimeout(r, 200));
       setCurrentSlot(previousSlot); currentSlotRef.current = previousSlot;
     }
-  }, [pauseNameLoading, persistNames]);
+    presetNamesRef.current[slot] = readback ? readback.patchName : null;
+    setPresetNames([...presetNamesRef.current]);
+    persistNames();
+    const label = SysExCodec.slotToLabel(slot);
+    if (!readback) throw new SlotWriteError(`Couldn't read ${label} back to confirm the rename`);
+    if (!sameSlotName(readback.patchName, name)) {
+      throw new SlotWriteError(
+        `The pedal didn’t keep the new name for ${label}: it still reads "${readback.patchName}"`,
+        readback,
+      );
+    }
+  }, [pauseNameLoading, persistNames, pullPreset]);
 
   // Bulk apply: write the same CTRL assignments and/or patch volume into many
   // saved patches. Per slot this replays the proven renameSlot sequence —
