@@ -519,6 +519,11 @@ export const SysExCodec = {
     // CMD=0x12, sub=0x10, 46 bytes, raw SysEx (not nibble-encoded)
     // Confirmed: captures 100548 (WAH OFF, BOOST OFF, DLY ON, MOD ON) + 101538
     // Block indices: 0=PRE 1=WAH 2=BOOST 3=AMP 4=NR 5=CAB 6=EQ 7=MOD 8=DLY 9=RVB 10=VOL
+    // Re-confirmed 2026-09-15 against the official editor toggling WAH, OD,
+    // DLY, RVB and VOL in turn (dumps/official-toggles): byte[38] is the block
+    // index, matching the list above. The bytes at [41-44] are NOT meaningful:
+    // the official editor sent 0xaf there in that capture and 0x5a in
+    // dumps/official-write, so the device ignores them.
     return new Uint8Array([
       0xF0, 0x21, 0x25, 0x7E, 0x47, 0x50, 0x2D, 0x32, // [0-7]   header
       0x12, 0x10,                                        // [8-9]   CMD, sub
@@ -692,15 +697,22 @@ export const SysExCodec = {
   },
 
   buildSaveCommit(presetName: string, slot: number): Uint8Array {
-    // CMD=0x12, sub=0x18, 62 bytes, nibble-encoded "save to slot" commit
-    // From captures 100548 + 101538: sent after live edits or write chunks to persist
-    // Decoded payload: [0:3]=03 20 14, [4]=sub-slot (A=0,B=1,C=2,D=3), [8:24]=name
-    // Confirmed: capture 121732 slot 1B has decoded[4]=0x01, slot 1A has decoded[4]=0x00
+    // CMD=0x12, sub=0x18, 62 bytes, nibble-encoded "save to slot" commit.
+    // Ground truth: dumps/official-write/official-write.pcapng (2026-09-15),
+    // the official Valeton editor saving to 2A and then to 40A on fw 1.8.0.
+    // Decoded payload is one TLV: {type 0x2003, len 20,
+    //   [4:6] u16 target slot, [6:8] u16 0x005a, [8:24] 16-byte name}.
+    // The slot is the ABSOLUTE index (the capture shows 0x04 for 2A and 0x9c
+    // for 40A), so slots above 127 need nothing special here.
     const decoded = new Uint8Array(24);
     decoded[0] = 0x03;
     decoded[1] = 0x20;
     decoded[2] = 0x14;
     decoded[4] = slot;  // full absolute slot number (0-255), nibble-encoded by caller
+    // Constant in every captured save, and the one field this app used to send
+    // as zero , which is why its saves were silently discarded by the pedal.
+    // Not volume or style: slot 4 reads back as volume 75 / style 5.
+    decoded[6] = 0x5A;
     // [8:24] = preset name (16 bytes, null-terminated; same as .prst format)
     for (let i = 0; i < 16 && i < presetName.length; i++) {
       decoded[8 + i] = presetName.charCodeAt(i);

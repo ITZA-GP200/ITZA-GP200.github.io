@@ -935,13 +935,28 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     // Save-commit persists the device's current editing buffer to flash.
     // Live edits (toggle, param, reorder) already updated the editing buffer.
     // Valeton flow: save-commit → preset-change (re-select slot to confirm).
-    // decoded[4] must be the sub-slot index (A=0,B=1,C=2,D=3); otherwise device saves to wrong slot!
+    // The slot is the absolute index (dumps/official-write); see buildSaveCommit.
     const targetSlot = slot ?? currentSlotRef.current ?? 0;
+    // The preset-change below makes the device re-report every block's on/off
+    // state, and those frames are indistinguishable from a player working the
+    // footswitches , applied blind they flip blocks in the editor the moment
+    // SAVE is pressed (hardware-observed on WAH/DST). Mute the echoes for the
+    // whole sequence, exactly as pushPreset does around its own hops.
+    suppressFxFor(2000);
+    suppressSlotEchoUntilRef.current = Date.now() + 2000;
     const msg = SysExCodec.buildSaveCommit(presetName, targetSlot);
-    console.log(`[GP-200] save-commit: name="${presetName}" slot=${targetSlot} (sub=${targetSlot % 4})`);
+    console.log(`[GP-200] save-commit: name="${presetName}" slot=${targetSlot}`);
     outputRef.current.send(msg);
+    // The official editor follows every save with a preset change to the slot
+    // it just wrote, ~20ms later (dumps/official-write). Ours never did.
+    await new Promise(r => setTimeout(r, 50));
+    outputRef.current.send(SysExCodec.buildPresetChange(targetSlot));
+    setCurrentSlot(targetSlot); currentSlotRef.current = targetSlot;
     // Wait for device to write to flash
     await new Promise(r => setTimeout(r, 300));
+    // suppressFxFor is a plain per-render function over a stable ref, so it
+    // needs no dependency entry (same reasoning as pushPreset).
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const writePresetToSlot = useCallback(async (preset: GP200Preset, slot: number): Promise<void> => {

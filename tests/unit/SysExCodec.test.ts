@@ -311,6 +311,43 @@ describe.skipIf(!HAS_UPLOAD_FIXTURE)('SysExCodec: flash upload (buildUploadImage
   });
 });
 
+describe('SysExCodec: save commit (capture-verified)', () => {
+  // Bytes from dumps/official-write/official-write.pcapng: the official
+  // Valeton editor saving "BE MY FIRE 1" to 2A (slot 4) and then to 40A
+  // (slot 156), firmware 1.8.0.
+  const NAME = 'BE MY FIRE 1';
+
+  function payloadOf(msg: Uint8Array): number[] {
+    return Array.from(SysExCodec.nibbleDecode(msg.slice(13, msg.length - 1)));
+  }
+
+  it('matches the captured save to slot 4 byte for byte', () => {
+    const msg = SysExCodec.buildSaveCommit(NAME, 4);
+    expect(msg.length).toBe(62);
+    expect(Array.from(msg.subarray(0, 10))).toEqual([
+      0xF0, 0x21, 0x25, 0x7E, 0x47, 0x50, 0x2D, 0x32, 0x12, 0x18,
+    ]);
+    expect(payloadOf(msg)).toEqual([
+      0x03, 0x20, 0x14, 0x00, 0x04, 0x00, 0x5a, 0x00,
+      0x42, 0x45, 0x20, 0x4d, 0x59, 0x20, 0x46, 0x49, 0x52, 0x45, 0x20, 0x31,
+      0x00, 0x00, 0x00, 0x00,
+    ]);
+  });
+
+  it('addresses a high slot with its absolute index (40A = 156 = 0x9c)', () => {
+    const payload = payloadOf(SysExCodec.buildSaveCommit(NAME, 156));
+    expect(payload[4]).toBe(0x9c);
+    expect(payload[5]).toBe(0x00);
+  });
+
+  it('always sets the 0x5a field the pedal requires', () => {
+    // Sending this as zero is what made every save silently fail.
+    for (const slot of [0, 4, 127, 156, 255]) {
+      expect(payloadOf(SysExCodec.buildSaveCommit('X', slot))[6]).toBe(0x5a);
+    }
+  });
+});
+
 describe('SysExCodec: flash upload slot addressing', () => {
   // Addressing doesn't depend on patch content, so a blank image will do.
   const image = new Uint8Array(400);
