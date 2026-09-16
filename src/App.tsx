@@ -45,6 +45,7 @@ import { createDefaultPreset } from '@/core/defaultPreset';
 import { createZip, type ZipEntry } from '@/core/zipStore';
 import { slotsForScope, type BulkScope } from '@/core/bulkApply';
 import { SysExCodec } from '@/core/SysExCodec';
+import { samePatchContent } from '@/core/patchIdentity';
 import { track } from '@/core/analytics';
 import { useEngagementTracking } from '@/hooks/useEngagementTracking';
 
@@ -588,63 +589,118 @@ function App() {
     }
   }
 
-  /**
-   * Flash-upload one slot and mirror the result into the editor. pushPreset
-   * leaves the pedal sitting on `slot` and reads it back, so loading that
-   * readback keeps the top bar on what the pedal actually plays, including
-   * when the write was refused and the slot still holds its old patch.
-   */
-  async function writeSlot(source: GP200Preset, slot: number): Promise<void> {
+  // ── Slot writes ─────────────────────────────────────────────────────────────
+  // Every Patch Manager write goes through one of two paths, both taken from a
+  // capture of the official Valeton editor (dumps/official-write):
+  //   copySlot    the pedal duplicates one slot into another. Lossless, ~1 s,
+  //               no patch data sent. Used whenever the patch is in a slot.
+  //   writePatch  live-push patch data, then save-commit. For data that lives
+  //               in no slot (files, INIT, a patch displaced by a swap). ~15 s.
+  // Both verify by read-back. The flash upload this code used before is
+  // refused by the hardware, and the official editor never sends it.
+
+  /** Run a write and mirror what the slot now holds into the editor, including
+   *  a refused write's read-back, so the top bar shows what the pedal plays. */
+  async function mirrorWrite(write: () => Promise<GP200Preset>): Promise<void> {
     try {
-      loadPreset(await midiDevice.pushPreset({ ...source, slotIndex: slot }, slot));
+      loadPreset(await write());
     } catch (err) {
       if (err instanceof SlotWriteError && err.readback) loadPreset(err.readback);
       throw err;
     }
   }
 
-  /** Every slot from `first` to `last`, inclusive. */
-  function slotSpan(first: number, last: number): number[] {
-    const slots: number[] = [];
-    for (let slot = first; slot <= last; slot++) slots.push(slot);
-    return slots;
+  function copySlot(fromSlot: number, toSlot: number): Promise<void> {
+    return mirrorWrite(() => midiDevice.copySlotOnDevice(fromSlot, toSlot));
+  }
+
+  function writePatch(patch: GP200Preset, slot: number): Promise<void> {
+    return mirrorWrite(() => midiDevice.writePresetToSlot({ ...patch, slotIndex: slot }, slot));
   }
 
   /**
-   * Refuse a job before it touches the pedal when any slot it would write is
-   * past SysExCodec.MAX_UPLOAD_SLOT. pushPreset refuses those slots too, but
-   * only one write at a time: a shift stopped halfway leaves duplicates.
+   * Put `patch` into `slot`, copying it on the pedal from `sourceSlot` when
+   * that slot still holds it and writing the data otherwise. The check keeps a
+   * paste correct after a cut, a shift or an edit on the pedal has changed the
+   * slot the clipboard remembers.
    */
-  function refuseUnwritable(slots: number[]): boolean {
-    const blocked = slots.filter((slot) => slot > SysExCodec.MAX_UPLOAD_SLOT);
-    if (blocked.length === 0) return false;
-    setLoadError(SysExCodec.describeUnwritableSlot(Math.min(...blocked)));
+  async function placePatch(patch: GP200Preset, slot: number, sourceSlot?: number): Promise<void> {
+    if (sourceSlot !== undefined) {
+      const atSource = await midiDevice.pullPreset(sourceSlot);
+      if (samePatchContent(atSource, patch)) {
+        if (sourceSlot !== slot) await copySlot(sourceSlot, slot);
+        return;
+      }
+    }
+    await writePatch(patch, slot);
+  }
+
+  /**
+   * Run a Patch Manager job behind the shared progress bar and cancel control.
+   * `run` calls `step(phase)` before each slot operation, which returns false
+   * once the user has cancelled. Resolves true when the job ran to the end.
+   */
+  async function runSlotJob(
+    steps: number,
+    failure: string,
+    run: (step: (phase: string) => boolean) => Promise<void>,
+  ): Promise<boolean> {
+    if (bulkProgress) return false;
+    bulkCancelRef.current = false;
+    const state = { done: 0, cancelled: false };
+    setBulkProgress({ done: 0, total: steps, phase: 'Starting…' });
+    const step = (phase: string): boolean => {
+      if (bulkCancelRef.current) {
+        state.cancelled = true;
+        return false;
+      }
+      setBulkProgress({ done: state.done, total: steps, phase });
+      state.done += 1;
+      return true;
+    };
+    try {
+      await run(step);
+      setLoadError(null);
+      return !state.cancelled;
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      setLoadError(`${failure}: ${detail}`);
+      return false;
+    } finally {
+      setBulkProgress(null);
+      if (midiDevice.status === 'connected') void midiDevice.loadPresetNames();
+    }
+  }
+
+  /**
+   * Remove the patch at `slot`: copy every slot below it up by one, then clear
+   * `last` (the end of the occupied range) with INIT. Top-down, so each patch
+   * is copied before the slot it came from is overwritten.
+   */
+  async function removeAndShiftUp(
+    slot: number,
+    last: number,
+    step: (phase: string) => boolean,
+  ): Promise<boolean> {
+    for (let s = slot; s < last; s++) {
+      if (!step('Shifting…')) return false;
+      await copySlot(s + 1, s);
+    }
+    if (!step('Clearing…')) return false;
+    await writePatch(createDefaultPreset(), Math.max(slot, last));
     return true;
   }
 
   async function handleImportToSlot(slot: number, bytes: Uint8Array) {
-    if (refuseUnwritable([slot])) return;
-    try {
+    const ok = await runSlotJob(1, `Failed to write to ${SysExCodec.slotToLabel(slot)}`, async (step) => {
       const decoded = new PRSTDecoder(bytes).decode();
-      // Flash-upload path (chunked 0x12/0x20, mirrors the official editor):
-      // full fidelity including the CTRL/EXP controls tail, and much faster
-      // than the per-parameter writePresetToSlot fallback.
-      await writeSlot(decoded, slot);
-      setLoadError(null);
-      track('preset_import', { target: 'slot', ok: true });
-    } catch (err) {
-      let detail = String(err);
-      if (err instanceof Error) detail = err.message;
-      setLoadError(`Failed to write to ${SysExCodec.slotToLabel(slot)}: ${detail}`);
-      track('preset_import', { target: 'slot', ok: false });
-    }
+      if (!step('Writing…')) return;
+      await writePatch(decoded, slot);
+    });
+    track('preset_import', { target: 'slot', ok });
   }
 
   // ── In-app patch clipboard ────────────────────────────────────────────────
-  // Built on pullPreset/pushPreset — the same proven read and flash-upload
-  // path the per-slot EXPORT and IMPORT buttons already use — rather than the
-  // device's own patch-move message, which is decoded but not hardware-verified
-  // and would reshuffle all 256 slots if it turned out to be wrong.
 
   /** Human-readable range label for a set of slot indices. */
   function slotsRangeLabel(slots: number[]): string {
@@ -659,161 +715,115 @@ function App() {
   }
 
   /**
-   * Copy one or more slots to the clipboard.
-   * Reads each slot sequentially from the device (MIDI-safe).
+   * Read one or more slots onto the clipboard, sequentially (MIDI-safe).
+   * Resolves false when a read failed, so a cut never removes a patch that
+   * didn't make it onto the clipboard.
    */
-  async function handleCopySlots(slots: number[]) {
+  async function copyToClipboard(slots: number[]): Promise<boolean> {
     const sorted = [...slots].sort((a, b) => a - b);
     try {
       const items: GP200Preset[] = [];
       for (const s of sorted) items.push(await midiDevice.pullPreset(s));
       setClipboard({ source: sorted, items, label: slotsRangeLabel(sorted), count: items.length });
       setLoadError(null);
+      return true;
     } catch {
       setLoadError(`Failed to copy ${slotsRangeLabel(sorted)} from device`);
+      return false;
     }
+  }
+
+  async function handleCopySlots(slots: number[]) {
+    await copyToClipboard(slots);
   }
 
   /** Legacy single-slot copy (used by existing buttons). */
   async function handleCopySlot(slot: number) {
-    return handleCopySlots([slot]);
+    await copyToClipboard([slot]);
   }
 
-  /**
-   * Paste clipboard content starting at `slot`, overwriting in place.
-   * Uses only the first item for legacy single-slot callers.
-   */
+  /** Legacy single-slot paste: the first clipboard item, overwriting `slot`. */
   async function handlePasteToSlot(slot: number) {
     if (!clipboard) return;
-    // Legacy single-slot: use first item in the multi-preset clipboard.
     const item = clipboard.items[0];
     if (!item) return;
-    if (refuseUnwritable([slot])) return;
-    try {
-      await writeSlot(item, slot);
-      setLoadError(null);
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      setLoadError(`Failed to paste into ${SysExCodec.slotToLabel(slot)}: ${detail}`);
-    }
+    const from = clipboard.source[0];
+    await runSlotJob(1, `Failed to paste into ${SysExCodec.slotToLabel(slot)}`, async (step) => {
+      if (!step('Pasting…')) return;
+      await placePatch(item, slot, from);
+    });
   }
 
-  /**
-   * Paste clipboard content starting at `targetSlot`, overwriting in place.
-   * Handles multi-patch clipboard.
-   */
+  /** Paste the clipboard starting at `targetSlot`, overwriting in place. */
   async function handlePasteOverwrite(targetSlot: number) {
-    if (!clipboard || bulkProgress) return;
-    const { items } = clipboard;
-    if (refuseUnwritable(slotSpan(targetSlot, Math.min(targetSlot + items.length - 1, 255)))) return;
-    bulkCancelRef.current = false;
-    setBulkProgress({ done: 0, total: items.length, phase: 'Pasting…' });
-    try {
-      for (let i = 0; i < items.length; i++) {
-        if (bulkCancelRef.current) return;
-        const dest = targetSlot + i;
-        if (dest >= 256) break;
-        await writeSlot(items[i], dest);
-        setBulkProgress({ done: i + 1, total: items.length, phase: 'Pasting…' });
+    if (!clipboard) return;
+    const { items, source } = clipboard;
+    const count = Math.min(items.length, 256 - targetSlot);
+    await runSlotJob(count, 'Failed to paste', async (step) => {
+      for (let i = 0; i < count; i++) {
+        if (!step('Pasting…')) return;
+        await placePatch(items[i], targetSlot + i, source[i]);
       }
-      setLoadError(null);
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      setLoadError(`Failed to paste: ${detail}`);
-    } finally {
-      setBulkProgress(null);
-      if (midiDevice.status === 'connected') void midiDevice.loadPresetNames();
-    }
+    });
   }
 
   /**
-   * Paste clipboard content by INSERT at `targetSlot`:
-   * shifts slots target..lastOccupied down by N; last N patches are lost.
+   * Paste by INSERT at `targetSlot`: shift target..lastOccupied down by N, then
+   * place the clipboard in the gap. The last N patches of the list are lost.
    */
   async function handlePasteInsert(targetSlot: number) {
-    if (!clipboard || bulkProgress) return;
-    const { items } = clipboard;
+    if (!clipboard) return;
+    const { items, source } = clipboard;
     const n = items.length;
     const last = Math.min(lastOccupiedSlot(255 - n), 255 - n);
-    if (targetSlot > last) { await handlePasteOverwrite(targetSlot); return; }
-    if (refuseUnwritable(slotSpan(targetSlot, last + n))) return;
-    const shiftCount = last - targetSlot + 1;
-    const total = shiftCount * 2 + n;
-    bulkCancelRef.current = false;
-    setBulkProgress({ done: 0, total, phase: 'Reading…' });
-    try {
-      const affected: GP200Preset[] = [];
-      for (let s = targetSlot; s <= last; s++) {
-        if (bulkCancelRef.current) return;
-        affected.push(await midiDevice.pullPreset(s));
-        setBulkProgress({ done: affected.length, total, phase: 'Reading…' });
-      }
-      for (let i = affected.length - 1; i >= 0; i--) {
-        if (bulkCancelRef.current) return;
-        const dest = targetSlot + n + i;
-        if (dest <= 255) await writeSlot(affected[i], dest);
-        setBulkProgress({ done: shiftCount + (affected.length - i), total, phase: 'Shifting…' });
+    if (targetSlot > last) {
+      await handlePasteOverwrite(targetSlot);
+      return;
+    }
+    await runSlotJob(last - targetSlot + 1 + n, 'Failed to insert-paste', async (step) => {
+      // Bottom-up, so every patch is copied before its old slot is overwritten.
+      for (let s = last; s >= targetSlot; s--) {
+        if (!step('Shifting…')) return;
+        await copySlot(s, s + n);
       }
       for (let i = 0; i < n; i++) {
-        if (bulkCancelRef.current) return;
-        const dest = targetSlot + i;
-        await writeSlot(items[i], dest);
-        setBulkProgress({ done: shiftCount * 2 + i + 1, total, phase: 'Inserting…' });
+        if (!step('Inserting…')) return;
+        // A source inside the shifted range now sits N slots further down.
+        const from = source[i] >= targetSlot && source[i] <= last ? source[i] + n : source[i];
+        await placePatch(items[i], targetSlot + i, from);
       }
-      setLoadError(null);
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      setLoadError(`Failed to insert-paste: ${detail}`);
-    } finally {
-      setBulkProgress(null);
-      if (midiDevice.status === 'connected') void midiDevice.loadPresetNames();
-    }
+    });
   }
 
   /**
-   * Paste via SWAP: clipboard goes to target..target+N-1; whatever was there
-   * moves back to the original clipboard source slots.  Nothing lost.
+   * Paste via SWAP: the clipboard goes to target..target+N-1 and whatever was
+   * there moves to the clipboard's source slots. Nothing is lost.
    */
   async function handlePasteSwap(targetSlot: number) {
-    if (!clipboard || bulkProgress) return;
+    if (!clipboard) return;
     const { source, items } = clipboard;
-    const n = items.length;
-    const total = n * 4;
-    if (refuseUnwritable([...slotSpan(targetSlot, targetSlot + n - 1), ...source])) return;
-    bulkCancelRef.current = false;
-    setBulkProgress({ done: 0, total, phase: 'Reading…' });
-    try {
-      // Read target slots (what will be displaced)
-      const displaced: GP200Preset[] = [];
-      for (let i = 0; i < n; i++) {
-        if (bulkCancelRef.current) return;
-        displaced.push(await midiDevice.pullPreset(targetSlot + i));
-        setBulkProgress({ done: displaced.length, total, phase: 'Reading…' });
-      }
-      // Write clipboard items to target
-      for (let i = 0; i < n; i++) {
-        if (bulkCancelRef.current) return;
-        const dest = targetSlot + i;
-        await writeSlot(items[i], dest);
-        setBulkProgress({ done: n + i + 1, total, phase: 'Writing clipboard…' });
-      }
-      // Write displaced items back to original source slots
-      for (let i = 0; i < Math.min(displaced.length, source.length); i++) {
-        if (bulkCancelRef.current) return;
-        const dest = source[i];
-        await writeSlot(displaced[i], dest);
-        setBulkProgress({ done: n * 2 + n + i + 1, total, phase: 'Writing displaced…' });
-      }
-      // Clipboard becomes what was displaced (standard "swap clears clipboard" behavior)
-      setClipboard(null);
-      setLoadError(null);
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      setLoadError(`Failed to swap-paste: ${detail}`);
-    } finally {
-      setBulkProgress(null);
-      if (midiDevice.status === 'connected') void midiDevice.loadPresetNames();
+    const n = Math.min(items.length, 256 - targetSlot);
+    const targets = Array.from({ length: n }, (_unused, i) => targetSlot + i);
+    if (source.some((slot) => targets.includes(slot))) {
+      setLoadError('Swap needs the target slots and the clipboard’s own slots not to overlap');
+      return;
     }
+    const ok = await runSlotJob(n * 2, 'Failed to swap-paste', async (step) => {
+      // Read what will be displaced before writing anything, so a failed read
+      // leaves the pedal untouched.
+      const displaced: GP200Preset[] = [];
+      for (const slot of targets) displaced.push(await midiDevice.pullPreset(slot));
+      for (let i = 0; i < n; i++) {
+        if (!step('Placing clipboard…')) return;
+        await placePatch(items[i], targets[i], source[i]);
+      }
+      for (let i = 0; i < n; i++) {
+        if (!step('Moving displaced…')) return;
+        // Its old slot was just overwritten, so this data is the only copy.
+        await writePatch(displaced[i], source[i]);
+      }
+    });
+    if (ok) setClipboard(null);
   }
 
   /**
@@ -826,123 +836,85 @@ function App() {
   }
 
   /**
-   * Context menu INSERT dispatcher — inserts N blank or clipboard patches.
+   * Context menu INSERT: shift target..lastOccupied down by `count`, then fill
+   * the gap with INIT patches or the clipboard (cycling when count exceeds it).
    */
   async function handleContextInsert(
     targetSlot: number,
     mode: 'default' | 'clipboard',
     count: number,
   ) {
-    if (bulkProgress) return;
+    const clip = clipboard;
+    if (mode === 'clipboard' && !clip) return;
     const last = Math.min(lastOccupiedSlot(255 - count), 255 - count);
     const shiftCount = targetSlot <= last ? last - targetSlot + 1 : 0;
-    const total = shiftCount * 2 + count;
-    if (refuseUnwritable(slotSpan(targetSlot, shiftCount > 0 ? last + count : targetSlot + count - 1))) return;
-    bulkCancelRef.current = false;
-    setBulkProgress({ done: 0, total, phase: 'Reading…' });
-    try {
-      const affected: GP200Preset[] = [];
-      for (let s = targetSlot; s <= last; s++) {
-        if (bulkCancelRef.current) return;
-        affected.push(await midiDevice.pullPreset(s));
-        setBulkProgress({ done: affected.length, total, phase: 'Reading…' });
+    const insertCount = Math.min(count, 256 - targetSlot);
+    await runSlotJob(shiftCount + insertCount, 'Failed to insert', async (step) => {
+      for (let s = last; shiftCount > 0 && s >= targetSlot; s--) {
+        if (!step('Shifting…')) return;
+        await copySlot(s, s + count);
       }
-      for (let i = affected.length - 1; i >= 0; i--) {
-        if (bulkCancelRef.current) return;
-        const dest = targetSlot + count + i;
-        if (dest <= 255) await writeSlot(affected[i], dest);
-        setBulkProgress({ done: shiftCount + (affected.length - i), total, phase: 'Shifting…' });
+      for (let i = 0; i < insertCount; i++) {
+        if (!step('Inserting…')) return;
+        if (mode === 'default' || !clip) {
+          await writePatch(createDefaultPreset(), targetSlot + i);
+          continue;
+        }
+        const k = i % clip.items.length;
+        const src = clip.source[k];
+        const from = shiftCount > 0 && src >= targetSlot && src <= last ? src + count : src;
+        await placePatch(clip.items[k], targetSlot + i, from);
       }
-      // Build the insert items
-      const insertItems: GP200Preset[] = [];
-      if (mode === 'default') {
-        for (let k = 0; k < count; k++) insertItems.push(createDefaultPreset());
-      } else {
-        if (!clipboard) return;
-        for (let k = 0; k < count; k++) insertItems.push(clipboard.items[k % clipboard.items.length]);
-      }
-      for (let i = 0; i < insertItems.length; i++) {
-        if (bulkCancelRef.current) return;
-        const dest = targetSlot + i;
-        await writeSlot(insertItems[i], dest);
-        setBulkProgress({ done: shiftCount * 2 + i + 1, total, phase: 'Inserting…' });
-      }
-      setLoadError(null);
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      setLoadError(`Failed to insert: ${detail}`);
-    } finally {
-      setBulkProgress(null);
-      if (midiDevice.status === 'connected') void midiDevice.loadPresetNames();
-    }
+    });
   }
 
-  /**
-   * Context menu RESET — overwrites selected slots with factory-default preset.
-   */
+  /** Context menu RESET: overwrite the selected slots with the factory INIT patch. */
   async function handleResetSlots(slots: number[]) {
-    if (bulkProgress) return;
-    if (refuseUnwritable(slots)) return;
-    bulkCancelRef.current = false;
-    setBulkProgress({ done: 0, total: slots.length, phase: 'Resetting…' });
-    try {
-      for (let i = 0; i < slots.length; i++) {
-        if (bulkCancelRef.current) return;
-        const blank = createDefaultPreset();
-        await writeSlot({ ...blank, patchName: "It's GP-200" }, slots[i]);
-        setBulkProgress({ done: i + 1, total: slots.length, phase: 'Resetting…' });
+    await runSlotJob(slots.length, 'Failed to reset', async (step) => {
+      for (const slot of slots) {
+        if (!step('Resetting…')) return;
+        await writePatch({ ...createDefaultPreset(), patchName: "It's GP-200" }, slot);
       }
-      setLoadError(null);
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      setLoadError(`Failed to reset: ${detail}`);
-    } finally {
-      setBulkProgress(null);
-      if (midiDevice.status === 'connected') void midiDevice.loadPresetNames();
-    }
+    });
   }
 
-  /**
-   * Context menu CUT — copy selected slots to clipboard then remove+shift them.
-   */
+  /** Context menu CUT: copy the selected slots, then remove each and shift up. */
   async function handleCutSlots(slots: number[]) {
     if (bulkProgress || slots.length === 0) return;
-    // Each removal rewrites everything from the cut slot to the last occupied one.
-    if (refuseUnwritable(slotSpan(Math.min(...slots), Math.max(lastOccupiedSlot(255), ...slots)))) return;
-    await handleCopySlots(slots);
-    // Remove each slot by shift-up, highest first to preserve lower indices
-    const sorted = [...slots].sort((a, b) => b - a);
-    for (const slot of sorted) {
-      await handleRemoveShift(slot);
-    }
+    // Nothing is removed unless every patch made it onto the clipboard first.
+    if (!(await copyToClipboard(slots))) return;
+    const last = lastOccupiedSlot(255);
+    // Highest first, so removing one slot never moves another still to be cut.
+    const highestFirst = [...slots].sort((a, b) => b - a);
+    const steps = highestFirst.reduce((sum, slot) => sum + Math.max(0, last - slot) + 1, 0);
+    await runSlotJob(steps, 'Failed to cut', async (step) => {
+      for (const slot of highestFirst) {
+        if (!(await removeAndShiftUp(slot, last, step))) return;
+      }
+    });
   }
 
+  /**
+   * Exchange two slots. One side is a lossless on-pedal copy; the other patch
+   * then exists only as data, so it goes through the slower live-push path.
+   */
   async function handleSwapSlots(first: number, second: number) {
     if (first === second) return;
-    if (refuseUnwritable([first, second])) return;
-    try {
-      // Read both before writing either: a failed read then leaves the pedal
-      // untouched instead of half-swapped.
-      const a = await midiDevice.pullPreset(first);
-      const b = await midiDevice.pullPreset(second);
-      await writeSlot(b, first);
-      await writeSlot(a, second);
-      setLoadError(null);
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      setLoadError(
-        `Failed to swap ${SysExCodec.slotToLabel(first)} and `
-        + `${SysExCodec.slotToLabel(second)}: ${detail}`,
-      );
-    } finally {
-      if (midiDevice.status === 'connected') midiDevice.loadPresetNames();
-    }
+    const labels = `${SysExCodec.slotToLabel(first)} and ${SysExCodec.slotToLabel(second)}`;
+    await runSlotJob(2, `Failed to swap ${labels}`, async (step) => {
+      // Read before writing, so a failed read leaves the pedal untouched.
+      const firstPatch = await midiDevice.pullPreset(first);
+      if (!step('Swapping…')) return;
+      await copySlot(second, first);
+      if (!step('Swapping…')) return;
+      await writePatch(firstPatch, second);
+    });
   }
 
   /**
    * Returns the highest slot index that has a non-null name, capped at `cap`.
    * Used by insert/remove to know where the occupied region ends so we don't
-   * cascade blank reads across the entire 256-slot space.
+   * cascade copies across the entire 256-slot space.
    */
   function lastOccupiedSlot(cap: number): number {
     const names = midiDevice.presetNames;
@@ -953,124 +925,42 @@ function App() {
   }
 
   /**
-   * Insert the clipboard patch BEFORE `slot`, shifting every patch from
-   * slot..lastOccupied down by one position.  Read all affected patches first
-   * so a failed read aborts before any writes touch the device.
+   * Insert the first clipboard patch BEFORE `slot`, shifting every patch from
+   * slot..lastOccupied down by one position.
    */
   async function handleInsertBefore(slot: number) {
-    if (!clipboard || bulkProgress) return;
-    const last = Math.min(lastOccupiedSlot(254), 254); // cap: 255 gets overwritten, not lost
+    if (!clipboard) return;
+    const item = clipboard.items[0];
+    if (!item) return;
+    const src = clipboard.source[0];
+    const last = Math.min(lastOccupiedSlot(254), 254);
     if (slot > last) {
-      // Beyond occupied range — just paste directly (no shifting needed).
+      // Beyond the occupied range: nothing to shift.
       await handlePasteToSlot(slot);
       return;
     }
-    if (refuseUnwritable(slotSpan(slot, last + 1))) return;
-    const count = last - slot + 1; // patches that need to shift
-    bulkCancelRef.current = false;
-    setBulkProgress({ done: 0, total: count * 2 + 1, phase: 'Inserting…' });
-    try {
-      // Phase 1: read all patches that will shift (fail-safe before any writes).
-      const affected: GP200Preset[] = [];
-      for (let s = slot; s <= last; s++) {
-        if (bulkCancelRef.current) return;
-        affected.push(await midiDevice.pullPreset(s));
-        setBulkProgress({ done: affected.length, total: count * 2 + 1, phase: 'Reading…' });
+    await runSlotJob(last - slot + 2, `Failed to insert before ${SysExCodec.slotToLabel(slot)}`, async (step) => {
+      for (let s = last; s >= slot; s--) {
+        if (!step('Shifting…')) return;
+        await copySlot(s, s + 1);
       }
-      // Phase 2: write shifted patches from the bottom up (avoids clobbering unread slots).
-      for (let i = affected.length - 1; i >= 0; i--) {
-        if (bulkCancelRef.current) return;
-        const targetSlot = slot + i + 1;
-        if (targetSlot <= 255) {
-          await writeSlot(affected[i], targetSlot);
-        }
-        setBulkProgress({ done: count + (affected.length - i), total: count * 2 + 1, phase: 'Shifting…' });
-      }
-      // Phase 3: write clipboard to the freed slot.
-      if (!bulkCancelRef.current) {
-        await writeSlot(clipboard.items[0], slot);
-      }
-      setLoadError(null);
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      setLoadError(`Failed to insert before ${SysExCodec.slotToLabel(slot)}: ${detail}`);
-    } finally {
-      setBulkProgress(null);
-      if (midiDevice.status === 'connected') void midiDevice.loadPresetNames();
-    }
+      if (!step('Inserting…')) return;
+      const from = src >= slot && src <= last ? src + 1 : src;
+      await placePatch(item, slot, from);
+    });
   }
 
-  /**
-   * Remove the patch at `slot` and shift every patch from slot+1..lastOccupied
-   * up by one.  The final occupied slot is overwritten with an init preset so
-   * it no longer shows as occupied after a name refresh.
-   */
+  /** Remove the patch at `slot` and shift every patch below it up by one. */
   async function handleRemoveShift(slot: number) {
-    if (bulkProgress) return;
     const last = lastOccupiedSlot(255);
-    if (slot >= last) {
-      // Last (or only) occupied slot — just clear it directly.
-      if (refuseUnwritable([slot])) return;
-      const blank = createDefaultPreset();
-      try {
-        await writeSlot({ ...blank, patchName: '' }, slot);
-        setLoadError(null);
-      } catch (err) {
-        const detail = err instanceof Error ? err.message : String(err);
-        setLoadError(`Failed to clear ${SysExCodec.slotToLabel(slot)}: ${detail}`);
-      } finally {
-        if (midiDevice.status === 'connected') void midiDevice.loadPresetNames();
-      }
-      return;
-    }
-    if (refuseUnwritable(slotSpan(slot, last))) return;
-    const count = last - slot; // number of patches shifting up
-    bulkCancelRef.current = false;
-    setBulkProgress({ done: 0, total: count * 2 + 1, phase: 'Removing…' });
-    try {
-      // Phase 1: read patches that will shift up (slot+1..last).
-      const affected: GP200Preset[] = [];
-      for (let s = slot + 1; s <= last; s++) {
-        if (bulkCancelRef.current) return;
-        affected.push(await midiDevice.pullPreset(s));
-        setBulkProgress({ done: affected.length, total: count * 2 + 1, phase: 'Reading…' });
-      }
-      // Phase 2: write each patch one position earlier.
-      for (let i = 0; i < affected.length; i++) {
-        if (bulkCancelRef.current) return;
-        const targetSlot = slot + i;
-        await writeSlot(affected[i], targetSlot);
-        setBulkProgress({ done: count + i + 1, total: count * 2 + 1, phase: 'Shifting…' });
-      }
-      // Phase 3: clear the (now-duplicate) last slot with an init patch.
-      if (!bulkCancelRef.current) {
-        const blank = createDefaultPreset();
-        await writeSlot({ ...blank, patchName: '' }, last);
-      }
-      setLoadError(null);
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      setLoadError(`Failed to remove ${SysExCodec.slotToLabel(slot)}: ${detail}`);
-    } finally {
-      setBulkProgress(null);
-      if (midiDevice.status === 'connected') void midiDevice.loadPresetNames();
-    }
+    await runSlotJob(Math.max(0, last - slot) + 1, `Failed to remove ${SysExCodec.slotToLabel(slot)}`, async (step) => {
+      await removeAndShiftUp(slot, last, step);
+    });
   }
 
-  /**
-   * Cut: copy the patch to the clipboard and then remove + shift it.
-   * Equivalent to COPY → REMOVE+SHIFT so the user can then PASTE INSERT elsewhere.
-   */
+  /** Toolbar CUT: the single-slot form of handleCutSlots. */
   async function handleCutSlot(slot: number) {
-    if (bulkProgress) return;
-    // The removal rewrites everything from here to the last occupied slot.
-    if (refuseUnwritable(slotSpan(slot, Math.max(lastOccupiedSlot(255), slot)))) return;
-    try {
-      await handleCopySlot(slot);
-    } catch {
-      return; // handleCopySlot already sets loadError
-    }
-    await handleRemoveShift(slot);
+    await handleCutSlots([slot]);
   }
 
   async function handleRenameSlot(slot: number, name: string) {
@@ -1129,20 +1019,16 @@ function App() {
 
   async function handlePushConfirm(slot: number) {
     if (!preset) return;
-    if (refuseUnwritable([slot])) {
-      setSlotBrowserMode(null);
-      return;
-    }
+    // Close the picker first: the write takes ~15 s and shows its own progress.
+    setSlotBrowserMode(null);
     try {
-      // pushPreset, not writeSlot: the editor already holds this patch, and
-      // loading a refused slot's old content would throw the user's work away.
-      await midiDevice.pushPreset(preset, slot);
+      // writePresetToSlot directly, not mirrorWrite: the editor already holds
+      // this patch, and loading a refused slot's old content would discard it.
+      await midiDevice.writePresetToSlot({ ...preset, slotIndex: slot }, slot, setPushProgress);
       setLoadError(null);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       setLoadError(`Failed to save to ${SysExCodec.slotToLabel(slot)}: ${detail}`);
-    } finally {
-      setSlotBrowserMode(null);
     }
   }
 
