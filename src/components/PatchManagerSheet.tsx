@@ -88,6 +88,8 @@ export interface PatchManagerSheetProps {
    *  app-level error banner sits under this dialog's overlay. */
   errorMessage?: string | null;
   onDismissError?: () => void;
+  /** Slots whose name the pedal never answered for; rendered as "?". */
+  unreadSlots?: ReadonlySet<number>;
 }
 
 function bankSlotsOf(slot: number): number[] {
@@ -139,6 +141,7 @@ export function PatchManagerSheet({
   onResetSlots,
   errorMessage = null,
   onDismissError,
+  unreadSlots,
 }: PatchManagerSheetProps) {
   // Anchor + extras. The anchor is what every single-slot action acts on, so
   // multi-select sits on top of those buttons without changing them.
@@ -450,6 +453,7 @@ export function PatchManagerSheet({
           onSelect={handleSelect}
           onActivate={handleActivateFromPicker}
           onContextMenu={handleRowContextMenu}
+          unreadSlots={unreadSlots}
         />
       </div>
 

@@ -16,6 +16,9 @@ export interface PatchPickerProps {
   onActivate?: (slot: number) => void;
   /** right-click / ⋯ context menu (pixel coordinates of the trigger point) */
   onContextMenu?: (slot: number, x: number, y: number) => void;
+  /** Slots the pedal never answered a name read for. Shown as "?" so an
+   *  unanswered read can't masquerade as an empty slot. */
+  unreadSlots?: ReadonlySet<number>;
 }
 
 interface PatchRow {
@@ -83,8 +86,15 @@ function bankLabel(bank: number): string {
   return `BANK ${String(bank).padStart(2, '0')}`;
 }
 
-function slotName(name: string | null, namesLoadProgress: number): string {
+function slotName(
+  name: string | null,
+  namesLoadProgress: number,
+  unread: boolean,
+): string {
   if (name !== null) return name;
+  // "?" (read failed) is deliberately distinct from "-" (slot really is
+  // empty): the pedal not answering is not the same as having nothing there.
+  if (unread) return '?';
   if (namesLoadProgress < TOTAL_SLOTS) return '…';
   return '-';
 }
@@ -103,6 +113,7 @@ export function PatchPicker({
   onSelect,
   onActivate,
   onContextMenu,
+  unreadSlots,
 }: PatchPickerProps) {
   const rows = useMemo(() => buildRows(presetNames), [presetNames]);
   const categories = useMemo(() => buildBankCategories(rows), [rows]);
@@ -227,7 +238,14 @@ export function PatchPicker({
                     }}
                   >
                     <span className="pp-badge">{row.label}</span>
-                    <span className="pp-name">{slotName(row.name, namesLoadProgress)}</span>
+                    <span
+                      className="pp-name"
+                      title={unreadSlots?.has(row.slot)
+                        ? 'The pedal did not answer a name read for this slot; it may still hold a patch'
+                        : undefined}
+                    >
+                      {slotName(row.name, namesLoadProgress, unreadSlots?.has(row.slot) ?? false)}
+                    </span>
                     {isCurrent && <span className="pp-now">NOW</span>}
                   </button>
                 );

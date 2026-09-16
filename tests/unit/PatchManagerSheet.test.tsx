@@ -137,6 +137,18 @@ describe('PatchManagerSheet: errors', () => {
     renderSheet();
     expect(screen.queryByRole('alert')).toBeNull();
   });
+
+  it('shows "?" for slots the pedal never answered a name read for', () => {
+    // slot 2 has no name in makeNames(); unread means "no answer", not "empty"
+    renderSheet({ unreadSlots: new Set([2]) });
+    expect(screen.getAllByText('?').length).toBeGreaterThan(0);
+  });
+
+  it('still shows "-" for slots that simply have no patch', () => {
+    renderSheet();
+    expect(screen.queryByText('?')).toBeNull();
+    expect(screen.getAllByText('-').length).toBeGreaterThan(0);
+  });
 });
 
 describe('PatchManagerSheet: selection and arrange', () => {

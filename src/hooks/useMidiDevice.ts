@@ -154,6 +154,10 @@ export interface UseMidiDeviceReturn {
   currentSlot: number | null;
   presetNames: (string | null)[];
   namesLoadProgress: number;
+  /** Slots the pedal never answered a name read for, even after a retry.
+   *  Distinct from a null name, which also means "not scanned yet": these are
+   *  known-unreadable, so the list can say so instead of showing them empty. */
+  unreadSlots: ReadonlySet<number>;
   /** True while the background re-scan is verifying cache-seeded names against
    *  the device. Distinct from namesLoadProgress (which drives the first-load bar). */
   namesSyncing: boolean;
@@ -319,6 +323,10 @@ export function useMidiDevice(): UseMidiDeviceReturn {
   const [currentSlot, setCurrentSlot] = useState<number | null>(null);
   const [presetNames, setPresetNames] = useState<(string | null)[]>(new Array(256).fill(null));
   const [namesLoadProgress, setNamesLoadProgress] = useState(0);
+  // Slots whose name read timed out twice. A ref for the scan loop plus state
+  // for rendering, the same split presetNames uses.
+  const [unreadSlots, setUnreadSlots] = useState<ReadonlySet<number>>(new Set());
+  const unreadSlotsRef = useRef<Set<number>>(new Set());
   const [namesSyncing, setNamesSyncing] = useState(false);
   const [deviceInfo, setDeviceInfo] = useState<UseMidiDeviceReturn['deviceInfo']>(null);
   const [currentPreset, setCurrentPreset] = useState<GP200Preset | null>(null);
@@ -719,6 +727,8 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     setCurrentPreset(null);
     setUserIrNames([]);
     setDeviceState(null);
+    unreadSlotsRef.current.clear();
+    setUnreadSlots(new Set());
   }, []);
 
   /** Abort background name loading and wait for it to stop */
@@ -1039,6 +1049,25 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     [onMidiMessage],
   );
 
+  /**
+   * One name read plus a single retry, mirroring pullPreset. A lone timeout
+   * usually means the pedal was still busy; treating that as "no name" is what
+   * made the Patch Manager show occupied slots as empty.
+   */
+  const requestSlotNameRetrying = useCallback(
+    async (slot: number, timeoutMs: number): Promise<string | null> => {
+      const first = await requestSlotName(slot, timeoutMs);
+      if (first !== null) return first;
+      await new Promise(r => setTimeout(r, 60));
+      const second = await requestSlotName(slot, timeoutMs);
+      if (second === null) {
+        console.warn(`[GP-200] name read failed twice for ${SysExCodec.slotToLabel(slot)}`);
+      }
+      return second;
+    },
+    [requestSlotName],
+  );
+
   const loadPresetNames = useCallback(async (): Promise<void> => {
     if (!outputRef.current || !inputRef.current) return;
     if (namesLoadRunningRef.current) return; // already running
@@ -1055,22 +1084,26 @@ export function useMidiDevice(): UseMidiDeviceReturn {
         setNamesLoadProgress(s + 1);
         continue;
       }
-      const name = await requestSlotName(s, READ_NAME_TIMEOUT);
+      const name = await requestSlotNameRetrying(s, READ_NAME_TIMEOUT);
       if (namesLoadAbortRef.current) break;
       presetNamesRef.current[s] = name;
+      if (name === null) unreadSlotsRef.current.add(s);
+      else unreadSlotsRef.current.delete(s);
       // Batch UI updates: only re-render every BATCH_SIZE slots or on the last slot
       if ((s + 1) % BATCH_SIZE === 0 || s === 255) {
         setPresetNames([...presetNamesRef.current]);
+        setUnreadSlots(new Set(unreadSlotsRef.current));
       }
       setNamesLoadProgress(s + 1);
     }
     // Final flush in case we stopped mid-batch
     setPresetNames([...presetNamesRef.current]);
+    setUnreadSlots(new Set(unreadSlotsRef.current));
     if (inputRef.current) inputRef.current.onmidimessage = onMidiMessage;
     namesLoadRunningRef.current = false;
     // Warm the cache with whatever this pass filled in.
     persistNames();
-  }, [onMidiMessage, requestSlotName, persistNames]);
+  }, [onMidiMessage, requestSlotNameRetrying, persistNames]);
 
   // Force-read every slot and correct any that drifted from the cache-seeded
   // values. Runs silently in the background after a cache hit; the Patch
@@ -1089,21 +1122,28 @@ export function useMidiDevice(): UseMidiDeviceReturn {
 
     for (let s = 0; s < 256; s++) {
       if (namesLoadAbortRef.current) break;
-      const name = await requestSlotName(s, READ_NAME_TIMEOUT);
+      const name = await requestSlotNameRetrying(s, READ_NAME_TIMEOUT);
       if (namesLoadAbortRef.current) break;
       // A null read is a transient miss (timeout), so keep the cached value rather
-      // than blanking a slot we already have a good name for.
-      if (name !== null && name !== presetNamesRef.current[s]) {
-        presetNamesRef.current[s] = name;
-        changed = true;
-        setPresetNames([...presetNamesRef.current]);
+      // than blanking a slot we already have a good name for. Only a slot with
+      // no cached name to fall back on counts as unreadable.
+      if (name !== null) {
+        unreadSlotsRef.current.delete(s);
+        if (name !== presetNamesRef.current[s]) {
+          presetNamesRef.current[s] = name;
+          changed = true;
+          setPresetNames([...presetNamesRef.current]);
+        }
+      } else if (presetNamesRef.current[s] === null) {
+        unreadSlotsRef.current.add(s);
       }
     }
+    setUnreadSlots(new Set(unreadSlotsRef.current));
     if (inputRef.current) inputRef.current.onmidimessage = onMidiMessage;
     namesLoadRunningRef.current = false;
     setNamesSyncing(false);
     if (changed) persistNames();
-  }, [onMidiMessage, requestSlotName, persistNames]);
+  }, [onMidiMessage, requestSlotNameRetrying, persistNames]);
 
   const refreshNames = useCallback(async (): Promise<void> => {
     await pauseNameLoading();
@@ -1118,6 +1158,8 @@ export function useMidiDevice(): UseMidiDeviceReturn {
       if (!inCurrentBank) presetNamesRef.current[s] = null;
     }
     setPresetNames([...presetNamesRef.current]);
+    unreadSlotsRef.current.clear();
+    setUnreadSlots(new Set());
     setNamesLoadProgress(0);
     await loadPresetNames();
   }, [pauseNameLoading, loadPresetNames]);
@@ -1264,7 +1306,7 @@ export function useMidiDevice(): UseMidiDeviceReturn {
 
   return {
     status, handshakeStep, errorMessage, deviceName, currentSlot, presetNames, namesLoadProgress,
-    namesSyncing,
+    namesSyncing, unreadSlots,
     deviceInfo, currentPreset, userIrNames, deviceState,
     connect, disconnect, loadPresetNames, syncPresetNames, refreshNames,
     pullPreset, pushPreset, writePresetToSlot, saveToSlot, renameSlot,

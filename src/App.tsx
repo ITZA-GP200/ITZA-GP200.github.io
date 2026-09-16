@@ -1506,6 +1506,7 @@ function App() {
         onResetSlots={handleResetSlots}
         errorMessage={loadError}
         onDismissError={() => setLoadError(null)}
+        unreadSlots={midiDevice.unreadSlots}
       />
 
       {slotBrowserMode && (
