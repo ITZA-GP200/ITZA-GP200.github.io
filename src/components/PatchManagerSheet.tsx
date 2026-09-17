@@ -49,6 +49,10 @@ export interface PatchManagerSheetProps {
   onExportRequest: () => void;
   /** User-IR slot names enumerated at connect (30 entries; empty offline). */
   userIrNames: string[];
+  /** Last slot action failure (copy, paste, …). Shown inside the sheet,
+   *  because the app-level error banner sits under this dialog's overlay. */
+  errorMessage?: string | null;
+  onDismissError?: () => void;
 }
 
 function bankSlotsOf(slot: number): number[] {
@@ -89,6 +93,8 @@ export function PatchManagerSheet({
   onImportFile,
   onExportRequest,
   userIrNames,
+  errorMessage = null,
+  onDismissError,
 }: PatchManagerSheetProps) {
   // Anchor + extras. The anchor is what every single-slot action acts on, so
   // multi-select sits on top of those buttons without changing them.
@@ -392,6 +398,29 @@ export function PatchManagerSheet({
         className="px-4 py-3 space-y-2 flex-shrink-0"
         style={{ borderTop: '1px solid var(--border-active)' }}
       >
+        {errorMessage && (
+          <div
+            role="alert"
+            className="flex items-start justify-between gap-3 px-3 py-2 rounded font-mono-display text-caption"
+            style={{
+              color: 'var(--accent-red, #c05050)',
+              border: '1px solid var(--accent-red, #c05050)',
+              background: 'rgba(192,80,80,0.06)',
+            }}
+          >
+            <span>{errorMessage}</span>
+            {onDismissError && (
+              <button
+                type="button"
+                onClick={onDismissError}
+                aria-label="Dismiss error"
+                className="font-bold flex-shrink-0"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        )}
         {renaming && selected !== null && (
           <div className="flex items-center gap-2">
             <span

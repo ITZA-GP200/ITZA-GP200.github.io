@@ -13,6 +13,7 @@ import { presetNameCacheKey, loadCachedNames, saveCachedNames } from '@/core/pre
 import type { BulkApplyOptions, BulkApplyProgress } from '@/core/bulkApply';
 import { track } from '@/core/analytics';
 import { PRSTEncoder } from '@/core/PRSTEncoder';
+import { isSamePatch } from '@/core/samePatch';
 import {
   describeHandshakeSilence,
   describeMidiAccessDenied,
@@ -161,6 +162,11 @@ export interface UseMidiDeviceReturn {
   refreshNames: () => Promise<void>;
   pullPreset: (slot: number) => Promise<GP200Preset>;
   pushPreset: (preset: GP200Preset, slot: number) => Promise<void>;
+  /** Copy one slot into another on the pedal itself (no patch data sent).
+   *  `copied` is what COPY read from the source; nothing is written if the
+   *  source no longer holds it. Reads the target back and resolves with what
+   *  it holds, or throws when the pedal didn't take the copy. */
+  copySlotOnDevice: (fromSlot: number, toSlot: number, copied: GP200Preset) => Promise<GP200Preset>;
   writePresetToSlot: (preset: GP200Preset, slot: number) => Promise<void>;
   saveToSlot: (presetName: string, slot?: number) => Promise<void>;
   /** Rename a slot without touching its effect data. Briefly switches the
@@ -893,6 +899,75 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /**
+   * Copy `fromSlot` into `toSlot` on the pedal itself, the way the official
+   * Valeton editor saves a patch to another slot (USB capture, fw 1.8.0):
+   * select the source so the edit buffer holds it, then save-commit naming
+   * the target. No patch data crosses the wire, so nothing is lost in the
+   * copy and every bank is reachable.
+   */
+  const copySlotOnDevice = useCallback(
+    async (fromSlot: number, toSlot: number, copied: GP200Preset): Promise<GP200Preset> => {
+      const fromLabel = SysExCodec.slotToLabel(fromSlot);
+      const toLabel = SysExCodec.slotToLabel(toSlot);
+
+      // Only copy what COPY actually read: if the source was edited or
+      // overwritten since, the pedal would duplicate something else.
+      const source = await pullPreset(fromSlot);
+      if (!isSamePatch(source, copied)) {
+        throw new Error(`${fromLabel} has changed since it was copied; copy it again, then paste`);
+      }
+      if (fromSlot === toSlot) return source;
+      const output = outputRef.current;
+      if (!output) throw new Error('Not connected');
+      console.log(`[GP-200] device copy: ${fromLabel} -> ${toLabel} "${source.patchName}"`);
+
+      // Selecting slots re-reports block states and slot changes; mute those
+      // echoes so they can't flip blocks or pull a patch into the editor
+      // mid-copy (saveToSlot mutes its own part too).
+      suppressFxFor(3000);
+      suppressSlotEchoUntilRef.current = Date.now() + 3000;
+      // A preset change to the slot the pedal already sits on doesn't reload
+      // it from flash (see pushPreset), and that edit buffer may hold unsaved
+      // changes. Park on the neighbouring slot first so the buffer is exactly
+      // the stored source patch.
+      if (currentSlotRef.current === fromSlot) {
+        output.send(SysExCodec.buildPresetChange(fromSlot ^ 1));
+        await new Promise(r => setTimeout(r, 300));
+      }
+      output.send(SysExCodec.buildPresetChange(fromSlot));
+      setCurrentSlot(fromSlot); currentSlotRef.current = fromSlot;
+      await new Promise(r => setTimeout(r, 400));
+      await saveToSlot(source.patchName, toSlot);
+
+      // Read the target back and record only what the pedal reports, so the
+      // list never shows a paste the pedal didn't keep.
+      let readback: GP200Preset;
+      try {
+        readback = await pullPreset(toSlot);
+      } catch {
+        presetNamesRef.current[toSlot] = null;
+        setPresetNames([...presetNamesRef.current]);
+        persistNames();
+        onDeviceChangeRef.current?.(toSlot);
+        throw new Error(`Couldn't read ${toLabel} back to confirm the paste`);
+      }
+      presetNamesRef.current[toSlot] = readback.patchName;
+      setPresetNames([...presetNamesRef.current]);
+      persistNames();
+      if (!isSamePatch(readback, source)) {
+        // The pedal now sits on the target: let the editor show what it holds.
+        onDeviceChangeRef.current?.(toSlot);
+        throw new Error(`The pedal didn't take the paste: ${toLabel} reads "${readback.patchName}"`);
+      }
+      console.log(`[GP-200] device copy verified: ${toLabel} = "${readback.patchName}"`);
+      return readback;
+    },
+    // suppressFxFor: see saveToSlot. onDeviceChangeRef is a stable ref.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+    [pullPreset, saveToSlot, persistNames],
+  );
+
   const writePresetToSlot = useCallback(async (preset: GP200Preset, slot: number): Promise<void> => {
     await pauseNameLoading();
     if (!outputRef.current) throw new Error('Not connected');
@@ -1223,7 +1298,7 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     namesSyncing,
     deviceInfo, currentPreset, userIrNames, deviceState,
     connect, disconnect, loadPresetNames, syncPresetNames, refreshNames,
-    pullPreset, pushPreset, writePresetToSlot, saveToSlot, renameSlot,
+    pullPreset, pushPreset, copySlotOnDevice, writePresetToSlot, saveToSlot, renameSlot,
     bulkApply, bulkApplyProgress, cancelBulkApply,
     // Send operations + device-callback registration are owned by useMidiSend.
     sendEffectChange: send.sendEffectChange,
