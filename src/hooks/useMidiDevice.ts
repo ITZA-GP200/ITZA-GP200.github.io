@@ -24,6 +24,19 @@ import { useMidiSend } from './useMidiSend';
 
 const READ_TIMEOUT_MS = 3000;
 
+/** Thrown by copySlotOnDevice when the source slot no longer holds the patch
+ *  read from it earlier (by COPY, or when a default patch was set), so
+ *  nothing was written. */
+export class SourceChangedError extends Error {
+  readonly slot: number;
+
+  constructor(slot: number, change: string) {
+    super(`${SysExCodec.slotToLabel(slot)} has changed since it was read (${change})`);
+    this.name = 'SourceChangedError';
+    this.slot = slot;
+  }
+}
+
 function isSysEx(data: Uint8Array, cmd: number, sub: number): boolean {
   return (
     data.length > 10 &&
@@ -165,10 +178,16 @@ export interface UseMidiDeviceReturn {
   pullPreset: (slot: number) => Promise<GP200Preset>;
   pushPreset: (preset: GP200Preset, slot: number) => Promise<void>;
   /** Copy one slot into another on the pedal itself (no patch data sent).
-   *  `copied` is what COPY read from the source; nothing is written if the
-   *  source no longer holds it. Reads the target back and resolves with what
-   *  it holds, or throws when the pedal didn't take the copy. */
-  copySlotOnDevice: (fromSlot: number, toSlot: number, copied: GP200Preset) => Promise<GP200Preset>;
+   *  `copied` is what was read from the source earlier; nothing is written if
+   *  the source no longer holds it (SourceChangedError). `saveAs` names the
+   *  copy (default: the source's name). Reads the target back and resolves
+   *  with what it holds, or throws when the pedal didn't take the copy. */
+  copySlotOnDevice: (
+    fromSlot: number,
+    toSlot: number,
+    copied: GP200Preset,
+    saveAs?: string,
+  ) => Promise<GP200Preset>;
   writePresetToSlot: (preset: GP200Preset, slot: number) => Promise<void>;
   saveToSlot: (presetName: string, slot?: number) => Promise<void>;
   /** Rename a slot without touching its effect data. Briefly switches the
@@ -906,29 +925,29 @@ export function useMidiDevice(): UseMidiDeviceReturn {
    * Valeton editor saves a patch to another slot (USB capture, fw 1.8.0):
    * select the source so the edit buffer holds it, then save-commit naming
    * the target. No patch data crosses the wire, so nothing is lost in the
-   * copy and every bank is reachable.
+   * copy and every bank is reachable. The save-commit carries the name, so
+   * the copy can be saved under a different one (RESET's "Itza GP200").
    */
   const copySlotOnDevice = useCallback(
-    async (fromSlot: number, toSlot: number, copied: GP200Preset): Promise<GP200Preset> => {
+    async (fromSlot: number, toSlot: number, copied: GP200Preset, saveAs?: string): Promise<GP200Preset> => {
       const fromLabel = SysExCodec.slotToLabel(fromSlot);
       const toLabel = SysExCodec.slotToLabel(toSlot);
 
-      // Only copy what COPY actually read: if the source was edited or
+      // Only copy what was actually read: if the source was edited or
       // overwritten since, the pedal would duplicate something else.
       // Both are reads of flash, so any difference at all means a change.
       const source = await pullPreset(fromSlot);
       const changed = describePatchDifferences(source, copied);
       const sourceChanges = [...changed.identity, ...changed.values];
       if (sourceChanges.length > 0) {
-        console.warn(`[GP-200] device copy: ${fromLabel} changed since COPY:`, sourceChanges);
-        throw new Error(
-          `${fromLabel} has changed since it was copied (${sourceChanges[0]}); copy it again, then paste`,
-        );
+        console.warn(`[GP-200] device copy: ${fromLabel} changed since it was read:`, sourceChanges);
+        throw new SourceChangedError(fromSlot, sourceChanges[0]);
       }
-      if (fromSlot === toSlot) return source;
+      const savedName = saveAs ?? source.patchName;
+      if (fromSlot === toSlot && savedName === source.patchName) return source;
       const output = outputRef.current;
       if (!output) throw new Error('Not connected');
-      console.log(`[GP-200] device copy: ${fromLabel} -> ${toLabel} "${source.patchName}"`);
+      console.log(`[GP-200] device copy: ${fromLabel} -> ${toLabel} as "${savedName}"`);
 
       // Selecting slots re-reports block states and slot changes; mute those
       // echoes so they can't flip blocks or pull a patch into the editor
@@ -946,10 +965,10 @@ export function useMidiDevice(): UseMidiDeviceReturn {
       output.send(SysExCodec.buildPresetChange(fromSlot));
       setCurrentSlot(fromSlot); currentSlotRef.current = fromSlot;
       await new Promise(r => setTimeout(r, 400));
-      await saveToSlot(source.patchName, toSlot);
+      await saveToSlot(savedName, toSlot);
 
       // Read the target back and record only what the pedal reports, so the
-      // list never shows a paste the pedal didn't keep.
+      // list never shows a copy the pedal didn't keep.
       let readback: GP200Preset;
       try {
         readback = await pullPreset(toSlot);
@@ -958,7 +977,7 @@ export function useMidiDevice(): UseMidiDeviceReturn {
         setPresetNames([...presetNamesRef.current]);
         persistNames();
         onDeviceChangeRef.current?.(toSlot);
-        throw new Error(`Couldn't read ${toLabel} back to confirm the paste`);
+        throw new Error(`Couldn't read ${toLabel} back to confirm the copy`);
       }
       presetNamesRef.current[toSlot] = readback.patchName;
       setPresetNames([...presetNamesRef.current]);
@@ -966,13 +985,13 @@ export function useMidiDevice(): UseMidiDeviceReturn {
       // Fail only on what a discarded or misdirected save gets wrong. Values
       // can legitimately differ: the pedal saves its live edit buffer, where
       // live controls may have moved them. Log those precisely instead.
-      const result = describePatchDifferences(readback, source);
+      const result = describePatchDifferences(readback, { ...source, patchName: savedName });
       if (result.identity.length > 0) {
         console.warn(`[GP-200] device copy: ${toLabel} does not match ${fromLabel}:`, result);
         // The pedal now sits on the target: let the editor show what it holds.
         onDeviceChangeRef.current?.(toSlot);
         throw new Error(
-          `The pedal didn't take the paste: ${toLabel} differs from ${fromLabel} (${result.identity.join('; ')})`,
+          `The pedal didn't take the copy: ${toLabel} differs from ${fromLabel} (${result.identity.join('; ')})`,
         );
       }
       if (result.values.length > 0) {

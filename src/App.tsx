@@ -2,7 +2,8 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { usePreset } from '@/hooks/usePreset';
 import { applyFxScenario, findFxScenario } from '@/core/fxScenarios';
 import { patchStyleName } from '@/core/patchStyles';
-import { useMidiDevice } from '@/hooks/useMidiDevice';
+import { SourceChangedError, useMidiDevice } from '@/hooks/useMidiDevice';
+import { DEFAULT_PATCH_NAME, loadDefaultPatch, saveDefaultPatch } from '@/core/defaultPatch';
 import { useLooper } from '@/hooks/useLooper';
 import { useDrumMachine } from '@/hooks/useDrumMachine';
 import { useAudioEngine } from '@/components/AudioEngineProvider';
@@ -183,6 +184,8 @@ function App() {
   // `slot` is where the copied patch came from: paste copies it on the pedal
   // from there (see handlePasteToSlot).
   const [clipboard, setClipboard] = useState<{ preset: GP200Preset; slot: number; label: string } | null>(null);
+  // The template RESET copies (see core/defaultPatch.ts), kept across reloads.
+  const [defaultPatch, setDefaultPatch] = useState(loadDefaultPatch);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [firmwareWarningDismissed, setFirmwareWarningDismissed] = useState(false);
@@ -630,7 +633,39 @@ function App() {
       setLoadError(null);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
-      setLoadError(`Failed to paste into ${SysExCodec.slotToLabel(slot)}: ${detail}`);
+      const advice = err instanceof SourceChangedError ? '; copy it again, then paste' : '';
+      setLoadError(`Failed to paste into ${SysExCodec.slotToLabel(slot)}: ${detail}${advice}`);
+    }
+  }
+
+  // SET AS DEFAULT PATCH: remember a slot, and the patch as read now, as the
+  // template RESET copies.
+  async function handleSetDefaultPatch(slot: number) {
+    try {
+      const preset = await midiDevice.pullPreset(slot);
+      const next = { slot, preset };
+      saveDefaultPatch(next);
+      setDefaultPatch(next);
+      setLoadError(null);
+    } catch {
+      setLoadError(`Failed to read ${SysExCodec.slotToLabel(slot)} to set it as the default patch`);
+    }
+  }
+
+  // RESET copies the default patch over a slot on the pedal itself (the same
+  // verified copy as PASTE), saved under DEFAULT_PATCH_NAME.
+  async function handleResetSlot(slot: number) {
+    if (!defaultPatch) return;
+    try {
+      const reset = await midiDevice.copySlotOnDevice(
+        defaultPatch.slot, slot, defaultPatch.preset, DEFAULT_PATCH_NAME,
+      );
+      loadPreset(reset);
+      setLoadError(null);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      const advice = err instanceof SourceChangedError ? '; set the default patch again' : '';
+      setLoadError(`Failed to reset ${SysExCodec.slotToLabel(slot)}: ${detail}${advice}`);
     }
   }
 
@@ -1074,6 +1109,9 @@ function App() {
         userIrNames={midiDevice.userIrNames}
         errorMessage={loadError}
         onDismissError={() => setLoadError(null)}
+        onSetDefaultPatch={handleSetDefaultPatch}
+        onResetSlot={handleResetSlot}
+        defaultPatchLabel={defaultPatch ? SysExCodec.slotToLabel(defaultPatch.slot) : null}
       />
 
       {slotBrowserMode && (
