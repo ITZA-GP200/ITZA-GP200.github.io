@@ -180,7 +180,9 @@ function App() {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [slotBrowserMode, setSlotBrowserMode] = useState<'pull' | 'push' | null>(null);
-  const [clipboard, setClipboard] = useState<{ preset: GP200Preset; label: string } | null>(null);
+  // `slot` is where the copied patch came from: paste copies it on the pedal
+  // from there (see handlePasteToSlot).
+  const [clipboard, setClipboard] = useState<{ preset: GP200Preset; slot: number; label: string } | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [firmwareWarningDismissed, setFirmwareWarningDismissed] = useState(false);
@@ -606,17 +608,22 @@ function App() {
   async function handleCopySlot(slot: number) {
     try {
       const pulled = await midiDevice.pullPreset(slot);
-      setClipboard({ preset: pulled, label: SysExCodec.slotToLabel(slot) });
+      setClipboard({ preset: pulled, slot, label: SysExCodec.slotToLabel(slot) });
       setLoadError(null);
     } catch {
       setLoadError(`Failed to copy ${SysExCodec.slotToLabel(slot)} from device`);
     }
   }
 
+  // PASTE is the pedal's own copy, as the official editor does it: select the
+  // copied slot, then save it under the target's number. The flash upload
+  // used here before is ignored by the hardware (fw 1.8.0).
   async function handlePasteToSlot(slot: number) {
     if (!clipboard) return;
     try {
-      await midiDevice.pushPreset({ ...clipboard.preset, slotIndex: slot }, slot);
+      const pasted = await midiDevice.copySlotOnDevice(clipboard.slot, slot, clipboard.preset);
+      // The pedal now sits on the target, so show that patch in the editor.
+      loadPreset(pasted);
       setLoadError(null);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
@@ -1059,6 +1066,8 @@ function App() {
         onImportFile={handleFile}
         onExportRequest={() => setShowExportDialog(true)}
         userIrNames={midiDevice.userIrNames}
+        errorMessage={loadError}
+        onDismissError={() => setLoadError(null)}
       />
 
       {slotBrowserMode && (

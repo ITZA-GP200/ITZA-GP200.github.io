@@ -188,3 +188,20 @@ describe('PatchManagerSheet: selection and arrange', () => {
     expect(screen.getByRole('button', { name: '▲ UP' })).toBeDisabled();
   });
 });
+
+describe('PatchManagerSheet: errors', () => {
+  it('shows a slot action failure inside the sheet, with a dismiss control', () => {
+    const { props } = renderSheet({
+      errorMessage: 'Failed to paste into 31D: 30D has changed since it was copied',
+      onDismissError: vi.fn(),
+    });
+    expect(screen.getByRole('alert')).toHaveTextContent('30D has changed since it was copied');
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss error' }));
+    expect(props.onDismissError).toHaveBeenCalled();
+  });
+
+  it('shows no alert when nothing failed', () => {
+    renderSheet();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
