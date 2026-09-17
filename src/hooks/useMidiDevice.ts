@@ -15,6 +15,7 @@ import { track } from '@/core/analytics';
 import { PRSTEncoder } from '@/core/PRSTEncoder';
 import { pushPresetToDevice, type PushProgress } from '@/core/devicePush';
 import { samePatchContent, sameSlotName } from '@/core/patchIdentity';
+import { createReadReplyCollector, isFirstReplyChunkFor } from '@/core/readReply';
 import {
   describeHandshakeSilence,
   describeMidiAccessDenied,
@@ -351,8 +352,11 @@ export function useMidiDevice(): UseMidiDeviceReturn {
   // localStorage cache key for this device's slot names (deviceType + port name),
   // computed during the handshake. null until connected / storage unavailable.
   const cacheKeyRef        = useRef<string | null>(null);
-  // (fastNameReadRef removed — the sub=0x20 fast name read was unreliable
-  // on hardware; requestSlotName now always uses the proven 7-chunk full read.)
+  // Whether the fast name-only read (sub=0x20, documented for fw 1.8.0) works
+  // on this device. null = untested; probed once per connection, then either
+  // used for every slot or permanently bypassed in favor of full reads.
+  // (Upstream behaviour, restored: the fast read works on hardware.)
+  const fastNameReadRef    = useRef<boolean | null>(null);
   // While a flash push bounces the device across slots (park → write →
   // return), the device echoes each hop as a preset-change frame. Acting on
   // those would pull the park slot into the editor mid-save; ignore echoes
@@ -733,6 +737,7 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     setCurrentPreset(null);
     setUserIrNames([]);
     setDeviceState(null);
+    fastNameReadRef.current = null;
     unreadSlotsRef.current.clear();
     setUnreadSlots(new Set());
   }, []);
@@ -741,9 +746,8 @@ export function useMidiDevice(): UseMidiDeviceReturn {
   const pauseNameLoading = useCallback(async () => {
     if (namesLoadRunningRef.current) {
       namesLoadAbortRef.current = true;
-      // Each in-flight name request now collects 7 chunks (up to ~1500ms);
-      // give it up to 2000ms to see the abort flag and exit.
-      for (let i = 0; i < 40 && namesLoadRunningRef.current; i++) {
+      // Wait for the running loop to finish (max ~600ms for one in-flight request)
+      for (let i = 0; i < 20 && namesLoadRunningRef.current; i++) {
         await new Promise(r => setTimeout(r, 50));
       }
     }
@@ -756,49 +760,54 @@ export function useMidiDevice(): UseMidiDeviceReturn {
         reject(new Error('Not connected'));
         return;
       }
-      const chunks: Uint8Array[] = [];
+      const label = SysExCodec.slotToLabel(slot);
+      // Accepts only a whole reply that names this slot, so the tail of an
+      // earlier read (a name scan the pause cut short, or this read's own
+      // timed-out first attempt) can't be mixed in. See core/readReply.ts.
+      const collector = createReadReplyCollector(slot);
       let attempts = 0;
       let timer: ReturnType<typeof setTimeout>;
+      let handler: ((event: { data: unknown }) => void) | null = null;
+
+      // Hand the input back only if it is still ours: a newer read may have
+      // installed its own handler, and clobbering it made that read time out.
+      function releaseInput() {
+        if (inputRef.current && inputRef.current.onmidimessage === handler) {
+          inputRef.current.onmidimessage = onMidiMessage;
+        }
+      }
 
       function tryRequest() {
-        chunks.length = 0;
+        collector.reset();
         timer = setTimeout(() => {
           if (attempts < 1) {
             attempts++;
             tryRequest();
           } else {
-            if (inputRef.current) inputRef.current.onmidimessage = onMidiMessage;
+            releaseInput();
             setStatus('error');
             setErrorMessage('Read timeout');
             reject(new Error('Read timeout'));
           }
         }, READ_TIMEOUT_MS);
 
-        if (inputRef.current) {
-          inputRef.current.onmidimessage = (event: { data: unknown }) => {
-            const data = getBytes(event.data);
-            console.log('[GP-200] pull rx:', Array.from(data).map(b => b.toString(16).padStart(2,'0')).join(' '));
-            onMidiMessage(event);
-            if (isSysEx(data, 0x12, 0x18)) {
-              // Logged, not enforced: nobody has confirmed how the pedal labels
-              // slots above 127 in this header byte, so rejecting on a mismatch
-              // could break reads that work today. The log is the evidence
-              // needed before enforcing it (and for addressing high-slot writes).
-              if (chunks.length === 0 && data[10] !== slot) {
-                const note = `[GP-200] pull ${SysExCodec.slotToLabel(slot)}: reply header slot byte ${data[10]}`;
-                if (slot > SysExCodec.MAX_UPLOAD_SLOT) console.log(note);
-                else console.warn(`${note}, expected ${slot}`);
-              }
-              chunks.push(data);
-              if (chunks.length === 7) {
-                clearTimeout(timer);
-                if (inputRef.current) inputRef.current.onmidimessage = onMidiMessage;
-                try { resolve(SysExCodec.parseReadChunks(chunks)); }
-                catch (e) { reject(e); }
-              }
-            }
-          };
-        }
+        handler = (event: { data: unknown }) => {
+          const data = getBytes(event.data);
+          console.log('[GP-200] pull rx:', Array.from(data).map(b => b.toString(16).padStart(2,'0')).join(' '));
+          onMidiMessage(event);
+          if (!isSysEx(data, 0x12, 0x18)) return;
+          const result = collector.accept(data);
+          if (result.kind === 'foreign') {
+            console.warn(`[GP-200] pull ${label}: ignored a reply for slot ${result.slot}`);
+            return;
+          }
+          if (result.kind !== 'complete') return;
+          clearTimeout(timer);
+          releaseInput();
+          try { resolve(SysExCodec.parseReadChunks(result.chunks)); }
+          catch (e) { reject(e); }
+        };
+        if (inputRef.current) inputRef.current.onmidimessage = handler;
 
         const req = SysExCodec.buildReadRequest(slot);
         console.log('[GP-200] pull tx:', Array.from(req).map(b => b.toString(16).padStart(2,'0')).join(' '));
@@ -1091,62 +1100,46 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     [pullPreset, saveToSlot, verifySlotWrite],
   );
 
-  /** Request one slot's name by issuing a full 7-chunk read (sub=0x18),
-   *  exactly like pullPreset does. Collects all 7 response chunks, then
-   *  calls parseReadChunks → parsePresetFromDecoded to extract the name.
-   *  The previous fast-path (sub=0x20 name-only read) was unreliable on
-   *  hardware and has been removed. */
+  /** Request one slot's name. Fast path (sub=0x20 name-only read, fw 1.8.0)
+   *  when useFast; full 7-chunk read request otherwise. Either way the
+   *  first sub=0x18 chunk with offset 0 carries the name.
+   *
+   *  This is upstream's reader, restored. A fork change had replaced it with
+   *  a full read that counted any 7 chunks, which mixed late replies into the
+   *  next slot's read and left occupied slots unreadable (and twice as slow).
+   *  Two additions on top of upstream: the offset-0 chunk must name the
+   *  requested slot, so a late chunk from an earlier request can't be taken
+   *  as this slot's name; and a timeout only hands the input back if the
+   *  handler is still ours, so it can't hijack a read that started since. */
   const requestSlotName = useCallback(
-    (slot: number, timeoutMs: number): Promise<string | null> => {
+    (slot: number, useFast: boolean, timeoutMs: number): Promise<string | null> => {
       return new Promise<string | null>((resolve) => {
-        const chunks: Uint8Array[] = [];
-        const timer = setTimeout(() => {
-          if (inputRef.current) inputRef.current.onmidimessage = onMidiMessage;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const handler = (event: { data: unknown }) => {
+          const data = getBytes(event.data);
+          onMidiMessage(event);
+          if (!isSysEx(data, 0x12, 0x18)) return;
+          if (!isFirstReplyChunkFor(data, slot)) return;
+          clearTimeout(timer);
+          if (inputRef.current && inputRef.current.onmidimessage === handler) {
+            inputRef.current.onmidimessage = onMidiMessage;
+          }
+          resolve(SysExCodec.parsePresetName(data));
+        };
+        timer = setTimeout(() => {
+          if (inputRef.current && inputRef.current.onmidimessage === handler) {
+            inputRef.current.onmidimessage = onMidiMessage;
+          }
           resolve(null);
         }, timeoutMs);
-        if (inputRef.current) {
-          inputRef.current.onmidimessage = (event: { data: unknown }) => {
-            const data = getBytes(event.data);
-            onMidiMessage(event);
-            if (isSysEx(data, 0x12, 0x18)) {
-              chunks.push(new Uint8Array(data));
-              if (chunks.length === 7) {
-                clearTimeout(timer);
-                if (inputRef.current) inputRef.current.onmidimessage = onMidiMessage;
-                try {
-                  const preset = SysExCodec.parseReadChunks(chunks);
-                  resolve(preset.patchName ?? null);
-                } catch {
-                  resolve(null);
-                }
-              }
-            }
-          };
-        }
-        const req = SysExCodec.buildReadRequest(slot);
+        if (inputRef.current) inputRef.current.onmidimessage = handler;
+        let req: Uint8Array;
+        if (useFast) req = SysExCodec.buildNameReadRequest(slot);
+        else req = SysExCodec.buildReadRequest(slot);
         outputRef.current!.send(req);
       });
     },
     [onMidiMessage],
-  );
-
-  /**
-   * One name read plus a single retry, mirroring pullPreset. A lone timeout
-   * usually means the pedal was still busy; treating that as "no name" is what
-   * made the Patch Manager show occupied slots as empty.
-   */
-  const requestSlotNameRetrying = useCallback(
-    async (slot: number, timeoutMs: number): Promise<string | null> => {
-      const first = await requestSlotName(slot, timeoutMs);
-      if (first !== null) return first;
-      await new Promise(r => setTimeout(r, 60));
-      const second = await requestSlotName(slot, timeoutMs);
-      if (second === null) {
-        console.warn(`[GP-200] name read failed twice for ${SysExCodec.slotToLabel(slot)}`);
-      }
-      return second;
-    },
-    [requestSlotName],
   );
 
   const loadPresetNames = useCallback(async (): Promise<void> => {
@@ -1154,10 +1147,9 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     if (namesLoadRunningRef.current) return; // already running
     namesLoadRunningRef.current = true;
     namesLoadAbortRef.current = false;
-    // 7-chunk full read; device typically replies in <100ms per slot but give
-    // generous headroom (1500ms) so a busy device still succeeds.
-    const READ_NAME_TIMEOUT = 1500;
-    const BATCH_SIZE = 8; // update UI every 8 slots to avoid excessive re-renders
+    const FULL_TIMEOUT = 500; // device responds in ~20ms normally
+    const FAST_TIMEOUT = 250; // single-chunk response, fail over quickly
+    const BATCH_SIZE = 8;     // Update UI every 8 slots instead of every slot
 
     for (let s = 0; s < 256; s++) {
       if (namesLoadAbortRef.current) break;
@@ -1165,9 +1157,25 @@ export function useMidiDevice(): UseMidiDeviceReturn {
         setNamesLoadProgress(s + 1);
         continue;
       }
-      const name = await requestSlotNameRetrying(s, READ_NAME_TIMEOUT);
+      let name: string | null = null;
+      if (fastNameReadRef.current !== false) {
+        name = await requestSlotName(s, true, FAST_TIMEOUT);
+        if (name !== null) {
+          fastNameReadRef.current = true;
+        } else if (fastNameReadRef.current === null && !namesLoadAbortRef.current) {
+          // Probe failed on first use; the firmware may not support the
+          // name-only read. Retry this slot with a full read; if THAT works
+          // the fast path is dead for this connection, not the device.
+          const fallback = await requestSlotName(s, false, FULL_TIMEOUT);
+          if (fallback !== null) fastNameReadRef.current = false;
+          name = fallback;
+        }
+      } else {
+        name = await requestSlotName(s, false, FULL_TIMEOUT);
+      }
       if (namesLoadAbortRef.current) break;
       presetNamesRef.current[s] = name;
+      // Track unanswered reads so the list shows "?" rather than "empty".
       if (name === null) unreadSlotsRef.current.add(s);
       else unreadSlotsRef.current.delete(s);
       // Batch UI updates: only re-render every BATCH_SIZE slots or on the last slot
@@ -1184,7 +1192,7 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     namesLoadRunningRef.current = false;
     // Warm the cache with whatever this pass filled in.
     persistNames();
-  }, [onMidiMessage, requestSlotNameRetrying, persistNames]);
+  }, [onMidiMessage, requestSlotName, persistNames]);
 
   // Force-read every slot and correct any that drifted from the cache-seeded
   // values. Runs silently in the background after a cache hit; the Patch
@@ -1198,12 +1206,25 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     namesLoadRunningRef.current = true;
     namesLoadAbortRef.current = false;
     setNamesSyncing(true);
-    const READ_NAME_TIMEOUT = 1500;
+    const FULL_TIMEOUT = 500;
+    const FAST_TIMEOUT = 250;
     let changed = false;
 
     for (let s = 0; s < 256; s++) {
       if (namesLoadAbortRef.current) break;
-      const name = await requestSlotNameRetrying(s, READ_NAME_TIMEOUT);
+      let name: string | null = null;
+      if (fastNameReadRef.current !== false) {
+        name = await requestSlotName(s, true, FAST_TIMEOUT);
+        if (name !== null) {
+          fastNameReadRef.current = true;
+        } else if (fastNameReadRef.current === null && !namesLoadAbortRef.current) {
+          const fallback = await requestSlotName(s, false, FULL_TIMEOUT);
+          if (fallback !== null) fastNameReadRef.current = false;
+          name = fallback;
+        }
+      } else {
+        name = await requestSlotName(s, false, FULL_TIMEOUT);
+      }
       if (namesLoadAbortRef.current) break;
       // A null read is a transient miss (timeout), so keep the cached value rather
       // than blanking a slot we already have a good name for. Only a slot with
@@ -1224,7 +1245,7 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     namesLoadRunningRef.current = false;
     setNamesSyncing(false);
     if (changed) persistNames();
-  }, [onMidiMessage, requestSlotNameRetrying, persistNames]);
+  }, [onMidiMessage, requestSlotName, persistNames]);
 
   const refreshNames = useCallback(async (): Promise<void> => {
     await pauseNameLoading();
