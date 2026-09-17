@@ -302,3 +302,32 @@ describe('PatchManagerSheet: right-click menu', () => {
     expect(within(menu).getByRole('menuitem', { name: 'COPY' })).toHaveAttribute('title', 'Connect the GP-200 first');
   });
 });
+
+describe('PatchManagerSheet: right-click RENAME', () => {
+  function openMenuOn(text: string) {
+    fireEvent.contextMenu(screen.getByText(text), { clientX: 120, clientY: 140 });
+    return screen.getByRole('menu', { name: 'Patch actions' });
+  }
+
+  it('opens the same inline rename as the RENAME button, for the right-clicked slot', async () => {
+    const { props } = renderSheet();
+    const menu = openMenuOn('Crunch');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'RENAME' }));
+    expect(screen.queryByRole('menu')).toBeNull();
+    const input = screen.getByDisplayValue('Crunch');
+    fireEvent.change(input, { target: { value: 'Lead Boost' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await vi.waitFor(() => {
+      expect(props.onRenameSlot).toHaveBeenCalledWith(1, 'Lead Boost');
+    });
+  });
+
+  it('renames one patch at a time, and says so', () => {
+    renderSheet();
+    fireEvent.click(screen.getByText('Clean'));
+    fireEvent.click(screen.getByText('Crunch'), { shiftKey: true });
+    const rename = within(openMenuOn('Crunch')).getByRole('menuitem', { name: 'RENAME' });
+    expect(rename).toHaveAttribute('aria-disabled', 'true');
+    expect(rename).toHaveAttribute('title', 'Rename works on one patch at a time');
+  });
+});

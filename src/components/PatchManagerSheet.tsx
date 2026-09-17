@@ -165,6 +165,8 @@ export function PatchManagerSheet({
   if (!copyBlocked && selectedSlots.length !== 1) copyBlocked = 'Copy works on one patch at a time for now';
   let pasteBlocked = slotActionBlocked;
   if (!pasteBlocked && selectedSlots.length !== 1) pasteBlocked = 'Select a single slot to paste into';
+  let renameBlocked = slotActionBlocked;
+  if (!renameBlocked && selectedSlots.length !== 1) renameBlocked = 'Rename works on one patch at a time';
 
   function handleActivateFromPicker(slot: number) {
     if (connected) void runBusy(() => onActivate(slot));
@@ -743,6 +745,12 @@ export function PatchManagerSheet({
         onPaste={() => {
           setMenuAt(null);
           if (selected !== null) void runBusy(() => onPasteToSlot(selected));
+        }}
+        renameBlocked={renameBlocked}
+        onRename={() => {
+          setMenuAt(null);
+          // The same inline rename the RENAME button opens.
+          startRename();
         }}
         onClose={() => setMenuAt(null)}
       />
