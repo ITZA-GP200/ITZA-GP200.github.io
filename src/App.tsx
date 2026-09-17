@@ -465,6 +465,7 @@ function App() {
 
   // Stable reference (useCallback([]) inside useMidiDevice), safe to close over.
   const saveToSlot = midiDevice.saveToSlot;
+  const refreshSlotName = midiDevice.refreshSlotName;
   const handleFile = useCallback((buffer: Uint8Array) => {
     try {
       const decoded = new PRSTDecoder(buffer).decode();
@@ -482,6 +483,8 @@ function App() {
         await sendPresetToDevice(decoded);
         await new Promise((settle) => setTimeout(settle, 250));
         await saveToSlot(decoded.patchName);
+        // The save doesn't touch the Patch Manager's list; read the name back.
+        await refreshSlotName();
       })().catch(() => setLoadError('Failed to save to device'));
     } catch (err) {
       let message = String(err);
@@ -489,7 +492,7 @@ function App() {
       setLoadError(`Error loading file: ${message}`);
       track('preset_import', { target: 'editor', ok: false });
     }
-  }, [loadPreset, sendPresetToDevice, saveToSlot, markEditorEntry]);
+  }, [loadPreset, sendPresetToDevice, saveToSlot, refreshSlotName, markEditorEntry]);
 
   function handleExportConfirm(name: string, author: string | undefined, slot: number) {
     if (!preset) return;
@@ -725,6 +728,9 @@ function App() {
     // alternative is still rejected by real hardware (docs §0.1), so this
     // stays the save path.
     await midiDevice.saveToSlot(preset.patchName, midiDevice.currentSlot);
+    // A name changed in the editor reaches the pedal with the save, but the
+    // Patch Manager's list only learns it by reading the slot back.
+    await midiDevice.refreshSlotName(midiDevice.currentSlot);
   }
 
   function handleOpenBrowser(mode: 'pull' | 'push') {

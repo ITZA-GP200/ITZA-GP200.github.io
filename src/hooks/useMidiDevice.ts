@@ -158,8 +158,10 @@ export interface UseMidiDeviceReturn {
   /** Force re-read every slot and correct any that drifted from the cache-seeded
    *  values, persisting the result. Runs silently in the background after connect. */
   syncPresetNames: () => Promise<void>;
-  /** Clear cached names (except the already-pulled current bank) and re-enumerate. */
+  /** Clear every cached name and re-read all 256 slots from the pedal. */
   refreshNames: () => Promise<void>;
+  /** Re-read one slot's name (default: the active slot) and update the list. */
+  refreshSlotName: (slot?: number) => Promise<void>;
   pullPreset: (slot: number) => Promise<GP200Preset>;
   pushPreset: (preset: GP200Preset, slot: number) => Promise<void>;
   /** Copy one slot into another on the pedal itself (no patch data sent).
@@ -1172,18 +1174,30 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     if (changed) persistNames();
   }, [onMidiMessage, requestSlotName, persistNames]);
 
+  /** Re-read one slot's name from the pedal and record it in the list.
+   *  For writes that don't read their slot back themselves, such as SAVE TO
+   *  after renaming the patch in the editor: that path wrote the new name to
+   *  the pedal but left the list showing the old one. */
+  const refreshSlotName = useCallback(async (slot?: number): Promise<void> => {
+    const target = slot ?? currentSlotRef.current;
+    if (target === null) return;
+    await pauseNameLoading();
+    if (!outputRef.current || !inputRef.current) return;
+    const name = await requestSlotName(target, 500);
+    // A failed read leaves the list as it was; REFRESH re-reads everything.
+    if (name === null) return;
+    presetNamesRef.current[target] = name;
+    setPresetNames([...presetNamesRef.current]);
+    persistNames();
+  }, [pauseNameLoading, requestSlotName, persistNames]);
+
   const refreshNames = useCallback(async (): Promise<void> => {
     await pauseNameLoading();
-    // Keep the names the handshake already pulled (current bank); those came
-    // from full reads moments ago; clear everything else for re-enumeration.
-    const bankBase = (() => {
-      if (currentSlotRef.current === null) return -1;
-      return Math.floor(currentSlotRef.current / 4) * 4;
-    })();
-    for (let s = 0; s < 256; s++) {
-      const inCurrentBank = bankBase >= 0 && s >= bankBase && s < bankBase + 4;
-      if (!inCurrentBank) presetNamesRef.current[s] = null;
-    }
+    // Re-read every slot. This used to keep the current bank's names on the
+    // grounds that the handshake had just read them, but a save made since
+    // can leave them stale, and REFRESH then couldn't correct them (hardware:
+    // a patch renamed in the editor and saved kept its old name in the list).
+    presetNamesRef.current.fill(null);
     setPresetNames([...presetNamesRef.current]);
     setNamesLoadProgress(0);
     await loadPresetNames();
@@ -1316,7 +1330,7 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     status, handshakeStep, errorMessage, deviceName, currentSlot, presetNames, namesLoadProgress,
     namesSyncing,
     deviceInfo, currentPreset, userIrNames, deviceState,
-    connect, disconnect, loadPresetNames, syncPresetNames, refreshNames,
+    connect, disconnect, loadPresetNames, syncPresetNames, refreshNames, refreshSlotName,
     pullPreset, pushPreset, copySlotOnDevice, writePresetToSlot, saveToSlot, renameSlot,
     bulkApply, bulkApplyProgress, cancelBulkApply,
     // Send operations + device-callback registration are owned by useMidiSend.
