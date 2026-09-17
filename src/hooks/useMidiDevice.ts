@@ -13,7 +13,7 @@ import { presetNameCacheKey, loadCachedNames, saveCachedNames } from '@/core/pre
 import type { BulkApplyOptions, BulkApplyProgress } from '@/core/bulkApply';
 import { track } from '@/core/analytics';
 import { PRSTEncoder } from '@/core/PRSTEncoder';
-import { isSamePatch } from '@/core/samePatch';
+import { describePatchDifferences } from '@/core/samePatch';
 import {
   describeHandshakeSilence,
   describeMidiAccessDenied,
@@ -913,9 +913,15 @@ export function useMidiDevice(): UseMidiDeviceReturn {
 
       // Only copy what COPY actually read: if the source was edited or
       // overwritten since, the pedal would duplicate something else.
+      // Both are reads of flash, so any difference at all means a change.
       const source = await pullPreset(fromSlot);
-      if (!isSamePatch(source, copied)) {
-        throw new Error(`${fromLabel} has changed since it was copied; copy it again, then paste`);
+      const changed = describePatchDifferences(source, copied);
+      const sourceChanges = [...changed.identity, ...changed.values];
+      if (sourceChanges.length > 0) {
+        console.warn(`[GP-200] device copy: ${fromLabel} changed since COPY:`, sourceChanges);
+        throw new Error(
+          `${fromLabel} has changed since it was copied (${sourceChanges[0]}); copy it again, then paste`,
+        );
       }
       if (fromSlot === toSlot) return source;
       const output = outputRef.current;
@@ -955,10 +961,23 @@ export function useMidiDevice(): UseMidiDeviceReturn {
       presetNamesRef.current[toSlot] = readback.patchName;
       setPresetNames([...presetNamesRef.current]);
       persistNames();
-      if (!isSamePatch(readback, source)) {
+      // Fail only on what a discarded or misdirected save gets wrong. Values
+      // can legitimately differ: the pedal saves its live edit buffer, where
+      // live controls may have moved them. Log those precisely instead.
+      const result = describePatchDifferences(readback, source);
+      if (result.identity.length > 0) {
+        console.warn(`[GP-200] device copy: ${toLabel} does not match ${fromLabel}:`, result);
         // The pedal now sits on the target: let the editor show what it holds.
         onDeviceChangeRef.current?.(toSlot);
-        throw new Error(`The pedal didn't take the paste: ${toLabel} reads "${readback.patchName}"`);
+        throw new Error(
+          `The pedal didn't take the paste: ${toLabel} differs from ${fromLabel} (${result.identity.join('; ')})`,
+        );
+      }
+      if (result.values.length > 0) {
+        console.info(
+          `[GP-200] device copy: ${toLabel} matches ${fromLabel} except values the pedal saved from its live buffer:`,
+          result.values,
+        );
       }
       console.log(`[GP-200] device copy verified: ${toLabel} = "${readback.patchName}"`);
       return readback;
