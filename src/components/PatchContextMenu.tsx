@@ -44,6 +44,10 @@ export interface PatchContextMenuProps {
   onCopy: () => void;
   /** Paste the clipboard over the selected slot. */
   onPaste: () => void;
+  /** Why RENAME can't run right now, or null when it can. */
+  renameBlocked: string | null;
+  /** Open the Patch Manager's inline rename for the selected slot. */
+  onRename: () => void;
   onClose: () => void;
 }
 
@@ -61,6 +65,8 @@ export function PatchContextMenu({
   pasteBlocked,
   onCopy,
   onPaste,
+  renameBlocked,
+  onRename,
   onClose,
 }: PatchContextMenuProps) {
   const [pasteOpen, setPasteOpen] = useState(false);
@@ -207,6 +213,8 @@ export function PatchContextMenu({
         <Divider />
         <MenuItem label="INSERT" trailing="▸" blocked={NOT_BUILT} />
         <Divider />
+        <MenuItem label="RENAME" blocked={renameBlocked} onSelect={onRename} />
+        <Divider />
         <MenuItem label="RESET" danger blocked={NOT_BUILT} />
       </div>
 
@@ -270,7 +278,9 @@ const panelStyle = {
   position: 'fixed',
   zIndex: 1000,
   background: 'var(--bg-surface-raised)',
-  border: '1px solid var(--border-subtle)',
+  // The app's accent (light blue in the dark theme) sets the menu apart
+  // from the panels it opens over.
+  border: '1px solid var(--accent)',
   borderRadius: 8,
   boxShadow: '0 12px 32px rgba(0,0,0,0.5)',
   color: 'var(--text-primary)',
