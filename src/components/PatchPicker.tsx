@@ -14,6 +14,9 @@ export interface PatchPickerProps {
   onSelect: (slot: number, modifiers?: { shift: boolean; toggle: boolean }) => void;
   /** double-click / Enter confirm */
   onActivate?: (slot: number) => void;
+  /** Right-click on a row, with the viewport point to open a menu at. Omit
+   *  to keep the browser's own context menu (the LOAD/SAVE AS picker). */
+  onRowContextMenu?: (slot: number, x: number, y: number) => void;
 }
 
 interface PatchRow {
@@ -100,6 +103,7 @@ export function PatchPicker({
   multiSelected,
   onSelect,
   onActivate,
+  onRowContextMenu,
 }: PatchPickerProps) {
   const rows = useMemo(() => buildRows(presetNames), [presetNames]);
   const categories = useMemo(() => buildBankCategories(rows), [rows]);
@@ -217,6 +221,19 @@ export function PatchPicker({
                       toggle: event.ctrlKey || event.metaKey,
                     })}
                     onDoubleClick={() => handleActivate(row.slot)}
+                    onContextMenu={(event) => {
+                      if (!onRowContextMenu) return;
+                      event.preventDefault();
+                      let x = event.clientX;
+                      let y = event.clientY;
+                      // The keyboard's menu key reports (0, 0): open by the row.
+                      if (x === 0 && y === 0) {
+                        const rect = event.currentTarget.getBoundingClientRect();
+                        x = rect.left + 24;
+                        y = rect.bottom;
+                      }
+                      onRowContextMenu(row.slot, x, y);
+                    }}
                   >
                     <span className="pp-badge">{row.label}</span>
                     <span className="pp-name">{slotName(row.name, namesLoadProgress)}</span>

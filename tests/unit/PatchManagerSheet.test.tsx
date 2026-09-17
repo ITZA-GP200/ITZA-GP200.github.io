@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { PatchManagerSheet } from '@/components/PatchManagerSheet';
 
 function makeNames(): (string | null)[] {
@@ -203,5 +203,102 @@ describe('PatchManagerSheet: errors', () => {
   it('shows no alert when nothing failed', () => {
     renderSheet();
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('PatchManagerSheet: right-click menu', () => {
+  function openMenuOn(text: string) {
+    fireEvent.contextMenu(screen.getByText(text), { clientX: 120, clientY: 140 });
+    return screen.getByRole('menu', { name: 'Patch actions' });
+  }
+
+  it('opens on right-click and selects the row it was opened on', () => {
+    renderSheet();
+    const menu = openMenuOn('Crunch');
+    expect(menu).toHaveTextContent('1 patch selected (1B)');
+  });
+
+  it('keeps an existing multi-selection when right-clicked inside it', () => {
+    renderSheet();
+    fireEvent.click(screen.getByText('Clean'));
+    fireEvent.click(screen.getByText('Crunch'), { shiftKey: true });
+    const menu = openMenuOn('Crunch');
+    expect(menu).toHaveTextContent('2 patches selected · 1A–1B');
+    expect(within(menu).getByRole('menuitem', { name: 'COPY' })).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('COPY copies the right-clicked slot and closes the menu', () => {
+    const { props } = renderSheet();
+    const menu = openMenuOn('Crunch');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'COPY' }));
+    expect(props.onCopySlot).toHaveBeenCalledWith(1);
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('PASTE is unavailable until something has been copied', () => {
+    renderSheet();
+    const menu = openMenuOn('Crunch');
+    const paste = within(menu).getByRole('menuitem', { name: /^PASTE/ });
+    expect(paste).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(paste);
+    expect(screen.queryByRole('dialog', { name: 'Paste options' })).toBeNull();
+  });
+
+  it('PASTE opens the paste options, and OK overwrites the right-clicked slot', () => {
+    const { props } = renderSheet({ clipboardLabel: '1A' });
+    const menu = openMenuOn('Crunch');
+    expect(menu).toHaveTextContent('clip: 1A');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /^PASTE/ }));
+    const options = screen.getByRole('dialog', { name: 'Paste options' });
+    expect(within(options).getByRole('radio', { name: /OVERWRITE/ })).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(within(options).getByRole('button', { name: 'OK' }));
+    expect(props.onPasteToSlot).toHaveBeenCalledWith(1);
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('shows the actions that are not built yet greyed out, and they do nothing', () => {
+    const { props } = renderSheet({ clipboardLabel: '1A' });
+    const menu = openMenuOn('Crunch');
+    for (const name of ['UNDO', 'REDO', 'CUT', 'RESET', /^INSERT/]) {
+      const item = within(menu).getByRole('menuitem', { name });
+      expect(item).toHaveAttribute('aria-disabled', 'true');
+      fireEvent.click(item);
+    }
+    expect(props.onPasteToSlot).not.toHaveBeenCalled();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /^PASTE/ }));
+    const options = screen.getByRole('dialog', { name: 'Paste options' });
+    expect(within(options).getByRole('radio', { name: /INSERT/ })).toHaveAttribute('aria-disabled', 'true');
+    expect(within(options).getByRole('radio', { name: /SWAP/ })).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('Escape closes the menu without closing the Patch Manager', () => {
+    const { props } = renderSheet();
+    openMenuOn('Crunch');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(props.onClose).not.toHaveBeenCalled();
+  });
+
+  it('Escape in the paste options steps back to the menu', () => {
+    renderSheet({ clipboardLabel: '1A' });
+    const menu = openMenuOn('Crunch');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /^PASTE/ }));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Paste options' })).toBeNull();
+    expect(screen.getByRole('menu', { name: 'Patch actions' })).toBeTruthy();
+  });
+
+  it('clicking outside closes the menu but not the Patch Manager', () => {
+    const { props } = renderSheet();
+    openMenuOn('Crunch');
+    fireEvent.click(screen.getByTestId('patch-menu-backdrop'));
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(props.onClose).not.toHaveBeenCalled();
+  });
+
+  it('says why COPY is unavailable while disconnected', () => {
+    renderSheet({ connected: false });
+    const menu = openMenuOn('Crunch');
+    expect(within(menu).getByRole('menuitem', { name: 'COPY' })).toHaveAttribute('title', 'Connect the GP-200 first');
   });
 });

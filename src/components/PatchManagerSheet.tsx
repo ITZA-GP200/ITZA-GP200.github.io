@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
 import { PatchPicker } from './PatchPicker';
+import { PatchContextMenu } from './PatchContextMenu';
 import { SysExCodec } from '@/core/SysExCodec';
 import {
   EMPTY_SELECTION,
@@ -60,6 +61,18 @@ function bankSlotsOf(slot: number): number[] {
   return [base, base + 1, base + 2, base + 3];
 }
 
+/** "17D"; "1A–1C" for a contiguous run; otherwise "1A, 2C, 5B" (+N past three). */
+function describeSlots(slots: number[]): string {
+  if (slots.length === 0) return '';
+  const labels = slots.map((slot) => SysExCodec.slotToLabel(slot));
+  if (slots.length === 1) return labels[0];
+  if (slots[slots.length - 1] - slots[0] === slots.length - 1) {
+    return `${labels[0]}–${labels[labels.length - 1]}`;
+  }
+  if (labels.length <= 3) return labels.join(', ');
+  return `${labels.slice(0, 3).join(', ')} +${labels.length - 3}`;
+}
+
 
 /**
  * Right-anchored side sheet listing all 256 device slots (64 banks × A–D)
@@ -108,6 +121,8 @@ export function PatchManagerSheet({
   const pendingImportRef = useRef<Uint8Array | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editorFileInputRef = useRef<HTMLInputElement>(null);
+  // Where the right-click menu is open, or null.
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
 
   const namesLoading = namesLoadProgress < 256;
   const bulkRunning = bulkProgress !== null;
@@ -133,6 +148,23 @@ export function PatchManagerSheet({
   function clearSelection() {
     setSelection(collapseToAnchor);
   }
+
+  // Standard context-menu behaviour: right-clicking a row outside the
+  // selection selects that row first; inside it, the selection is kept.
+  function handleRowContextMenu(slot: number, x: number, y: number) {
+    if (!selectedSlots.includes(slot)) handleSelect(slot);
+    setMenuAt({ x, y });
+  }
+
+  // Why each menu action can't run right now (null when it can). COPY and
+  // PASTE act on one slot, like the toolbar buttons they share handlers with.
+  let slotActionBlocked: string | null = null;
+  if (!connected) slotActionBlocked = 'Connect the GP-200 first';
+  else if (busy || bulkRunning) slotActionBlocked = 'Wait for the current action to finish';
+  let copyBlocked = slotActionBlocked;
+  if (!copyBlocked && selectedSlots.length !== 1) copyBlocked = 'Copy works on one patch at a time for now';
+  let pasteBlocked = slotActionBlocked;
+  if (!pasteBlocked && selectedSlots.length !== 1) pasteBlocked = 'Select a single slot to paste into';
 
   function handleActivateFromPicker(slot: number) {
     if (connected) void runBusy(() => onActivate(slot));
@@ -390,6 +422,7 @@ export function PatchManagerSheet({
           multiSelected={selection.extra}
           onSelect={handleSelect}
           onActivate={handleActivateFromPicker}
+          onRowContextMenu={handleRowContextMenu}
         />
       </div>
 
@@ -693,6 +726,26 @@ export function PatchManagerSheet({
           </div>
         </div>
       )}
+      {/* Rendered inside the Dialog (as a portal), so its clicks bubble to the
+          Dialog panel, which stops them before the overlay could close the
+          whole Patch Manager. */}
+      <PatchContextMenu
+        position={menuAt}
+        selectionCount={selectedSlots.length}
+        selectionLabel={describeSlots(selectedSlots)}
+        clipboardLabel={clipboardLabel}
+        copyBlocked={copyBlocked}
+        pasteBlocked={pasteBlocked}
+        onCopy={() => {
+          setMenuAt(null);
+          if (selected !== null) void runBusy(() => onCopySlot(selected));
+        }}
+        onPaste={() => {
+          setMenuAt(null);
+          if (selected !== null) void runBusy(() => onPasteToSlot(selected));
+        }}
+        onClose={() => setMenuAt(null)}
+      />
     </Dialog>
   );
 }
