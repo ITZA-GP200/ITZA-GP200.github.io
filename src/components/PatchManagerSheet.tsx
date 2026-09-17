@@ -3,6 +3,7 @@ import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
 import { PatchPicker } from './PatchPicker';
 import { PatchContextMenu } from './PatchContextMenu';
+import { DEFAULT_PATCH_NAME } from '@/core/defaultPatch';
 import { SysExCodec } from '@/core/SysExCodec';
 import {
   EMPTY_SELECTION,
@@ -54,6 +55,12 @@ export interface PatchManagerSheetProps {
    *  because the app-level error banner sits under this dialog's overlay. */
   errorMessage?: string | null;
   onDismissError?: () => void;
+  /** Make a slot the template RESET copies (reads and remembers it). */
+  onSetDefaultPatch?: (slot: number) => Promise<void>;
+  /** Copy the default patch over a slot, saved as DEFAULT_PATCH_NAME. */
+  onResetSlot?: (slot: number) => Promise<void>;
+  /** Slot holding the default patch ("5B"), or null when none is set. */
+  defaultPatchLabel?: string | null;
 }
 
 function bankSlotsOf(slot: number): number[] {
@@ -108,6 +115,9 @@ export function PatchManagerSheet({
   userIrNames,
   errorMessage = null,
   onDismissError,
+  onSetDefaultPatch,
+  onResetSlot,
+  defaultPatchLabel = null,
 }: PatchManagerSheetProps) {
   // Anchor + extras. The anchor is what every single-slot action acts on, so
   // multi-select sits on top of those buttons without changing them.
@@ -167,6 +177,17 @@ export function PatchManagerSheet({
   if (!pasteBlocked && selectedSlots.length !== 1) pasteBlocked = 'Select a single slot to paste into';
   let renameBlocked = slotActionBlocked;
   if (!renameBlocked && selectedSlots.length !== 1) renameBlocked = 'Rename works on one patch at a time';
+  // Hosts that don't pass the handlers keep these greyed out as not built.
+  let setDefaultBlocked = onSetDefaultPatch ? slotActionBlocked : 'Not built yet';
+  if (!setDefaultBlocked && selectedSlots.length !== 1) setDefaultBlocked = 'Pick one patch as the default';
+  let resetBlocked = onResetSlot ? slotActionBlocked : 'Not built yet';
+  if (!resetBlocked && defaultPatchLabel === null) {
+    resetBlocked = 'Set a default patch first: right-click a patch, then SET AS DEFAULT PATCH';
+  }
+  if (!resetBlocked && selectedSlots.length !== 1) resetBlocked = 'Reset works on one patch at a time for now';
+  // Resetting the template onto itself would rename it, and every later
+  // RESET would then refuse because the default patch "changed".
+  if (!resetBlocked && selectedLabel === defaultPatchLabel) resetBlocked = 'This is the default patch';
 
   function handleActivateFromPicker(slot: number) {
     if (connected) void runBusy(() => onActivate(slot));
@@ -747,6 +768,18 @@ export function PatchManagerSheet({
           if (selected !== null) void runBusy(() => onPasteToSlot(selected));
         }}
         renameBlocked={renameBlocked}
+        setDefaultBlocked={setDefaultBlocked}
+        onSetDefault={() => {
+          setMenuAt(null);
+          if (selected !== null && onSetDefaultPatch) void runBusy(() => onSetDefaultPatch(selected));
+        }}
+        defaultPatchLabel={defaultPatchLabel}
+        resetName={DEFAULT_PATCH_NAME}
+        resetBlocked={resetBlocked}
+        onReset={() => {
+          setMenuAt(null);
+          if (selected !== null && onResetSlot) void runBusy(() => onResetSlot(selected));
+        }}
         onRename={() => {
           setMenuAt(null);
           // The same inline rename the RENAME button opens.

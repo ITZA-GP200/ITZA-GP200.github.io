@@ -331,3 +331,61 @@ describe('PatchManagerSheet: right-click RENAME', () => {
     expect(rename).toHaveAttribute('title', 'Rename works on one patch at a time');
   });
 });
+
+describe('PatchManagerSheet: default patch and RESET', () => {
+  function openMenuOn(text: string) {
+    fireEvent.contextMenu(screen.getByText(text), { clientX: 120, clientY: 140 });
+    return screen.getByRole('menu', { name: 'Patch actions' });
+  }
+
+  it('SET AS DEFAULT PATCH hands the right-clicked slot over', () => {
+    const onSetDefaultPatch = vi.fn().mockResolvedValue(undefined);
+    renderSheet({ onSetDefaultPatch, onResetSlot: vi.fn().mockResolvedValue(undefined) });
+    const menu = openMenuOn('Crunch');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'SET AS DEFAULT PATCH' }));
+    expect(onSetDefaultPatch).toHaveBeenCalledWith(1);
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('RESET explains how to set a default when there is none', () => {
+    renderSheet({ onSetDefaultPatch: vi.fn(), onResetSlot: vi.fn(), defaultPatchLabel: null });
+    const reset = within(openMenuOn('Crunch')).getByRole('menuitem', { name: 'RESET' });
+    expect(reset).toHaveAttribute('aria-disabled', 'true');
+    expect(reset.getAttribute('title')).toContain('SET AS DEFAULT PATCH');
+  });
+
+  it('RESET asks first, naming the default slot and the reset name, then resets', () => {
+    const onResetSlot = vi.fn().mockResolvedValue(undefined);
+    renderSheet({ onSetDefaultPatch: vi.fn(), onResetSlot, defaultPatchLabel: '1A' });
+    const menu = openMenuOn('Crunch');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'RESET' }));
+    const confirm = screen.getByRole('alertdialog', { name: 'Confirm reset' });
+    expect(confirm).toHaveTextContent('Reset 1B to your default patch (from 1A)');
+    expect(confirm).toHaveTextContent('Itza GP200');
+    expect(onResetSlot).not.toHaveBeenCalled();
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Reset' }));
+    expect(onResetSlot).toHaveBeenCalledWith(1);
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('Cancel and Escape both step back from the confirmation without resetting', () => {
+    const onResetSlot = vi.fn();
+    renderSheet({ onSetDefaultPatch: vi.fn(), onResetSlot, defaultPatchLabel: '1A' });
+    const menu = openMenuOn('Crunch');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'RESET' }));
+    fireEvent.click(within(screen.getByRole('alertdialog', { name: 'Confirm reset' })).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('alertdialog', { name: 'Confirm reset' })).toBeNull();
+    fireEvent.click(within(screen.getByRole('menu', { name: 'Patch actions' })).getByRole('menuitem', { name: 'RESET' }));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('alertdialog', { name: 'Confirm reset' })).toBeNull();
+    expect(screen.getByRole('menu', { name: 'Patch actions' })).toBeTruthy();
+    expect(onResetSlot).not.toHaveBeenCalled();
+  });
+
+  it('will not reset the default patch onto itself', () => {
+    renderSheet({ onSetDefaultPatch: vi.fn(), onResetSlot: vi.fn(), defaultPatchLabel: '1B' });
+    const reset = within(openMenuOn('Crunch')).getByRole('menuitem', { name: 'RESET' });
+    expect(reset).toHaveAttribute('aria-disabled', 'true');
+    expect(reset).toHaveAttribute('title', 'This is the default patch');
+  });
+});

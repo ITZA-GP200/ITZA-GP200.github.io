@@ -48,6 +48,18 @@ export interface PatchContextMenuProps {
   renameBlocked: string | null;
   /** Open the Patch Manager's inline rename for the selected slot. */
   onRename: () => void;
+  /** Why SET AS DEFAULT PATCH can't run right now, or null when it can. */
+  setDefaultBlocked: string | null;
+  /** Make the selected slot the template RESET copies. */
+  onSetDefault: () => void;
+  /** Slot holding the default patch ("5B"), or null when none is set. */
+  defaultPatchLabel: string | null;
+  /** Name reset patches are saved under. */
+  resetName: string;
+  /** Why RESET can't run right now, or null when it can. */
+  resetBlocked: string | null;
+  /** Copy the default patch over the selected slot (after confirming). */
+  onReset: () => void;
   onClose: () => void;
 }
 
@@ -67,9 +79,17 @@ export function PatchContextMenu({
   onPaste,
   renameBlocked,
   onRename,
+  setDefaultBlocked,
+  onSetDefault,
+  defaultPatchLabel,
+  resetName,
+  resetBlocked,
+  onReset,
   onClose,
 }: PatchContextMenuProps) {
   const [pasteOpen, setPasteOpen] = useState(false);
+  // RESET overwrites a patch, so it asks first, inside the menu (per the design).
+  const [confirmReset, setConfirmReset] = useState(false);
   const [placement, setPlacement] = useState<Placement | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const submenuRef = useRef<HTMLDivElement>(null);
@@ -82,6 +102,7 @@ export function PatchContextMenu({
   if (position !== openedAt) {
     setOpenedAt(position);
     setPasteOpen(false);
+    setConfirmReset(false);
     setPlacement(null);
   }
 
@@ -106,14 +127,14 @@ export function PatchContextMenu({
       subTop = Math.max(EDGE, window.innerHeight - submenuHeight - EDGE);
     }
     setPlacement({ menu: { left, top }, submenu: { left: subLeft, top: subTop } });
-  }, [position, pasteOpen]);
+  }, [position, pasteOpen, confirmReset]);
 
   // Focus the first available action when the menu appears.
   useEffect(() => {
-    if (!position || !placement || pasteOpen) return;
+    if (!position || !placement || pasteOpen || confirmReset) return;
     const first = menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not([aria-disabled="true"])');
     first?.focus();
-  }, [position, placement, pasteOpen]);
+  }, [position, placement, pasteOpen, confirmReset]);
 
   // Escape steps back (paste options, then the menu) and Tab closes it. Caught
   // in the capture phase: the Patch Manager closes itself on Escape at the
@@ -129,6 +150,10 @@ export function PatchContextMenu({
         pasteItemRef.current?.focus();
         return;
       }
+      if (event.key === 'Escape' && confirmReset) {
+        setConfirmReset(false);
+        return;
+      }
       onClose();
     }
     window.addEventListener('keydown', onKeyDown, true);
@@ -137,7 +162,7 @@ export function PatchContextMenu({
       window.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('resize', onClose);
     };
-  }, [position, pasteOpen, onClose]);
+  }, [position, pasteOpen, confirmReset, onClose]);
 
   if (!position) return null;
 
@@ -195,6 +220,24 @@ export function PatchContextMenu({
             clip: {clipboardLabel} · 1 patch
           </div>
         )}
+        {confirmReset ? (
+          <div role="alertdialog" aria-label="Confirm reset" className="px-1.5 pt-1 pb-0.5">
+            <Divider />
+            <p className="text-caption pt-1.5 pb-2.5" style={{ color: 'var(--text-primary)', lineHeight: 1.5 }}>
+              Reset {selectionLabel} to your default patch (from {defaultPatchLabel}) as
+              “{resetName}”? The patch there is overwritten, and there’s no undo yet.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="ghost" autoFocus onClick={() => setConfirmReset(false)}>
+                Cancel
+              </Button>
+              <Button size="sm" variant="danger" onClick={onReset}>
+                Reset
+              </Button>
+            </div>
+          </div>
+        ) : (
+        <>
         <Divider />
         <MenuItem label="UNDO" blocked={NOT_BUILT} />
         <MenuItem label="REDO" blocked={NOT_BUILT} />
@@ -214,8 +257,11 @@ export function PatchContextMenu({
         <MenuItem label="INSERT" trailing="▸" blocked={NOT_BUILT} />
         <Divider />
         <MenuItem label="RENAME" blocked={renameBlocked} onSelect={onRename} />
+        <MenuItem label="SET AS DEFAULT PATCH" blocked={setDefaultBlocked} onSelect={onSetDefault} />
         <Divider />
-        <MenuItem label="RESET" danger blocked={NOT_BUILT} />
+        <MenuItem label="RESET" danger blocked={resetBlocked} onSelect={() => setConfirmReset(true)} />
+        </>
+        )}
       </div>
 
       {pasteOpen && clipboardLabel !== null && (
