@@ -871,14 +871,26 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     if (!outputRef.current) return;
     // Save-commit persists the device's current editing buffer to flash.
     // Live edits (toggle, param, reorder) already updated the editing buffer.
-    // Valeton flow: save-commit → preset-change (re-select slot to confirm).
-    // decoded[4] must be the sub-slot index (A=0,B=1,C=2,D=3); otherwise device saves to wrong slot!
+    // Valeton flow (USB capture of the official editor): save-commit, then
+    // ~20ms later a preset change to the slot just written.
     const targetSlot = slot ?? currentSlotRef.current ?? 0;
+    // That preset change makes the pedal re-report every block's on/off state,
+    // in frames the dispatcher can't tell from footswitch presses. Applied,
+    // they flip blocks in the editor the moment SAVE is pressed (seen on WAH
+    // and OD). Mute them for the sequence, as pushPreset does for its hops.
+    suppressFxFor(2000);
+    suppressSlotEchoUntilRef.current = Date.now() + 2000;
     const msg = SysExCodec.buildSaveCommit(presetName, targetSlot);
-    console.log(`[GP-200] save-commit: name="${presetName}" slot=${targetSlot} (sub=${targetSlot % 4})`);
+    console.log(`[GP-200] save-commit: name="${presetName}" slot=${targetSlot}`);
     outputRef.current.send(msg);
+    await new Promise(r => setTimeout(r, 50));
+    outputRef.current.send(SysExCodec.buildPresetChange(targetSlot));
+    setCurrentSlot(targetSlot); currentSlotRef.current = targetSlot;
     // Wait for device to write to flash
     await new Promise(r => setTimeout(r, 300));
+    // suppressFxFor is a plain per-render function over a stable ref (see the
+    // note on onMidiMessage), so it needs no dependency entry.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const writePresetToSlot = useCallback(async (preset: GP200Preset, slot: number): Promise<void> => {

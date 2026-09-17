@@ -673,13 +673,20 @@ export const SysExCodec = {
   buildSaveCommit(presetName: string, slot: number): Uint8Array {
     // CMD=0x12, sub=0x18, 62 bytes, nibble-encoded "save to slot" commit
     // From captures 100548 + 101538: sent after live edits or write chunks to persist
-    // Decoded payload: [0:3]=03 20 14, [4]=sub-slot (A=0,B=1,C=2,D=3), [8:24]=name
-    // Confirmed: capture 121732 slot 1B has decoded[4]=0x01, slot 1A has decoded[4]=0x00
+    // Ground truth: USB capture of the official Valeton editor saving to 2A
+    // and then to 40A (fw 1.8.0, 2026-09-15). The decoded payload is one TLV:
+    //   [0:2] type 0x2003, [2:4] len 20, [4:6] u16 target slot,
+    //   [6:8] u16 0x005a, [8:24] 16-byte name.
+    // The slot is the ABSOLUTE index (the capture has 0x04 for 2A and 0x9c for
+    // 40A), not the sub-slot, so all 256 slots are reachable.
     const decoded = new Uint8Array(24);
     decoded[0] = 0x03;
     decoded[1] = 0x20;
     decoded[2] = 0x14;
     decoded[4] = slot;  // full absolute slot number (0-255), nibble-encoded by caller
+    // Present in every captured save. Sent as zero, the pedal accepts the
+    // message but silently doesn't persist the save.
+    decoded[6] = 0x5A;
     // [8:24] = preset name (16 bytes, null-terminated; same as .prst format)
     for (let i = 0; i < 16 && i < presetName.length; i++) {
       decoded[8 + i] = presetName.charCodeAt(i);

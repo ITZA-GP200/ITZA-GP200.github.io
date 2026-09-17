@@ -1404,3 +1404,39 @@ describe('SysExCodec: control records in device dumps', () => {
     expect(preset.ctrlAssignments![0].blockMask).toBe(0x7FF);
   });
 });
+
+describe('SysExCodec: save commit matches the official editor', () => {
+  // Bytes from a USB capture of the official Valeton editor (fw 1.8.0) saving
+  // "BE MY FIRE 1" to 2A (slot 4) and then to 40A (slot 156).
+  const NAME = 'BE MY FIRE 1';
+
+  function payloadOf(msg: Uint8Array): number[] {
+    return Array.from(SysExCodec.nibbleDecode(msg.slice(13, msg.length - 1)));
+  }
+
+  it('is byte-identical to the captured save to slot 4', () => {
+    const msg = SysExCodec.buildSaveCommit(NAME, 4);
+    expect(msg.length).toBe(62);
+    expect(Array.from(msg.subarray(0, 13))).toEqual([
+      0xF0, 0x21, 0x25, 0x7E, 0x47, 0x50, 0x2D, 0x32, 0x12, 0x18, 0x00, 0x00, 0x00,
+    ]);
+    expect(payloadOf(msg)).toEqual([
+      0x03, 0x20, 0x14, 0x00, 0x04, 0x00, 0x5a, 0x00,
+      0x42, 0x45, 0x20, 0x4d, 0x59, 0x20, 0x46, 0x49, 0x52, 0x45, 0x20, 0x31,
+      0x00, 0x00, 0x00, 0x00,
+    ]);
+    expect(msg[61]).toBe(0xF7);
+  });
+
+  it('addresses a high slot by its absolute index (40A = 156 = 0x9c)', () => {
+    const payload = payloadOf(SysExCodec.buildSaveCommit(NAME, 156));
+    expect(payload[4]).toBe(0x9c);
+    expect(payload[5]).toBe(0x00);
+  });
+
+  it('always carries the 0x5a field, without which the pedal drops the save', () => {
+    for (const slot of [0, 4, 127, 156, 255]) {
+      expect(payloadOf(SysExCodec.buildSaveCommit('X', slot))[6]).toBe(0x5a);
+    }
+  });
+});
