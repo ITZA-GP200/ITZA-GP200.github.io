@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultPreset } from '@/core/defaultPreset';
-import { isSamePatch } from '@/core/samePatch';
+import { describePatchDifferences, isSamePatch } from '@/core/samePatch';
 import type { GP200Preset } from '@/core/types';
 
 function patch(overrides: Partial<GP200Preset> = {}): GP200Preset {
@@ -63,5 +63,43 @@ describe('isSamePatch', () => {
     params[1] = Number.NaN;
     const withNaN = withBlock(base, 6, { params });
     expect(isSamePatch(withNaN, withBlock(base, 6, { params: [...params] }))).toBe(true);
+  });
+});
+
+describe('describePatchDifferences', () => {
+  it('reports nothing for identical reads', () => {
+    expect(describePatchDifferences(patch(), patch())).toEqual({ identity: [], values: [] });
+  });
+
+  it('treats a changed knob as a value difference, not an identity one', () => {
+    // A successful on-pedal copy (16B -> 17D) was rejected when this counted
+    // as a failure: live controls can move saved values.
+    const base = patch();
+    const vol = base.effects.find((effect) => effect.slotIndex === 10)!;
+    const params = [...vol.params];
+    params[0] = params[0] + 23;
+    const result = describePatchDifferences(withBlock(base, 10, { params }), base);
+    expect(result.identity).toEqual([]);
+    expect(result.values).toHaveLength(1);
+    expect(result.values[0]).toContain('VOL param 0');
+  });
+
+  it('treats patch volume, pan and tempo as value differences', () => {
+    const result = describePatchDifferences(patch({ patchVolume: 75, patchTempo: 90 }), patch());
+    expect(result.identity).toEqual([]);
+    expect(result.values).toHaveLength(2);
+  });
+
+  it('treats a different name as an identity difference, naming both', () => {
+    const result = describePatchDifferences(patch({ patchName: 'Spicy Bass' }), patch());
+    expect(result.identity).toEqual(['name "Spicy Bass" vs "Net Red"']);
+  });
+
+  it('treats a block switched the other way as an identity difference, by module', () => {
+    const base = patch();
+    const wah = base.effects.find((effect) => effect.slotIndex === 1)!;
+    const result = describePatchDifferences(withBlock(base, 1, { enabled: !wah.enabled }), base);
+    expect(result.identity).toHaveLength(1);
+    expect(result.identity[0]).toMatch(/^WAH (on|off) vs (on|off)$/);
   });
 });
