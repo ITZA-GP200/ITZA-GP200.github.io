@@ -18,6 +18,8 @@ import {
 export interface BulkExportProgress {
   done: number;
   total: number;
+  /** False for jobs that can't stop halfway safely (PROTECT 64): no cancel link. */
+  cancellable?: boolean;
 }
 
 export interface PatchManagerSheetProps {
@@ -215,6 +217,15 @@ export function PatchManagerSheet({
   const clipboardCount = clipboardSlots.length || (clipboardLabel === null ? 0 : 1);
   let renameBlocked = slotActionBlocked;
   if (!renameBlocked && selectedSlots.length !== 1) renameBlocked = 'Rename works on one patch at a time';
+  // Protected bank 64: names are fixed, 64D is only ever the swap slot, and
+  // swaps can't carry patches (and their names) in or out of the bank.
+  const inBank64 = (slot: number) => bank64Protected && slot >= 252;
+  const BANK64_NAMES_FIXED = 'Bank 64 is protected: its names are fixed';
+  const BANK64_NO_SWAPS = 'Bank 64 is protected: swaps can’t move patches in or out of it';
+  if (!renameBlocked && selected !== null && inBank64(selected)) renameBlocked = BANK64_NAMES_FIXED;
+  const toolbarSwapBlocked = selectedSlots.some(inBank64) ? BANK64_NO_SWAPS : null;
+  const upBlocked = selected !== null && (inBank64(selected) || inBank64(selected - 1)) ? BANK64_NO_SWAPS : null;
+  const downBlocked = selected !== null && (inBank64(selected) || inBank64(selected + 1)) ? BANK64_NO_SWAPS : null;
   // Hosts that don't pass the handlers keep these greyed out as not built.
   let setDefaultBlocked = onSetDefaultPatch ? slotActionBlocked : 'Not built yet';
   if (!setDefaultBlocked && selectedSlots.length !== 1) setDefaultBlocked = 'Pick one patch as the default';
@@ -236,6 +247,9 @@ export function PatchManagerSheet({
   }
   if (!swapBlocked && clipboardCount > 1) swapBlocked = 'Swap works with one copied patch';
   if (!swapBlocked && selectedLabel === clipboardLabel) swapBlocked = 'The copied patch is already here';
+  if (!swapBlocked && ((selected !== null && inBank64(selected)) || clipboardSlots.some(inBank64))) {
+    swapBlocked = BANK64_NO_SWAPS;
+  }
   if (!swapBlocked && (selectedLabel === swapSlotLabel || clipboardLabel === swapSlotLabel)) {
     swapBlocked = 'The swap slot can’t take part in a swap';
   }
@@ -247,6 +261,7 @@ export function PatchManagerSheet({
   // Resetting the template onto itself would rename it, and every later
   // RESET would then refuse because the default patch "changed".
   if (!resetBlocked && selectedLabel === defaultPatchLabel) resetBlocked = 'We can’t reset the default patch';
+  if (!resetBlocked && selected === 255 && bank64Protected) resetBlocked = 'Bank 64 is protected: 64D is the swap slot';
   // Flags the swap slot at the top of the menu: swaps overwrite it.
   const selectionIsSwapSlot = selectedSlots.length === 1 && selectedLabel === swapSlotLabel;
 
@@ -532,6 +547,14 @@ export function PatchManagerSheet({
         className="px-4 py-3 space-y-2 flex-shrink-0"
         style={{ borderTop: '1px solid var(--border-active)' }}
       >
+        {(busy || bulkRunning) && (
+          // Fades in after a moment (CSS), so quick actions don't flicker it.
+          <div role="status" className="pm-working font-mono-display text-caption">
+            <span className="pm-spinner" aria-hidden="true" />
+            Working with the pedal…
+            {bulkProgress && ` ${bulkProgress.done}/${bulkProgress.total}`}
+          </div>
+        )}
         {errorMessage && (
           <div
             role="alert"
@@ -623,9 +646,9 @@ export function PatchManagerSheet({
           </Button>
           <Button
             size="sm"
-            disabled={actionsDisabled}
+            disabled={actionsDisabled || renameBlocked !== null}
             onClick={startRename}
-            title="Rename this slot (briefly switches patches)"
+            title={renameBlocked ?? 'Rename this slot (briefly switches patches)'}
           >
             RENAME
           </Button>
@@ -766,20 +789,20 @@ export function PatchManagerSheet({
           <Button
             size="sm"
             variant="ghost"
-            disabled={selectedSlots.length !== 2 || !connected || busy || bulkRunning}
+            disabled={selectedSlots.length !== 2 || !connected || busy || bulkRunning || toolbarSwapBlocked !== null}
             onClick={() => {
               if (selectedSlots.length === 2) {
                 void runBusy(() => onSwapSlots(selectedSlots[0], selectedSlots[1]));
               }
             }}
-            title="Exchange the two selected patches"
+            title={toolbarSwapBlocked ?? 'Exchange the two selected patches'}
           >
             SWAP
           </Button>
           <Button
             size="sm"
             variant="ghost"
-            disabled={actionsDisabled || selectedSlots.length !== 1 || selected === 0}
+            disabled={actionsDisabled || selectedSlots.length !== 1 || selected === 0 || upBlocked !== null}
             onClick={() => {
               if (selected !== null && selected > 0) {
                 const target = selected - 1;
@@ -790,14 +813,14 @@ export function PatchManagerSheet({
                 });
               }
             }}
-            title="Swap this patch with the slot above it"
+            title={upBlocked ?? 'Swap this patch with the slot above it'}
           >
             ▲ UP
           </Button>
           <Button
             size="sm"
             variant="ghost"
-            disabled={actionsDisabled || selectedSlots.length !== 1 || selected === 255}
+            disabled={actionsDisabled || selectedSlots.length !== 1 || selected === 255 || downBlocked !== null}
             onClick={() => {
               if (selected !== null && selected < 255) {
                 const target = selected + 1;
@@ -808,7 +831,7 @@ export function PatchManagerSheet({
                 });
               }
             }}
-            title="Swap this patch with the slot below it"
+            title={downBlocked ?? 'Swap this patch with the slot below it'}
           >
             ▼ DOWN
           </Button>
@@ -855,14 +878,14 @@ export function PatchManagerSheet({
               aria-live="polite"
             >
               {bulkProgress.done}/{bulkProgress.total}
-              <button
+              {bulkProgress.cancellable !== false && <button
                 type="button"
                 onClick={onCancelBulk}
                 className="underline"
                 style={{ color: 'var(--accent-red, #c05050)' }}
               >
                 cancel
-              </button>
+              </button>}
             </span>
           )}
         </div>
