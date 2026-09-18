@@ -5,6 +5,7 @@ import { patchStyleName } from '@/core/patchStyles';
 import { useMidiDevice } from '@/hooks/useMidiDevice';
 import { SourceChangedError } from '@/core/samePatch';
 import { swapThroughScratch } from '@/core/swapThrough';
+import { describeRange, pasteMany, type ClipItem } from '@/core/multiPaste';
 import { DEFAULT_PATCH_NAME, loadDefaultPatch, saveDefaultPatch } from '@/core/defaultPatch';
 import { loadSwapSlot, saveSwapSlot } from '@/core/swapSlot';
 import { useLooper } from '@/hooks/useLooper';
@@ -186,7 +187,8 @@ function App() {
   const [slotBrowserMode, setSlotBrowserMode] = useState<'pull' | 'push' | null>(null);
   // `slot` is where the copied patch came from: paste copies it on the pedal
   // from there (see handlePasteToSlot).
-  const [clipboard, setClipboard] = useState<{ preset: GP200Preset; slot: number; label: string } | null>(null);
+  // Copied patches in slot order, each as read at COPY time.
+  const [clipboard, setClipboard] = useState<{ items: ClipItem[]; label: string } | null>(null);
   // The template RESET copies (see core/defaultPatch.ts), kept across reloads.
   const [defaultPatch, setDefaultPatch] = useState(loadDefaultPatch);
   // Scratch space swaps copy through (see core/swapSlot.ts), kept across reloads.
@@ -617,29 +619,57 @@ function App() {
   // device's own patch-move message, which is decoded but not hardware-verified
   // and would reshuffle all 256 slots if it turned out to be wrong.
   async function handleCopySlot(slot: number) {
-    try {
-      const pulled = await midiDevice.pullPreset(slot);
-      setClipboard({ preset: pulled, slot, label: SysExCodec.slotToLabel(slot) });
-      setLoadError(null);
-    } catch {
-      setLoadError(`Failed to copy ${SysExCodec.slotToLabel(slot)} from device`);
+    await handleCopySlots([slot], SysExCodec.slotToLabel(slot));
+  }
+
+  // COPY of several slots reads each one now, so PASTE can refuse any that
+  // change before it runs.
+  async function handleCopySlots(slots: number[], label: string) {
+    const items: ClipItem[] = [];
+    for (const slot of [...slots].sort((a, b) => a - b)) {
+      try {
+        items.push({ slot, preset: await midiDevice.pullPreset(slot) });
+      } catch {
+        setLoadError(`Failed to copy ${SysExCodec.slotToLabel(slot)} from device; nothing was copied`);
+        return;
+      }
     }
+    setClipboard({ items, label });
+    setLoadError(null);
   }
 
   // PASTE is the pedal's own copy, as the official editor does it: select the
   // copied slot, then save it under the target's number. The flash upload
   // used here before is ignored by the hardware (fw 1.8.0).
+  // Several copied patches land in consecutive slots from the target, one
+  // verified copy at a time, with the bulk counter and its cancel.
   async function handlePasteToSlot(slot: number) {
-    if (!clipboard) return;
+    if (!clipboard || bulkProgress) return;
+    const { items } = clipboard;
+    const multi = items.length > 1;
+    bulkCancelRef.current = false;
+    if (multi) setBulkProgress({ done: 0, total: items.length });
     try {
-      const pasted = await midiDevice.copySlotOnDevice(clipboard.slot, slot, clipboard.preset);
-      // The pedal now sits on the target, so show that patch in the editor.
-      loadPreset(pasted);
-      setLoadError(null);
+      const result = await pasteMany(midiDevice, items, slot, {
+        onProgress: (done, total) => { if (multi) setBulkProgress({ done, total }); },
+        shouldStop: () => bulkCancelRef.current,
+      });
+      // The pedal now sits on the last target, so show that patch in the editor.
+      if (result.last) loadPreset(result.last);
+      if (result.stopped) {
+        const pasted = result.done === 0 ? 'nothing pasted' : `${describeRange(slot, result.done)} pasted`;
+        setLoadError(`Paste cancelled: ${pasted}, ${describeRange(slot + result.done, items.length - result.done)} unchanged`);
+      } else {
+        setLoadError(null);
+      }
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
-      const advice = err instanceof SourceChangedError ? '; copy it again, then paste' : '';
-      setLoadError(`Failed to paste into ${SysExCodec.slotToLabel(slot)}: ${detail}${advice}`);
+      const cause = err instanceof Error ? err.cause : undefined;
+      const changed = err instanceof SourceChangedError || cause instanceof SourceChangedError;
+      const advice = changed ? '; copy again, then paste' : '';
+      setLoadError(`Failed to paste into ${describeRange(slot, items.length)}: ${detail}${advice}`);
+    } finally {
+      if (multi) setBulkProgress(null);
     }
   }
 
@@ -703,7 +733,9 @@ function App() {
   async function handleSwapWithClipboard(slot: number) {
     if (!clipboard) return;
     try {
-      loadPreset(await swapOnPedal(clipboard.slot, slot, clipboard.preset));
+      if (clipboard.items.length !== 1) throw new Error('Swap works with one copied patch');
+      const [copied] = clipboard.items;
+      loadPreset(await swapOnPedal(copied.slot, slot, copied.preset));
       // The copied slot now holds the other patch, so the clipboard is stale.
       setClipboard(null);
       setLoadError(null);
@@ -1130,9 +1162,11 @@ function App() {
         onCancelBulk={() => { bulkCancelRef.current = true; }}
         onImportToSlot={handleImportToSlot}
         onCopySlot={handleCopySlot}
+        onCopySlots={handleCopySlots}
         onPasteToSlot={handlePasteToSlot}
         onSwapSlots={handleSwapSlots}
         clipboardLabel={clipboard?.label ?? null}
+        clipboardSlots={clipboard?.items.map((item) => item.slot) ?? []}
         onRenameSlot={handleRenameSlot}
         onRefreshNames={() => void midiDevice.refreshNames()}
         onImportFile={handleFile}

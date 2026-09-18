@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { PatchManagerSheet } from '@/components/PatchManagerSheet';
 
 function makeNames(): (string | null)[] {
@@ -490,5 +490,54 @@ describe('PatchManagerSheet: swap slot and PASTE ▸ SWAP', () => {
     fireEvent.click(within(openMenuOn('Crunch')).getByRole('menuitem', { name: /^PASTE/ }));
     const swap = within(screen.getByRole('dialog', { name: 'Paste options' })).getByRole('radio', { name: /SWAP/ });
     expect(swap).toHaveAttribute('title', 'The copied patch is already here');
+  });
+});
+
+describe('PatchManagerSheet: multi-slot COPY and PASTE', () => {
+  function openMenuOn(text: string, init?: MouseEventInit) {
+    fireEvent.contextMenu(screen.getByText(text), { clientX: 120, clientY: 140, ...init });
+    return screen.getByRole('menu', { name: 'Patch actions' });
+  }
+
+  it('COPY with two patches selected copies both, named as a range', () => {
+    const onCopySlots = vi.fn().mockResolvedValue(undefined);
+    renderSheet({ onCopySlots });
+    fireEvent.click(screen.getByText('Clean'));
+    fireEvent.click(screen.getByText('Crunch'), { shiftKey: true });
+    fireEvent.click(within(openMenuOn('Crunch')).getByRole('menuitem', { name: 'COPY' }));
+    expect(onCopySlots).toHaveBeenCalledWith([0, 1], '1A–1B');
+  });
+
+  it('keeps COPY to one patch when the host has no multi-copy', () => {
+    renderSheet();
+    fireEvent.click(screen.getByText('Clean'));
+    fireEvent.click(screen.getByText('Crunch'), { shiftKey: true });
+    expect(within(openMenuOn('Crunch')).getByRole('menuitem', { name: 'COPY' }))
+      .toHaveAttribute('title', 'Copy works on one patch at a time for now');
+  });
+
+  it('PASTE of several patches names the slots it will overwrite', () => {
+    const { props } = renderSheet({ clipboardLabel: '63A–63B', clipboardSlots: [248, 249] });
+    const menu = openMenuOn('Clean');
+    expect(menu).toHaveTextContent('clip: 63A–63B · 2 patches');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /^PASTE/ }));
+    const panel = screen.getByRole('dialog', { name: 'Paste options' });
+    expect(panel).toHaveTextContent('Paste 2 patches starting at 1A');
+    expect(panel).toHaveTextContent('Replaces 1A–1B with 63A–63B');
+    expect(within(panel).getByRole('radio', { name: /SWAP/ })).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(within(panel).getByRole('button', { name: 'OK' }));
+    expect(props.onPasteToSlot).toHaveBeenCalledWith(0);
+  });
+
+  it('refuses a paste that would overwrite the copied patches or run past 64D', () => {
+    renderSheet({ clipboardLabel: '1A–1B', clipboardSlots: [0, 1] });
+    expect(within(openMenuOn('Crunch')).getByRole('menuitem', { name: /^PASTE/ }).getAttribute('title'))
+      .toContain('would overwrite the copied patches');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    // 63A with 10 copied patches would need 63A–65B.
+    cleanup();
+    renderSheet({ clipboardLabel: '1A, 1B +8', clipboardSlots: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] });
+    expect(within(openMenuOn('American Idiot')).getByRole('menuitem', { name: /^PASTE/ }))
+      .toHaveAttribute('title', 'Not enough room: 10 patches from 63A would run past 64D');
   });
 });

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/Button';
 import { PatchPicker } from './PatchPicker';
 import { PatchContextMenu } from './PatchContextMenu';
 import { DEFAULT_PATCH_NAME } from '@/core/defaultPatch';
+import { describeRange, pasteProblem } from '@/core/multiPaste';
 import { SysExCodec } from '@/core/SysExCodec';
 import {
   EMPTY_SELECTION,
@@ -37,12 +38,17 @@ export interface PatchManagerSheetProps {
   onImportToSlot: (slot: number, bytes: Uint8Array) => Promise<void>;
   /** Read a slot into the in-app clipboard. */
   onCopySlot: (slot: number) => Promise<void>;
+  /** Copy several slots at once (label names them, e.g. "1A–1D"). Omit to
+   *  keep COPY to one slot. */
+  onCopySlots?: (slots: number[], label: string) => Promise<void>;
   /** Write the clipboard into a slot. */
   onPasteToSlot: (slot: number) => Promise<void>;
   /** Exchange the contents of two slots. */
   onSwapSlots: (first: number, second: number) => Promise<boolean | void>;
   /** Label of whatever is on the clipboard, or null when it is empty. */
   clipboardLabel: string | null;
+  /** The copied slots, in paste order (empty when nothing is copied). */
+  clipboardSlots?: number[];
   onRenameSlot: (slot: number, name: string) => Promise<void>;
   onRefreshNames: () => void;
   /** Load a .prst into the editor buffer (pushes + saves when connected). */
@@ -111,9 +117,11 @@ export function PatchManagerSheet({
   onCancelBulk,
   onImportToSlot,
   onCopySlot,
+  onCopySlots,
   onPasteToSlot,
   onSwapSlots,
   clipboardLabel,
+  clipboardSlots = [],
   onRenameSlot,
   onRefreshNames,
   onImportFile,
@@ -181,9 +189,13 @@ export function PatchManagerSheet({
   if (!connected) slotActionBlocked = 'Connect the GP-200 first';
   else if (busy || bulkRunning) slotActionBlocked = 'Wait for the current action to finish';
   let copyBlocked = slotActionBlocked;
-  if (!copyBlocked && selectedSlots.length !== 1) copyBlocked = 'Copy works on one patch at a time for now';
+  if (!copyBlocked && selectedSlots.length !== 1 && !onCopySlots) copyBlocked = 'Copy works on one patch at a time for now';
   let pasteBlocked = slotActionBlocked;
   if (!pasteBlocked && selectedSlots.length !== 1) pasteBlocked = 'Select a single slot to paste into';
+  if (!pasteBlocked && selected !== null && clipboardSlots.length > 0) {
+    pasteBlocked = pasteProblem(clipboardSlots, selected);
+  }
+  const clipboardCount = clipboardSlots.length || (clipboardLabel === null ? 0 : 1);
   let renameBlocked = slotActionBlocked;
   if (!renameBlocked && selectedSlots.length !== 1) renameBlocked = 'Rename works on one patch at a time';
   // Hosts that don't pass the handlers keep these greyed out as not built.
@@ -201,6 +213,7 @@ export function PatchManagerSheet({
   if (!swapBlocked && swapSlotLabel === null) {
     swapBlocked = 'Set a swap slot first: right-click a spare slot, then USE FOR SWAP SLOT';
   }
+  if (!swapBlocked && clipboardCount > 1) swapBlocked = 'Swap works with one copied patch';
   if (!swapBlocked && selectedLabel === clipboardLabel) swapBlocked = 'The copied patch is already here';
   if (!swapBlocked && (selectedLabel === swapSlotLabel || clipboardLabel === swapSlotLabel)) {
     swapBlocked = 'The swap slot can’t take part in a swap';
@@ -215,6 +228,21 @@ export function PatchManagerSheet({
   if (!resetBlocked && selectedLabel === defaultPatchLabel) resetBlocked = 'We can’t reset the default patch';
   // Flags the swap slot at the top of the menu: swaps overwrite it.
   const selectionIsSwapSlot = selectedSlots.length === 1 && selectedLabel === swapSlotLabel;
+
+  let pasteToolbarTitle = 'Copy a patch first';
+  if (clipboardLabel !== null && selected !== null) {
+    pasteToolbarTitle = pasteBlocked ?? (clipboardCount > 1
+      ? `Overwrite ${describeRange(selected, clipboardCount)} with the ${clipboardCount} copied patches (${clipboardLabel})`
+      : `Overwrite ${selectedLabel} with the copied patch (${clipboardLabel})`);
+  }
+
+  function copySelection() {
+    if (selectedSlots.length > 1 && onCopySlots) {
+      void runBusy(() => onCopySlots(selectedSlots, describeSlots(selectedSlots)));
+    } else if (selected !== null) {
+      void runBusy(() => onCopySlot(selected));
+    }
+  }
 
   function handleActivateFromPicker(slot: number) {
     if (connected) void runBusy(() => onActivate(slot));
@@ -613,24 +641,22 @@ export function PatchManagerSheet({
           <Button
             size="sm"
             variant="ghost"
-            disabled={actionsDisabled}
-            onClick={() => {
-              if (selected !== null) void runBusy(() => onCopySlot(selected));
-            }}
-            title="Copy this patch into the app clipboard"
+            disabled={actionsDisabled || copyBlocked !== null}
+            onClick={copySelection}
+            title={selectedSlots.length > 1
+              ? `Copy the ${selectedSlots.length} selected patches into the app clipboard`
+              : 'Copy this patch into the app clipboard'}
           >
             COPY
           </Button>
           <Button
             size="sm"
             variant="ghost"
-            disabled={actionsDisabled || clipboardLabel === null}
+            disabled={actionsDisabled || clipboardLabel === null || pasteBlocked !== null}
             onClick={() => {
               if (selected !== null) void runBusy(() => onPasteToSlot(selected));
             }}
-            title={clipboardLabel
-              ? `Overwrite ${selectedLabel} with the copied patch (${clipboardLabel})`
-              : 'Copy a patch first'}
+            title={pasteToolbarTitle}
           >
             PASTE{clipboardLabel ? ` (${clipboardLabel})` : ''}
           </Button>
@@ -787,11 +813,13 @@ export function PatchManagerSheet({
         selectionCount={selectedSlots.length}
         selectionLabel={describeSlots(selectedSlots)}
         clipboardLabel={clipboardLabel}
+        clipboardCount={clipboardCount}
+        pasteRangeLabel={selected !== null ? describeRange(selected, clipboardCount) : undefined}
         copyBlocked={copyBlocked}
         pasteBlocked={pasteBlocked}
         onCopy={() => {
           setMenuAt(null);
-          if (selected !== null) void runBusy(() => onCopySlot(selected));
+          copySelection();
         }}
         onPaste={(method) => {
           setMenuAt(null);
