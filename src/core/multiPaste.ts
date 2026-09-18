@@ -1,5 +1,5 @@
 import { SysExCodec } from './SysExCodec';
-import { LAST_UNPROTECTED_SLOT } from './protectBank';
+import { LAST_UNPROTECTED_SLOT, PROTECTED_SWAP_SLOT, protectedNameFor } from './protectBank';
 import type { GP200Preset } from './types';
 
 /** One copied patch: where it was read from, and what was read. */
@@ -12,7 +12,7 @@ export interface ClipItem {
 export interface PasteDevice {
   /** On-pedal copy, verified by read-back; throws SourceChangedError when
    *  `copied` no longer matches the source. */
-  copySlotOnDevice(fromSlot: number, toSlot: number, copied: GP200Preset): Promise<GP200Preset>;
+  copySlotOnDevice(fromSlot: number, toSlot: number, copied: GP200Preset, saveAs?: string): Promise<GP200Preset>;
 }
 
 const LAST_SLOT = 255;
@@ -36,6 +36,11 @@ export function pasteProblem(sources: number[], target: number, bank64Protected 
   const end = target + count - 1;
   if (bank64Protected && target <= LAST_UNPROTECTED_SLOT && end > LAST_UNPROTECTED_SLOT) {
     return `Not enough room: ${count} patches from ${label(target)} would run into protected bank 64`;
+  }
+  // In a protected bank 64, pastes may land in 64A–64C (keeping their names)
+  // but never in 64D, the swap slot.
+  if (bank64Protected && end >= PROTECTED_SWAP_SLOT && target > LAST_UNPROTECTED_SLOT) {
+    return 'Bank 64 is protected: 64D is the swap slot';
   }
   if (end > LAST_SLOT) {
     return `Not enough room: ${count} patches from ${label(target)} would run past 64D`;
@@ -86,7 +91,9 @@ export async function pasteMany(
     const from = items[i].slot;
     const to = target + i;
     try {
-      last = await device.copySlotOnDevice(from, to, items[i].preset);
+      // A protected slot keeps its fixed name; elsewhere the copy keeps its own.
+      const saveAs = progress.bank64Protected ? protectedNameFor(to) : undefined;
+      last = await device.copySlotOnDevice(from, to, items[i].preset, saveAs);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       const pasted = i === 0 ? 'Nothing pasted' : `Pasted ${describeRange(target, i)}`;

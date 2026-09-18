@@ -1,4 +1,3 @@
-import { DEFAULT_PATCH_NAME } from './defaultPatch';
 import { SysExCodec } from './SysExCodec';
 import { describeWriteFidelity } from './writeFidelity';
 import type { GP200Preset } from './types';
@@ -19,15 +18,28 @@ export const SWAP_SLOT_NAME = 'SWAP SLOT';
 /** The last slot list-shifting operations may touch while bank 64 is protected. */
 export const LAST_UNPROTECTED_SLOT = 251; // 63D
 
-/** What PROTECT 64 writes, slot by slot. */
+/** The default patch's fixed name in 64C. */
+export const DEFAULT_SLOT_NAME = 'ITZA GP-200 dflt';
+
+/**
+ * What PROTECT 64 writes, slot by slot, and each slot's fixed name while the
+ * bank is protected (named by the project owner). 64A/64B are utility slots
+ * for trying settings next to the default; 64C is the default RESET copies;
+ * 64D is the swap slot.
+ */
 export const PROTECTED_LAYOUT: readonly { slot: number; name: string }[] = [
-  { slot: 252, name: DEFAULT_PATCH_NAME },
-  { slot: 253, name: DEFAULT_PATCH_NAME },
-  { slot: PROTECTED_DEFAULT_SLOT, name: 'DEFAULT' },
+  { slot: 252, name: 'UTILITY-1' },
+  { slot: 253, name: 'UTILITY-2' },
+  { slot: PROTECTED_DEFAULT_SLOT, name: DEFAULT_SLOT_NAME },
   { slot: PROTECTED_SWAP_SLOT, name: SWAP_SLOT_NAME },
 ];
 
 export const isProtectedSlot = (slot: number) => slot > LAST_UNPROTECTED_SLOT;
+
+/** A protected slot's fixed name, or undefined outside bank 64. */
+export function protectedNameFor(slot: number): string | undefined {
+  return PROTECTED_LAYOUT.find((entry) => entry.slot === slot)?.name;
+}
 
 const STORAGE_KEY = 'gp200:protect64';
 
@@ -59,7 +71,7 @@ const label = (slot: number) => SysExCodec.slotToLabel(slot);
 
 /**
  * Fill 64A–64D from the patch shipped with the app, so nothing on the pedal
- * is needed first: one write from app data into 64C as "DEFAULT" (checked
+ * is needed first: one write from app data into 64C as its fixed name (checked
  * against what was sent), then verified on-pedal copies of 64C into the other
  * three under their protected names. Resolves with what 64C holds: the new
  * default. Differences the live write can't avoid (EXP targets, a
@@ -71,7 +83,7 @@ export async function protectBank64(
   onProgress?: (done: number, total: number) => void,
 ): Promise<GP200Preset> {
   const total = PROTECTED_LAYOUT.length;
-  const sent = { ...structuredClone(shipped), patchName: 'DEFAULT' };
+  const sent = { ...structuredClone(shipped), patchName: DEFAULT_SLOT_NAME };
   let written: GP200Preset;
   try {
     written = await device.writePresetToSlot(sent, PROTECTED_DEFAULT_SLOT);

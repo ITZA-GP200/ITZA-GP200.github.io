@@ -607,3 +607,64 @@ describe('PatchPicker: protected bank', () => {
     expect(screen.getByText('American Idiot').closest('section')).not.toHaveClass('pp-protected');
   });
 });
+
+describe('PatchManagerSheet: protected bank 64 rules', () => {
+  function namesWithBank64() {
+    const names = makeNames();
+    names[251] = 'Last Song';
+    names[252] = 'UTILITY-1';
+    names[253] = 'UTILITY-2';
+    names[254] = 'ITZA GP-200 dflt';
+    names[255] = 'SWAP SLOT';
+    return names;
+  }
+  const protectedHosts = () => ({
+    presetNames: namesWithBank64(),
+    bank64Protected: true,
+    onProtectBank64: vi.fn().mockResolvedValue(undefined),
+    onReleaseBank64: vi.fn().mockResolvedValue(undefined),
+    onResetSlot: vi.fn().mockResolvedValue(undefined),
+    onSetDefaultPatch: vi.fn(),
+    onSwapWithClipboard: vi.fn().mockResolvedValue(undefined),
+    defaultPatchLabel: '64C',
+    swapSlotLabel: '64D',
+  });
+  const menuOn = (text: string) => {
+    fireEvent.contextMenu(screen.getByText(text), { clientX: 120, clientY: 140 });
+    return screen.getByRole('menu', { name: 'Patch actions' });
+  };
+
+  it('fixes the names of 64A–64D', () => {
+    renderSheet(protectedHosts());
+    expect(within(menuOn('UTILITY-1')).getByRole('menuitem', { name: 'RENAME' }))
+      .toHaveAttribute('title', 'Bank 64 is protected: its names are fixed');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.getByRole('button', { name: 'RENAME' })).toBeDisabled();
+  });
+
+  it('keeps swaps out of bank 64, and ▼DOWN from 63D', () => {
+    renderSheet(protectedHosts());
+    fireEvent.click(screen.getByText('Last Song'));
+    expect(screen.getByRole('button', { name: '▼ DOWN' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '▲ UP' })).not.toBeDisabled();
+    fireEvent.click(screen.getByText('UTILITY-1'));
+    expect(screen.getByRole('button', { name: '▲ UP' })).toBeDisabled();
+  });
+
+  it('won’t RESET the swap slot', () => {
+    renderSheet(protectedHosts());
+    expect(within(menuOn('64D')).getByRole('menuitem', { name: 'RESET' }))
+      .toHaveAttribute('title', 'Bank 64 is protected: 64D is the swap slot');
+  });
+
+  it('shows the working spinner while an action runs', async () => {
+    let finish: () => void = () => {};
+    const onCopySlot = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    renderSheet({ onCopySlot });
+    fireEvent.click(screen.getByText('Clean'));
+    fireEvent.click(screen.getByRole('button', { name: 'COPY' }));
+    expect(screen.getByText(/Working with the pedal/)).toHaveClass('pm-working');
+    finish();
+    await vi.waitFor(() => expect(screen.queryByText(/Working with the pedal/)).toBeNull());
+  });
+});

@@ -13,6 +13,7 @@ import {
   PROTECTED_DEFAULT_SLOT,
   PROTECTED_SWAP_SLOT,
   protectBank64,
+  protectedNameFor,
   saveBankProtected,
   SWAP_SLOT_NAME,
 } from '@/core/protectBank';
@@ -669,6 +670,14 @@ function App() {
       });
       // The pedal now sits on the last target, so show that patch in the editor.
       if (result.last) loadPreset(result.last);
+      // Pasting into 64C changes the default patch: re-read it, so RESET
+      // copies the new settings (and doesn't refuse them as a changed source).
+      const lastTarget = slot + result.done - 1;
+      if (bank64Protected && slot <= PROTECTED_DEFAULT_SLOT && lastTarget >= PROTECTED_DEFAULT_SLOT) {
+        const next = { slot: PROTECTED_DEFAULT_SLOT, preset: await midiDevice.pullPreset(PROTECTED_DEFAULT_SLOT) };
+        saveDefaultPatch(next);
+        setDefaultPatch(next);
+      }
       if (result.stopped) {
         const pasted = result.done === 0 ? 'nothing pasted' : `${describeRange(slot, result.done)} pasted`;
         setLoadError(`Paste cancelled: ${pasted}, ${describeRange(slot + result.done, items.length - result.done)} unchanged`);
@@ -705,9 +714,9 @@ function App() {
   async function handleResetSlot(slot: number) {
     if (!defaultPatch) return;
     try {
-      const reset = await midiDevice.copySlotOnDevice(
-        defaultPatch.slot, slot, defaultPatch.preset, DEFAULT_PATCH_NAME,
-      );
+      // A protected bank-64 slot keeps its fixed name.
+      const name = (bank64Protected ? protectedNameFor(slot) : undefined) ?? DEFAULT_PATCH_NAME;
+      const reset = await midiDevice.copySlotOnDevice(defaultPatch.slot, slot, defaultPatch.preset, name);
       loadPreset(reset);
       setLoadError(null);
     } catch (err) {
@@ -783,9 +792,12 @@ function App() {
   // Needs nothing on the pedal first.
   async function handleProtectBank64() {
     if (bulkProgress) return;
-    setBulkProgress({ done: 0, total: 4 });
+    // Stopping halfway would leave bank 64 half-written, so no cancel link.
+    setBulkProgress({ done: 0, total: 4, cancellable: false });
     try {
-      const preset = await protectBank64(midiDevice, loadShippedPatch(), (done, total) => setBulkProgress({ done, total }));
+      const preset = await protectBank64(
+        midiDevice, loadShippedPatch(), (done, total) => setBulkProgress({ done, total, cancellable: false }),
+      );
       const next = { slot: PROTECTED_DEFAULT_SLOT, preset };
       saveDefaultPatch(next);
       setDefaultPatch(next);

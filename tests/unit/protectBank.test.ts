@@ -41,13 +41,13 @@ describe('protectBank64', () => {
     const pedal = fakePedal({ 252: 'Mr. Brown', 253: 'Mr. Brown', 254: 'Mr. Brown', 255: 'Mr. Brown' });
     const result = await protectBank64(pedal.device, patch("It's GP-200"));
     expect(pedal.log).toEqual([
-      'write 254 as DEFAULT',
-      '254->252 as Itza GP-200',
-      '254->253 as Itza GP-200',
+      'write 254 as ITZA GP-200 dflt',
+      '254->252 as UTILITY-1',
+      '254->253 as UTILITY-2',
       '254->255 as SWAP SLOT',
     ]);
-    expect([252, 253, 254, 255].map(pedal.nameAt)).toEqual(['Itza GP-200', 'Itza GP-200', 'DEFAULT', 'SWAP SLOT']);
-    expect(result.patchName).toBe('DEFAULT');
+    expect([252, 253, 254, 255].map(pedal.nameAt)).toEqual(['UTILITY-1', 'UTILITY-2', 'ITZA GP-200 dflt', 'SWAP SLOT']);
+    expect(result.patchName).toBe('ITZA GP-200 dflt');
   });
 
   it('needs nothing on the pedal first and leaves the shipped patch untouched', async () => {
@@ -61,7 +61,7 @@ describe('protectBank64', () => {
     const pedal = fakePedal({}, { dropKnob: true });
     await expect(protectBank64(pedal.device, patch("It's GP-200")))
       .rejects.toThrow('64C didn’t take the shipped patch');
-    expect(pedal.log).toEqual(['write 254 as DEFAULT']);
+    expect(pedal.log).toEqual(['write 254 as ITZA GP-200 dflt']);
   });
 
   it('says where it stopped and that bank 64 is not protected', async () => {
@@ -104,6 +104,29 @@ describe('pasteProblem with bank 64 protected', () => {
 
   it('allows a paste that starts in bank 64 (a direct action there)', () => {
     expect(pasteProblem([0, 1], 252, true)).toBeNull();
-    expect(pasteProblem([0], 255, true)).toBeNull();
+    expect(pasteProblem([0], 254, true)).toBeNull();
+  });
+});
+
+describe('protected bank 64 pastes', () => {
+  it('lets a paste land in 64A–64C, keeping each slot’s fixed name, but never in 64D', async () => {
+    expect(pasteProblem([0, 1, 2], 252, true)).toBeNull();
+    expect(pasteProblem([0, 1, 2, 3], 252, true)).toBe('Bank 64 is protected: 64D is the swap slot');
+    expect(pasteProblem([0], 255, true)).toBe('Bank 64 is protected: 64D is the swap slot');
+    const saved: string[] = [];
+    const device = {
+      async copySlotOnDevice(_from: number, to: number, copied: GP200Preset, saveAs?: string) {
+        saved.push(`${to}:${saveAs ?? copied.patchName}`);
+        return { ...copied, patchName: saveAs ?? copied.patchName };
+      },
+    };
+    const { pasteMany } = await import('@/core/multiPaste');
+    await pasteMany(device, [{ slot: 0, preset: patch('Clean') }, { slot: 1, preset: patch('Crunch') }], 252, {
+      bank64Protected: true,
+    });
+    expect(saved).toEqual(['252:UTILITY-1', '253:UTILITY-2']);
+    saved.length = 0;
+    await pasteMany(device, [{ slot: 0, preset: patch('Clean') }], 251, { bank64Protected: true });
+    expect(saved).toEqual(['251:Clean']);
   });
 });
