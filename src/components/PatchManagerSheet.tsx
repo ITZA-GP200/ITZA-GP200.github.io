@@ -198,7 +198,7 @@ export function PatchManagerSheet({
   if (!setSwapSlotBlocked && selectedLabel === swapSlotLabel) setSwapSlotBlocked = 'This is already the swap slot';
   let swapBlocked = onSwapWithClipboard ? pasteBlocked : 'Not built yet';
   if (!swapBlocked && swapSlotLabel === null) {
-    swapBlocked = 'Set a swap slot first: right-click a spare slot, then SET AS SWAP SLOT';
+    swapBlocked = 'Set a swap slot first: right-click a spare slot, then USE FOR SWAP SLOT';
   }
   if (!swapBlocked && selectedLabel === clipboardLabel) swapBlocked = 'The copied patch is already here';
   if (!swapBlocked && (selectedLabel === swapSlotLabel || clipboardLabel === swapSlotLabel)) {

@@ -36,7 +36,7 @@ const label = (slot: number) => SysExCodec.slotToLabel(slot);
 export async function swapThroughScratch(device: SwapDevice, request: SwapRequest): Promise<GP200Preset> {
   const { first, second, scratch, expectedFirst } = request;
   if (scratch === null) {
-    throw new Error('Set a swap slot first: right-click a spare slot, then SET AS SWAP SLOT');
+    throw new Error('Set a swap slot first: right-click a spare slot, then USE FOR SWAP SLOT');
   }
   if (first === second) throw new Error('Pick two different slots to swap');
   if (scratch === first || scratch === second) {

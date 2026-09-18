@@ -400,20 +400,20 @@ describe('PatchManagerSheet: swap slot and PASTE ▸ SWAP', () => {
     onSwapWithClipboard: vi.fn().mockResolvedValue(undefined),
   });
 
-  it('SET AS SWAP SLOT warns that swaps overwrite the slot, then sets it', () => {
+  it('USE FOR SWAP SLOT warns that swaps overwrite the slot, then sets it', () => {
     const hosts = swapHosts();
     renderSheet(hosts);
-    fireEvent.click(within(openMenuOn('Crunch')).getByRole('menuitem', { name: 'SET AS SWAP SLOT' }));
+    fireEvent.click(within(openMenuOn('Crunch')).getByRole('menuitem', { name: 'USE FOR SWAP SLOT' }));
     const confirm = screen.getByRole('alertdialog', { name: 'Confirm swap slot' });
     expect(confirm).toHaveTextContent('overwritten by every swap');
     expect(hosts.onSetSwapSlot).not.toHaveBeenCalled();
-    fireEvent.click(within(confirm).getByRole('button', { name: 'Use as swap slot' }));
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Use for swap slot' }));
     expect(hosts.onSetSwapSlot).toHaveBeenCalledWith(1);
   });
 
   it('keeps the swap slot and the default patch apart', () => {
     renderSheet({ ...swapHosts(), onSetDefaultPatch: vi.fn(), defaultPatchLabel: '1B', swapSlotLabel: '1A' });
-    const onDefault = within(openMenuOn('Crunch')).getByRole('menuitem', { name: 'SET AS SWAP SLOT' });
+    const onDefault = within(openMenuOn('Crunch')).getByRole('menuitem', { name: 'USE FOR SWAP SLOT' });
     expect(onDefault).toHaveAttribute('title', 'This is your default patch');
     fireEvent.keyDown(document, { key: 'Escape' });
     const onSwapSlot = within(openMenuOn('Clean')).getByRole('menuitem', { name: 'SET AS DEFAULT PATCH' });
@@ -425,7 +425,7 @@ describe('PatchManagerSheet: swap slot and PASTE ▸ SWAP', () => {
     fireEvent.click(within(openMenuOn('Crunch')).getByRole('menuitem', { name: /^PASTE/ }));
     const swap = within(screen.getByRole('dialog', { name: 'Paste options' })).getByRole('radio', { name: /SWAP/ });
     expect(swap).toHaveAttribute('aria-disabled', 'true');
-    expect(swap.getAttribute('title')).toContain('SET AS SWAP SLOT');
+    expect(swap.getAttribute('title')).toContain('USE FOR SWAP SLOT');
   });
 
   it('PASTE ▸ SWAP swaps with the clipboard instead of overwriting', () => {

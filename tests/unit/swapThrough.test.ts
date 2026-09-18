@@ -48,7 +48,7 @@ describe('swapThroughScratch', () => {
   it('refuses before touching the pedal when no scratch slot is set', async () => {
     const pedal = fakePedal({ 1: 'Angel', 2: 'Durango' });
     await expect(swapThroughScratch(pedal.device, { first: 1, second: 2, scratch: null }))
-      .rejects.toThrow('SET AS SWAP SLOT');
+      .rejects.toThrow('USE FOR SWAP SLOT');
     expect(pedal.log).toEqual([]);
   });
 
