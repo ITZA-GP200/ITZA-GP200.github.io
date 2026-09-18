@@ -57,12 +57,20 @@ describe('protectBank64', () => {
     expect(shipped.patchName).toBe("It's GP-200");
   });
 
-  it('refuses to copy a write the pedal didn’t take faithfully', async () => {
+  it('carries on, noting it, when the pedal keeps a knob its own way', async () => {
     const pedal = fakePedal({}, { dropKnob: true });
+    const missed: string[] = [];
+    await protectBank64(pedal.device, patch("It's GP-200"), undefined, missed);
+    expect(pedal.log.slice(0, 2)).toEqual(['write 254 as ITZA GP-200', 'write 254 as ITZA GP-200']);
+    expect(pedal.log).toHaveLength(5);
+    expect(missed[0]).toMatch(/^64C PRE param 0 99 vs /);
+  });
+
+  it('stops when the write lands with the wrong name or effects', async () => {
+    const pedal = fakePedal({});
+    pedal.device.writePresetToSlot = async (preset) => ({ ...preset, patchName: 'something else' });
     await expect(protectBank64(pedal.device, patch("It's GP-200")))
       .rejects.toThrow('64C didn’t take the shipped patch');
-    // Written twice (a value-only miss is retried once), never copied.
-    expect(pedal.log).toEqual(['write 254 as ITZA GP-200', 'write 254 as ITZA GP-200']);
   });
 
   it('says where it stopped and that bank 64 is not protected', async () => {
@@ -149,12 +157,14 @@ describe('writeChecked', () => {
     expect(result.patchName).toBe('X');
   });
 
-  it('gives up after the second miss, and at once on a wrong name', async () => {
+  it('notes a value still off after the second write, and fails at once on a wrong name', async () => {
     const { writeChecked } = await import('@/core/protectBank');
     let calls = 0;
     const alwaysOff = { async writePresetToSlot(preset: GP200Preset) { calls += 1; const s = structuredClone(preset); s.effects[0].params[0] = 99; return s; } };
-    await expect(writeChecked(alwaysOff, patch('X'), 252, (d) => `bad: ${d}`)).rejects.toThrow('bad:');
+    const missed: string[] = [];
+    await writeChecked(alwaysOff, patch('X'), 252, (d) => `bad: ${d}`, missed);
     expect(calls).toBe(2);
+    expect(missed).toHaveLength(1);
     calls = 0;
     const wrongName = { async writePresetToSlot(preset: GP200Preset) { calls += 1; return { ...preset, patchName: 'other' }; } };
     await expect(writeChecked(wrongName, patch('X'), 252, (d) => `bad: ${d}`)).rejects.toThrow('bad:');
