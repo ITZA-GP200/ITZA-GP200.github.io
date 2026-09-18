@@ -796,9 +796,7 @@ function App() {
       setLoadError(null);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
-      const cause = err instanceof Error ? err.cause : undefined;
-      const advice = cause instanceof SourceChangedError ? ' (the default patch changed: set it again first)' : '';
-      setLoadError(`PROTECT 64 failed: ${detail}${advice}`);
+      setLoadError(`PROTECT 64 failed: ${detail}`);
     } finally {
       setBulkProgress(null);
     }

@@ -99,3 +99,16 @@ describe('pasteProblem with bank 64 protected', () => {
     expect(pasteProblem([0], 255, true)).toBeNull();
   });
 });
+
+describe('protectBank64 with a changed default', () => {
+  it('explains plainly that nothing was written and what to do', async () => {
+    const { SourceChangedError } = await import('@/core/samePatch');
+    const device: ProtectDevice = {
+      async copySlotOnDevice(from) { throw new SourceChangedError(from, 'name "Mr. Brown" vs "DEFAULT"'); },
+    };
+    await expect(protectBank64(device, { slot: 254, preset: patch('DEFAULT') })).rejects.toThrow(
+      'Your default patch in 64C has changed on the pedal since it was set. Nothing was written; bank 64 is not '
+      + 'protected. Right-click the patch you want as the default, SET AS DEFAULT PATCH, then PROTECT 64 again',
+    );
+  });
+});
