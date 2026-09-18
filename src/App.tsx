@@ -7,6 +7,7 @@ import { SourceChangedError } from '@/core/samePatch';
 import { swapThroughScratch } from '@/core/swapThrough';
 import { describeRange, pasteMany, type ClipItem } from '@/core/multiPaste';
 import { describeWriteFidelity, summarizeWriteFidelity } from '@/core/writeFidelity';
+import { loadShippedPatch } from '@/core/shippedPatch';
 import {
   loadBankProtected,
   PROTECTED_DEFAULT_SLOT,
@@ -777,13 +778,14 @@ function App() {
     }
   }
 
-  // PROTECT 64 (the sheet has already asked): fill bank 64 from the default
-  // patch, then make 64C the default and 64D the swap slot.
+  // PROTECT 64 (the sheet has already asked): fill bank 64 from the patch
+  // shipped with the app, then make 64C the default and 64D the swap slot.
+  // Needs nothing on the pedal first.
   async function handleProtectBank64() {
-    if (!defaultPatch || bulkProgress) return;
+    if (bulkProgress) return;
     setBulkProgress({ done: 0, total: 4 });
     try {
-      const preset = await protectBank64(midiDevice, defaultPatch, (done, total) => setBulkProgress({ done, total }));
+      const preset = await protectBank64(midiDevice, loadShippedPatch(), (done, total) => setBulkProgress({ done, total }));
       const next = { slot: PROTECTED_DEFAULT_SLOT, preset };
       saveDefaultPatch(next);
       setDefaultPatch(next);
