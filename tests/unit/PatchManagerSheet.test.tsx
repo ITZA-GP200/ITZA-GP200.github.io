@@ -438,7 +438,7 @@ describe('PatchManagerSheet: swap slot and PASTE ▸ SWAP', () => {
   it('keeps the swap slot and the default patch apart', () => {
     renderSheet({ ...swapHosts(), onSetDefaultPatch: vi.fn(), defaultPatchLabel: '1B', swapSlotLabel: '1A' });
     const onDefault = within(openMenuOn('Crunch')).getByRole('menuitem', { name: 'USE FOR SWAP SLOT' });
-    expect(onDefault).toHaveAttribute('title', 'This is your default patch');
+    expect(onDefault).toHaveAttribute('title', 'Cannot use Default as Swap Slot');
     fireEvent.keyDown(document, { key: 'Escape' });
     const onSwapSlot = within(openMenuOn('Clean')).getByRole('menuitem', { name: 'SET AS DEFAULT PATCH' });
     expect(onSwapSlot).toHaveAttribute('title', 'Swap Slot cannot be the Default Patch');
