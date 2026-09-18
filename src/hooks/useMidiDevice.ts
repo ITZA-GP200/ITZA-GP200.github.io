@@ -1027,10 +1027,19 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     // the array position. PRSTDecoder returns effects in playback order, so for
     // a reordered preset the array position diverges from slotIndex and array
     // addressing writes every effect to the wrong physical block (#90).
-    for (let i = 0; i < preset.effects.length; i++) {
-      const eff = preset.effects[i];
+    //
+    // Effect types go first, for every block, then a settle, then the knobs.
+    // On hardware (fw 1.8.0) a knob sent 30 ms after its block's effect change
+    // was lost for the FIRST knob of every block (stored as 0, or 1 on CAB),
+    // while the same knob sent on its own during editing always lands: the
+    // pedal is still loading the new effect when it arrives.
+    for (const eff of preset.effects) {
       output.send(SysExCodec.buildEffectChange(eff.slotIndex, eff.effectId));
       await new Promise(r => setTimeout(r, 30));
+    }
+    await new Promise(r => setTimeout(r, 500));
+    for (let i = 0; i < preset.effects.length; i++) {
+      const eff = preset.effects[i];
       for (let p = 0; p < eff.params.length; p++) {
         if (eff.params[p] !== undefined) {
           output.send(SysExCodec.buildParamChange(eff.slotIndex, p, eff.effectId, eff.params[p]));
