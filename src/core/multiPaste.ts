@@ -1,4 +1,5 @@
 import { SysExCodec } from './SysExCodec';
+import { LAST_UNPROTECTED_SLOT } from './protectBank';
 import type { GP200Preset } from './types';
 
 /** One copied patch: where it was read from, and what was read. */
@@ -26,11 +27,17 @@ export function describeRange(target: number, count: number): string {
 /**
  * Why pasting the copied `sources` starting at `target` can't run, or null
  * when it can. The copied patches land in order in consecutive slots.
+ * `bank64Protected`: a paste that starts below bank 64 must end by 63D (one
+ * that starts in bank 64 is a direct action there, so it may fill it).
  */
-export function pasteProblem(sources: number[], target: number): string | null {
+export function pasteProblem(sources: number[], target: number, bank64Protected = false): string | null {
   const count = sources.length;
   if (count === 0) return 'Copy a patch first';
-  if (target + count - 1 > LAST_SLOT) {
+  const end = target + count - 1;
+  if (bank64Protected && target <= LAST_UNPROTECTED_SLOT && end > LAST_UNPROTECTED_SLOT) {
+    return `Not enough room: ${count} patches from ${label(target)} would run into protected bank 64`;
+  }
+  if (end > LAST_SLOT) {
     return `Not enough room: ${count} patches from ${label(target)} would run past 64D`;
   }
   if (count > 1) {
@@ -43,6 +50,8 @@ export function pasteProblem(sources: number[], target: number): string | null {
 }
 
 export interface PasteProgress {
+  /** Keep a paste that starts below bank 64 out of it (see pasteProblem). */
+  bank64Protected?: boolean;
   onProgress?: (done: number, total: number) => void;
   /** Checked before each copy; true stops the paste there. */
   shouldStop?: () => boolean;
@@ -68,7 +77,7 @@ export async function pasteMany(
   target: number,
   progress: PasteProgress = {},
 ): Promise<PasteResult> {
-  const problem = pasteProblem(items.map((item) => item.slot), target);
+  const problem = pasteProblem(items.map((item) => item.slot), target, progress.bank64Protected);
   if (problem) throw new Error(problem);
 
   let last: GP200Preset | null = null;

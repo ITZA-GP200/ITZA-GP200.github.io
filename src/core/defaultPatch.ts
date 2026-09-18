@@ -10,7 +10,7 @@ import { GP200PresetSchema, type GP200Preset } from './types';
  * (private mode, quota) degrade to "no default set".
  */
 
-export const DEFAULT_PATCH_NAME = 'Itza GP200';
+export const DEFAULT_PATCH_NAME = 'Itza GP-200';
 
 const STORAGE_KEY = 'gp200:defaultPatch';
 

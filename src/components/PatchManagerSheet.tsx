@@ -47,6 +47,12 @@ export interface PatchManagerSheetProps {
   onSwapSlots: (first: number, second: number) => Promise<boolean | void>;
   /** Label of whatever is on the clipboard, or null when it is empty. */
   clipboardLabel: string | null;
+  /** Bank 64 is set aside for the app (PROTECT 64). */
+  bank64Protected?: boolean;
+  /** PROTECT 64 (after the sheet's confirm). Omit to hide the button. */
+  onProtectBank64?: () => Promise<void>;
+  /** RELEASE 64: lift the protection only. */
+  onReleaseBank64?: () => Promise<void>;
   /** The copied slots, in paste order (empty when nothing is copied). */
   clipboardSlots?: number[];
   onRenameSlot: (slot: number, name: string) => Promise<void>;
@@ -122,6 +128,9 @@ export function PatchManagerSheet({
   onSwapSlots,
   clipboardLabel,
   clipboardSlots = [],
+  bank64Protected = false,
+  onProtectBank64,
+  onReleaseBank64,
   onRenameSlot,
   onRefreshNames,
   onImportFile,
@@ -161,6 +170,7 @@ export function PatchManagerSheet({
   if (currentSlot !== null) currentLabel = SysExCodec.slotToLabel(currentSlot);
 
   const selectedSlots = slotsOf(selection);
+  const [confirmingProtect, setConfirmingProtect] = useState(false);
 
   function handleSelect(slot: number, modifiers?: { shift: boolean; toggle: boolean }) {
     setRenaming(false);
@@ -193,7 +203,7 @@ export function PatchManagerSheet({
   let pasteBlocked = slotActionBlocked;
   if (!pasteBlocked && selectedSlots.length !== 1) pasteBlocked = 'Select a single slot to paste into';
   if (!pasteBlocked && selected !== null && clipboardSlots.length > 0) {
-    pasteBlocked = pasteProblem(clipboardSlots, selected);
+    pasteBlocked = pasteProblem(clipboardSlots, selected, bank64Protected);
   }
   const clipboardCount = clipboardSlots.length || (clipboardLabel === null ? 0 : 1);
   let renameBlocked = slotActionBlocked;
@@ -205,10 +215,16 @@ export function PatchManagerSheet({
   // the template, and every later RESET would refuse.
   if (!setDefaultBlocked && selectedLabel === swapSlotLabel) setDefaultBlocked = 'Swap Slot cannot be the Default Patch';
   if (!setDefaultBlocked && selectedLabel === defaultPatchLabel) setDefaultBlocked = 'Already set as default patch';
+  if (!setDefaultBlocked && bank64Protected) setDefaultBlocked = 'Bank 64 is protected: 64C is the default (RELEASE 64 to change it)';
   let setSwapSlotBlocked = onSetSwapSlot ? slotActionBlocked : 'Not built yet';
   if (!setSwapSlotBlocked && selectedSlots.length !== 1) setSwapSlotBlocked = 'Pick one slot as the swap slot';
   if (!setSwapSlotBlocked && selectedLabel === defaultPatchLabel) setSwapSlotBlocked = 'Cannot use Default as Swap Slot';
   if (!setSwapSlotBlocked && selectedLabel === swapSlotLabel) setSwapSlotBlocked = 'This is already the swap slot';
+  if (!setSwapSlotBlocked && bank64Protected) setSwapSlotBlocked = 'Bank 64 is protected: 64D is the swap slot (RELEASE 64 to change it)';
+  let protectBlocked = slotActionBlocked;
+  if (!protectBlocked && defaultPatchLabel == null) {
+    protectBlocked = 'Set a default patch first: right-click a patch, then SET AS DEFAULT PATCH';
+  }
   let swapBlocked = onSwapWithClipboard ? pasteBlocked : 'Not built yet';
   if (!swapBlocked && swapSlotLabel === null) {
     swapBlocked = 'Set a swap slot first: right-click a spare slot, then USE FOR SWAP SLOT';
@@ -502,7 +518,54 @@ export function PatchManagerSheet({
           onActivate={handleActivateFromPicker}
           onRowContextMenu={handleRowContextMenu}
           swapSlotLabel={swapSlotLabel}
+          protectedBank={bank64Protected ? 64 : null}
         />
+        {onProtectBank64 && onReleaseBank64 && (
+          <div className="flex items-center gap-2 pt-2 px-2 font-mono-display text-caption">
+            {bank64Protected && (
+              <Button
+                size="sm"
+                variant="danger"
+                disabled={busy || bulkRunning}
+                onClick={() => void runBusy(onReleaseBank64)}
+                title="Stop protecting bank 64; its patches stay as they are"
+              >
+                RELEASE 64
+              </Button>
+            )}
+            {!bank64Protected && !confirmingProtect && (
+              <Button
+                size="sm"
+                disabled={protectBlocked !== null}
+                onClick={() => setConfirmingProtect(true)}
+                title={protectBlocked ?? 'Set bank 64 aside for the app: blanks, DEFAULT and SWAP SLOT'}
+              >
+                PROTECT 64
+              </Button>
+            )}
+            {!bank64Protected && confirmingProtect && (
+              <div role="alertdialog" aria-label="Confirm protect bank 64" className="flex items-center gap-2 flex-wrap">
+                <span style={{ color: 'var(--text-primary)' }}>
+                  Are you sure? This will overwrite and protect patch bank 64.
+                </span>
+                <Button size="sm" variant="ghost" onClick={() => setConfirmingProtect(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  autoFocus
+                  disabled={protectBlocked !== null}
+                  onClick={() => {
+                    setConfirmingProtect(false);
+                    void runBusy(onProtectBank64);
+                  }}
+                >
+                  OK
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Selected-slot actions */}

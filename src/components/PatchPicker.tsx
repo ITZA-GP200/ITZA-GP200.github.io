@@ -19,6 +19,8 @@ export interface PatchPickerProps {
   onRowContextMenu?: (slot: number, x: number, y: number) => void;
   /** The user's swap slot ("64D"), tagged in the list since swaps overwrite it. */
   swapSlotLabel?: string | null;
+  /** A bank set aside for the app (PROTECT 64), painted red. */
+  protectedBank?: number | null;
 }
 
 interface PatchRow {
@@ -107,6 +109,7 @@ export function PatchPicker({
   onActivate,
   onRowContextMenu,
   swapSlotLabel = null,
+  protectedBank = null,
 }: PatchPickerProps) {
   const rows = useMemo(() => buildRows(presetNames), [presetNames]);
   const categories = useMemo(() => buildBankCategories(rows), [rows]);
@@ -137,6 +140,7 @@ export function PatchPicker({
 
   function railClass(target: number): string {
     const classes = ['pp-cat'];
+    if (target === protectedBank) classes.push('pp-protected');
     if (bank === target && normalizedQuery === '') classes.push('active');
     return classes.join(' ');
   }
@@ -198,8 +202,10 @@ export function PatchPicker({
         <div className="pp-list" ref={listRef} onKeyDown={handleListKeyDown}>
           {groups.length === 0 && <p className="pp-empty">No patches match “{query}”.</p>}
           {groups.map((group) => (
-            <section key={group.bank} className="pp-group">
-              <h3 className="pp-group-head">{bankLabel(group.bank)}</h3>
+            <section key={group.bank} className={group.bank === protectedBank ? 'pp-group pp-protected' : 'pp-group'}>
+              <h3 className="pp-group-head">
+                {bankLabel(group.bank)}{group.bank === protectedBank && ' · PROTECTED'}
+              </h3>
               {group.rows.map((row) => {
                 const isAnchor = row.slot === selected;
                 const isSelected = isAnchor || (multiSelected?.has(row.slot) ?? false);

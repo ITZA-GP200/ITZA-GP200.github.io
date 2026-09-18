@@ -914,7 +914,7 @@ export function useMidiDevice(): UseMidiDeviceReturn {
    * select the source so the edit buffer holds it, then save-commit naming
    * the target. No patch data crosses the wire, so nothing is lost in the
    * copy and every bank is reachable. The save-commit carries the name, so
-   * the copy can be saved under a different one (RESET's "Itza GP200").
+   * the copy can be saved under a different one (RESET's "Itza GP-200").
    */
   const copySlotOnDevice = useCallback(
     async (fromSlot: number, toSlot: number, copied: GP200Preset, saveAs?: string): Promise<GP200Preset> => {
