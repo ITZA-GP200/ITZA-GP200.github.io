@@ -682,17 +682,20 @@ function App() {
   }
 
   // Toolbar SWAP (two selected slots) and ▲UP / ▼DOWN (swap with the neighbour).
-  async function handleSwapSlots(first: number, second: number) {
-    if (first === second) return;
+  /** Resolves true when the two patches changed places, false otherwise. */
+  async function handleSwapSlots(first: number, second: number): Promise<boolean> {
+    if (first === second) return false;
     try {
       loadPreset(await swapOnPedal(first, second));
       setLoadError(null);
+      return true;
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       setLoadError(
         `Failed to swap ${SysExCodec.slotToLabel(first)} and `
         + `${SysExCodec.slotToLabel(second)}: ${detail}`,
       );
+      return false;
     }
   }
 

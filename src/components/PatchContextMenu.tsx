@@ -54,6 +54,8 @@ export interface PatchContextMenuProps {
   swapBlocked: string | null;
   /** Slot swaps copy through ("64D"), or null when none is set. */
   swapSlotLabel: string | null;
+  /** The single selected slot is the swap slot: flagged at the top. */
+  isSwapSlot?: boolean;
   /** Why RENAME can't run right now, or null when it can. */
   renameBlocked: string | null;
   /** Open the Patch Manager's inline rename for the selected slot. */
@@ -93,6 +95,7 @@ export function PatchContextMenu({
   onPaste,
   swapBlocked,
   swapSlotLabel,
+  isSwapSlot = false,
   renameBlocked,
   onRename,
   setDefaultBlocked,
@@ -234,6 +237,11 @@ export function PatchContextMenu({
           visibility: hidden ? 'hidden' : 'visible',
         }}
       >
+        {isSwapSlot && (
+          <div className="text-caption px-2 pt-1.5" style={{ color: 'var(--accent)' }}>
+            In Use for Swap Slot
+          </div>
+        )}
         <div className="text-caption px-2 pt-1.5 pb-1" style={{ color: 'var(--text-muted)' }}>
           {selectionText}
         </div>
