@@ -550,11 +550,9 @@ describe('PatchManagerSheet: PROTECT 64', () => {
     onSetSwapSlot: vi.fn().mockResolvedValue(undefined),
   });
 
-  it('needs a default patch first', () => {
+  it('works with no default patch set (it writes the patch shipped with the app)', () => {
     renderSheet(hosts());
-    const protect = screen.getByRole('button', { name: 'PROTECT 64' });
-    expect(protect).toBeDisabled();
-    expect(protect.getAttribute('title')).toContain('Set a default patch first');
+    expect(screen.getByRole('button', { name: 'PROTECT 64' })).not.toBeDisabled();
   });
 
   it('asks first; Cancel changes nothing, OK protects', async () => {

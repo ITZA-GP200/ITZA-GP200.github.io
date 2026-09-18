@@ -1,11 +1,12 @@
-import { DEFAULT_PATCH_NAME, type DefaultPatch } from './defaultPatch';
-import { SourceChangedError } from './samePatch';
+import { DEFAULT_PATCH_NAME } from './defaultPatch';
 import { SysExCodec } from './SysExCodec';
+import { describeWriteFidelity } from './writeFidelity';
 import type { GP200Preset } from './types';
 
 /**
- * PROTECT 64: bank 64 set aside for the app. Every slot gets a copy of the
- * default patch; 64C becomes the default and 64D the swap slot. While it's
+ * PROTECT 64: bank 64 set aside for the app. Every slot gets the patch shipped
+ * with the app (core/shippedPatch.ts); 64C becomes the default and 64D the
+ * swap slot. While it's
  * protected, operations that push patches along the list treat 63D as the
  * last slot, so nothing is ever pushed into bank 64 (or off the end). Direct
  * actions on a bank-64 slot still work. Only the on/off flag is stored, in
@@ -47,52 +48,58 @@ export function saveBankProtected(on: boolean): void {
   }
 }
 
-/** The pedal operation PROTECT 64 needs (useMidiDevice provides it). */
+/** The pedal operations PROTECT 64 needs (useMidiDevice provides them). */
 export interface ProtectDevice {
+  /** Write a patch from app data into a slot; resolves with the read-back. */
+  writePresetToSlot(preset: GP200Preset, slot: number): Promise<GP200Preset>;
   copySlotOnDevice(fromSlot: number, toSlot: number, copied: GP200Preset, saveAs?: string): Promise<GP200Preset>;
 }
 
+const label = (slot: number) => SysExCodec.slotToLabel(slot);
+
 /**
- * Copy the default patch into 64A–64D under the protected names, one
- * verified on-pedal copy each. If the default already lives in bank 64, its
- * own slot is written last, so it's still the patch as read while the others
- * copy from it. Resolves with what 64C holds at the end: the new default.
+ * Fill 64A–64D from the patch shipped with the app, so nothing on the pedal
+ * is needed first: one write from app data into 64C as "DEFAULT" (checked
+ * against what was sent), then verified on-pedal copies of 64C into the other
+ * three under their protected names. Resolves with what 64C holds: the new
+ * default. Differences the live write can't avoid (EXP targets, a
+ * footswitch's saved position) don't fail it; see writeFidelity.
  */
 export async function protectBank64(
   device: ProtectDevice,
-  source: DefaultPatch,
+  shipped: GP200Preset,
   onProgress?: (done: number, total: number) => void,
 ): Promise<GP200Preset> {
-  const order = [
-    ...PROTECTED_LAYOUT.filter((entry) => entry.slot !== source.slot),
-    ...PROTECTED_LAYOUT.filter((entry) => entry.slot === source.slot),
-  ];
-  let newDefault: GP200Preset | null = null;
-  for (let i = 0; i < order.length; i++) {
-    const { slot, name } = order[i];
-    let written: GP200Preset;
-    try {
-      written = await device.copySlotOnDevice(source.slot, slot, source.preset, name);
-    } catch (err) {
-      // The default slot no longer holds the patch set as default: say so
-      // plainly, and what to do, rather than the raw comparison.
-      if (err instanceof SourceChangedError) {
-        const outcome = i === 0 ? 'Nothing was written' : `Stopped at ${SysExCodec.slotToLabel(slot)}`;
-        throw new Error(
-          `Your default patch in ${SysExCodec.slotToLabel(source.slot)} has changed on the pedal since it was set. `
-          + `${outcome}; bank 64 is not protected. Right-click the patch you want as the default, `
-          + 'SET AS DEFAULT PATCH, then PROTECT 64 again',
-          { cause: err },
-        );
-      }
-      const detail = err instanceof Error ? err.message : String(err);
-      throw new Error(
-        `${detail}. Stopped at ${SysExCodec.slotToLabel(slot)}; bank 64 is not protected, run PROTECT 64 again`,
-        { cause: err },
-      );
-    }
-    if (slot === PROTECTED_DEFAULT_SLOT) newDefault = written;
-    onProgress?.(i + 1, order.length);
+  const total = PROTECTED_LAYOUT.length;
+  const sent = { ...structuredClone(shipped), patchName: 'DEFAULT' };
+  let written: GP200Preset;
+  try {
+    written = await device.writePresetToSlot(sent, PROTECTED_DEFAULT_SLOT);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new Error(`${detail}. Stopped at ${label(PROTECTED_DEFAULT_SLOT)}; bank 64 is not protected, run PROTECT 64 again`, { cause: err });
   }
-  return newDefault!;
+  const { identity, values } = describeWriteFidelity(written, sent);
+  const wrong = [...identity, ...values];
+  if (wrong.length > 0) {
+    throw new Error(
+      `${label(PROTECTED_DEFAULT_SLOT)} didn’t take the shipped patch (${wrong.slice(0, 3).join('; ')}`
+      + `${wrong.length > 3 ? '; …' : ''}); bank 64 is not protected, run PROTECT 64 again`,
+    );
+  }
+  onProgress?.(1, total);
+
+  let done = 1;
+  for (const { slot, name } of PROTECTED_LAYOUT) {
+    if (slot === PROTECTED_DEFAULT_SLOT) continue;
+    try {
+      await device.copySlotOnDevice(PROTECTED_DEFAULT_SLOT, slot, written, name);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new Error(`${detail}. Stopped at ${label(slot)}; bank 64 is not protected, run PROTECT 64 again`, { cause: err });
+    }
+    done += 1;
+    onProgress?.(done, total);
+  }
+  return written;
 }

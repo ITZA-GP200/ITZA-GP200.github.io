@@ -228,10 +228,8 @@ export function PatchManagerSheet({
   if (!setSwapSlotBlocked && selectedLabel === defaultPatchLabel) setSwapSlotBlocked = 'Cannot use Default as Swap Slot';
   if (!setSwapSlotBlocked && selectedLabel === swapSlotLabel) setSwapSlotBlocked = 'This is already the swap slot';
   if (!setSwapSlotBlocked && bank64Protected) setSwapSlotBlocked = 'Bank 64 is protected: 64D is the swap slot (RELEASE 64 to change it)';
-  let protectBlocked = slotActionBlocked;
-  if (!protectBlocked && defaultPatchLabel == null) {
-    protectBlocked = 'Set a default patch first: right-click a patch, then SET AS DEFAULT PATCH';
-  }
+  // PROTECT 64 writes the patch shipped with the app: no default needed.
+  const protectBlocked = slotActionBlocked;
   let swapBlocked = onSwapWithClipboard ? pasteBlocked : 'Not built yet';
   if (!swapBlocked && swapSlotLabel === null) {
     swapBlocked = 'Set a swap slot first: right-click a spare slot, then USE FOR SWAP SLOT';

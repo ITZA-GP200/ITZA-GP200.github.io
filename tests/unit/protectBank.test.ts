@@ -12,16 +12,23 @@ import type { GP200Preset } from '@/core/types';
 
 const patch = (name: string): GP200Preset => ({ ...createDefaultPreset(), patchName: name });
 
-function fakePedal(initial: Record<number, string>, failAt?: number) {
+function fakePedal(initial: Record<number, string>, options: { failCopyTo?: number; dropKnob?: boolean } = {}) {
   const slots = new Map<number, GP200Preset>();
   for (const [slot, name] of Object.entries(initial)) slots.set(Number(slot), patch(name));
   const log: string[] = [];
   const device: ProtectDevice = {
+    async writePresetToSlot(preset, slot) {
+      log.push(`write ${slot} as ${preset.patchName}`);
+      const stored = structuredClone(preset);
+      if (options.dropKnob) stored.effects[0].params[0] = 99;
+      slots.set(slot, stored);
+      return structuredClone(stored);
+    },
     async copySlotOnDevice(from, to, copied, saveAs) {
       // Like the real copy: refuse if the source no longer matches.
       if (slots.get(from)!.patchName !== copied.patchName) throw new Error(`${from} changed`);
       log.push(`${from}->${to} as ${saveAs}`);
-      if (to === failAt) throw new Error('The pedal didn’t take the copy');
+      if (to === options.failCopyTo) throw new Error('The pedal didn’t take the copy');
       slots.set(to, { ...structuredClone(slots.get(from)!), patchName: saveAs ?? copied.patchName });
       return structuredClone(slots.get(to)!);
     },
@@ -30,42 +37,43 @@ function fakePedal(initial: Record<number, string>, failAt?: number) {
 }
 
 describe('protectBank64', () => {
-  it('fills 64A–64D from the default under the protected names and returns the new default', async () => {
-    const pedal = fakePedal({ 10: 'Itza GP-200' });
-    const result = await protectBank64(pedal.device, { slot: 10, preset: patch('Itza GP-200') });
-    expect([252, 253, 254, 255].map(pedal.nameAt)).toEqual(['Itza GP-200', 'Itza GP-200', 'DEFAULT', 'SWAP SLOT']);
-    expect(result.patchName).toBe('DEFAULT');
-  });
-
-  it('writes the default’s own slot last when it already lives in bank 64', async () => {
-    const pedal = fakePedal({ 252: 'Itza GP-200' });
-    await protectBank64(pedal.device, { slot: 252, preset: patch('Itza GP-200') });
+  it('writes the shipped patch into 64C as DEFAULT, then copies it on the pedal', async () => {
+    const pedal = fakePedal({ 252: 'Mr. Brown', 253: 'Mr. Brown', 254: 'Mr. Brown', 255: 'Mr. Brown' });
+    const result = await protectBank64(pedal.device, patch("It's GP-200"));
     expect(pedal.log).toEqual([
-      '252->253 as Itza GP-200',
-      '252->254 as DEFAULT',
-      '252->255 as SWAP SLOT',
-      '252->252 as Itza GP-200',
+      'write 254 as DEFAULT',
+      '254->252 as Itza GP-200',
+      '254->253 as Itza GP-200',
+      '254->255 as SWAP SLOT',
     ]);
-  });
-
-  it('works from a default in 64C, renaming it DEFAULT last', async () => {
-    const pedal = fakePedal({ 254: 'My Default' });
-    const result = await protectBank64(pedal.device, { slot: 254, preset: patch('My Default') });
-    expect(pedal.log.at(-1)).toBe('254->254 as DEFAULT');
     expect([252, 253, 254, 255].map(pedal.nameAt)).toEqual(['Itza GP-200', 'Itza GP-200', 'DEFAULT', 'SWAP SLOT']);
     expect(result.patchName).toBe('DEFAULT');
+  });
+
+  it('needs nothing on the pedal first and leaves the shipped patch untouched', async () => {
+    const pedal = fakePedal({});
+    const shipped = patch("It's GP-200");
+    await protectBank64(pedal.device, shipped);
+    expect(shipped.patchName).toBe("It's GP-200");
+  });
+
+  it('refuses to copy a write the pedal didn’t take faithfully', async () => {
+    const pedal = fakePedal({}, { dropKnob: true });
+    await expect(protectBank64(pedal.device, patch("It's GP-200")))
+      .rejects.toThrow('64C didn’t take the shipped patch');
+    expect(pedal.log).toEqual(['write 254 as DEFAULT']);
   });
 
   it('says where it stopped and that bank 64 is not protected', async () => {
-    const pedal = fakePedal({ 10: 'X' }, 253);
-    await expect(protectBank64(pedal.device, { slot: 10, preset: patch('X') }))
+    const pedal = fakePedal({}, { failCopyTo: 253 });
+    await expect(protectBank64(pedal.device, patch("It's GP-200")))
       .rejects.toThrow('Stopped at 64B; bank 64 is not protected, run PROTECT 64 again');
   });
 
   it('reports progress per slot', async () => {
-    const pedal = fakePedal({ 10: 'X' });
+    const pedal = fakePedal({});
     const seen: string[] = [];
-    await protectBank64(pedal.device, { slot: 10, preset: patch('X') }, (d, t) => seen.push(`${d}/${t}`));
+    await protectBank64(pedal.device, patch('X'), (d, t) => seen.push(`${d}/${t}`));
     expect(seen).toEqual(['1/4', '2/4', '3/4', '4/4']);
   });
 });
@@ -97,18 +105,5 @@ describe('pasteProblem with bank 64 protected', () => {
   it('allows a paste that starts in bank 64 (a direct action there)', () => {
     expect(pasteProblem([0, 1], 252, true)).toBeNull();
     expect(pasteProblem([0], 255, true)).toBeNull();
-  });
-});
-
-describe('protectBank64 with a changed default', () => {
-  it('explains plainly that nothing was written and what to do', async () => {
-    const { SourceChangedError } = await import('@/core/samePatch');
-    const device: ProtectDevice = {
-      async copySlotOnDevice(from) { throw new SourceChangedError(from, 'name "Mr. Brown" vs "DEFAULT"'); },
-    };
-    await expect(protectBank64(device, { slot: 254, preset: patch('DEFAULT') })).rejects.toThrow(
-      'Your default patch in 64C has changed on the pedal since it was set. Nothing was written; bank 64 is not '
-      + 'protected. Right-click the patch you want as the default, SET AS DEFAULT PATCH, then PROTECT 64 again',
-    );
   });
 });
