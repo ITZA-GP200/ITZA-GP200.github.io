@@ -53,8 +53,17 @@ export function describeWriteFidelity(actual: GP200Preset, sent: GP200Preset): W
   if (actual.patchStyle !== sent.patchStyle) extras.push(`style ${actual.patchStyle} vs ${sent.patchStyle}`);
   if ((actual.patchNote ?? '') !== (sent.patchNote ?? '')) extras.push('note differs');
   if ((actual.author ?? '') !== (sent.author ?? '')) extras.push(`author "${actual.author ?? ''}" vs "${sent.author ?? ''}"`);
-  if (sent.expAssignments && !same(actual.expAssignments, sent.expAssignments)) extras.push('EXP assignments differ');
-  if (sent.ctrlAssignments && !same(actual.ctrlAssignments, sent.ctrlAssignments)) extras.push('CTRL assignments differ');
+  // Say which footswitch / expression slot differs, and how.
+  for (const want of sent.ctrlAssignments ?? []) {
+    const got = actual.ctrlAssignments?.find((ctrl) => ctrl.ctrlIndex === want.ctrlIndex);
+    if (!same(got, want)) extras.push(`CTRL ${want.ctrlIndex + 1} ${JSON.stringify(got ?? null)} vs ${JSON.stringify(want)}`);
+  }
+  for (const want of sent.expAssignments ?? []) {
+    const got = actual.expAssignments?.find((exp) => exp.page === want.page && exp.item === want.item);
+    if (!same(got, want)) {
+      extras.push(`EXP page ${want.page} item ${want.item} ${JSON.stringify(got ?? null)} vs ${JSON.stringify(want)}`);
+    }
+  }
   return { identity, values, extras };
 }
 

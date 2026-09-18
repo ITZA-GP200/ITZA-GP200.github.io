@@ -40,3 +40,14 @@ describe('describeWriteFidelity: knob slots', () => {
     expect(values).toEqual(['CAB param 1 0 vs 75']);
   });
 });
+
+describe('describeWriteFidelity: CTRL and EXP detail', () => {
+  it('names the footswitch that differs and how', () => {
+    const sent = { ...createDefaultPreset(), ctrlAssignments: [{ ctrlIndex: 0, blockMask: 5, state: 0 }] };
+    const actual = { ...createDefaultPreset(), ctrlAssignments: [{ ctrlIndex: 0, blockMask: 1, state: 0 }] };
+    const { extras } = describeWriteFidelity(actual as never, sent as never);
+    expect(extras).toEqual([
+      'CTRL 1 {"ctrlIndex":0,"blockMask":1,"state":0} vs {"ctrlIndex":0,"blockMask":5,"state":0}',
+    ]);
+  });
+});
