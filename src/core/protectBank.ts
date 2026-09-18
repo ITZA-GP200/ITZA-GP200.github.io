@@ -1,4 +1,5 @@
 import { DEFAULT_PATCH_NAME, type DefaultPatch } from './defaultPatch';
+import { SourceChangedError } from './samePatch';
 import { SysExCodec } from './SysExCodec';
 import type { GP200Preset } from './types';
 
@@ -73,6 +74,17 @@ export async function protectBank64(
     try {
       written = await device.copySlotOnDevice(source.slot, slot, source.preset, name);
     } catch (err) {
+      // The default slot no longer holds the patch set as default: say so
+      // plainly, and what to do, rather than the raw comparison.
+      if (err instanceof SourceChangedError) {
+        const outcome = i === 0 ? 'Nothing was written' : `Stopped at ${SysExCodec.slotToLabel(slot)}`;
+        throw new Error(
+          `Your default patch in ${SysExCodec.slotToLabel(source.slot)} has changed on the pedal since it was set. `
+          + `${outcome}; bank 64 is not protected. Right-click the patch you want as the default, `
+          + 'SET AS DEFAULT PATCH, then PROTECT 64 again',
+          { cause: err },
+        );
+      }
       const detail = err instanceof Error ? err.message : String(err);
       throw new Error(
         `${detail}. Stopped at ${SysExCodec.slotToLabel(slot)}; bank 64 is not protected, run PROTECT 64 again`,
