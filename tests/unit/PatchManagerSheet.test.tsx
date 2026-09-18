@@ -692,3 +692,71 @@ describe('PatchManagerSheet: USE FOR DEFAULT PATCH (64C)', () => {
     expect(onSetDefaultPatch).toHaveBeenCalledWith(1);
   });
 });
+
+describe('PatchManagerSheet: SAVE / RESTORE 64', () => {
+  const bankNames = (c = 'ITZA GP-200 dflt') => {
+    const names = makeNames();
+    names[252] = 'UTILITY-1';
+    names[253] = 'UTILITY-2';
+    names[254] = c;
+    names[255] = 'SWAP SLOT';
+    return names;
+  };
+  const hosts = () => ({
+    onSaveBank64: vi.fn().mockResolvedValue(undefined),
+    onRestoreBank64: vi.fn().mockResolvedValue(undefined),
+    onProtectBank64: vi.fn().mockResolvedValue(undefined),
+    onReleaseBank64: vi.fn().mockResolvedValue(undefined),
+  });
+
+  it('offers SAVE 64 only while bank 64 is protected', () => {
+    const h = hosts();
+    renderSheet({ ...h, presetNames: bankNames() });
+    expect(screen.queryByRole('button', { name: 'SAVE 64' })).toBeNull();
+    cleanup();
+    renderSheet({ ...h, presetNames: bankNames(), bank64Protected: true });
+    fireEvent.click(screen.getByRole('button', { name: 'SAVE 64' }));
+    expect(h.onSaveBank64).toHaveBeenCalledTimes(1);
+  });
+
+  it('RESTORE 64 asks where from; LAST SAVE needs a save in this browser', () => {
+    const h = hosts();
+    renderSheet({ ...h, presetNames: bankNames() });
+    fireEvent.click(screen.getByRole('button', { name: 'RESTORE 64' }));
+    const chooser = screen.getByRole('alertdialog', { name: 'Restore bank 64' });
+    expect(chooser).toHaveTextContent('This overwrites bank 64 on the pedal.');
+    expect(within(chooser).getByRole('button', { name: 'LAST SAVE' })).toBeDisabled();
+    fireEvent.click(within(chooser).getByRole('button', { name: 'Cancel' }));
+    expect(h.onRestoreBank64).not.toHaveBeenCalled();
+    cleanup();
+    renderSheet({ ...h, presetNames: bankNames(), bank64SavedAt: '2026-09-18T12:00:00.000Z' });
+    fireEvent.click(screen.getByRole('button', { name: 'RESTORE 64' }));
+    fireEvent.click(screen.getByRole('button', { name: /^LAST SAVE \(/ }));
+    expect(h.onRestoreBank64).toHaveBeenCalledWith('browser');
+  });
+
+  it('restores from a chosen file', async () => {
+    const h = hosts();
+    renderSheet({ ...h, presetNames: bankNames() });
+    fireEvent.click(screen.getByRole('button', { name: 'RESTORE 64' }));
+    const file = new File(['{"format":"gp200-bank64"}'], 'backup.json', { type: 'application/json' });
+    fireEvent.change(screen.getByTestId('restore-file-input'), { target: { files: [file] } });
+    await vi.waitFor(() => expect(h.onRestoreBank64).toHaveBeenCalledWith({ text: '{"format":"gp200-bank64"}' }));
+  });
+
+  it('warns when protected bank 64 changed on the pedal, with RESTORE 64 at hand', () => {
+    renderSheet({ ...hosts(), presetNames: bankNames('Mr. Brown'), bank64Protected: true });
+    const warning = screen.getByText(/Bank 64 changed on the pedal/).closest('[role="alert"]')!;
+    expect(warning).toHaveTextContent('64C is now “Mr. Brown”');
+    fireEvent.click(within(warning as HTMLElement).getByRole('button', { name: 'RESTORE 64' }));
+    expect(screen.getByRole('alertdialog', { name: 'Restore bank 64' })).toBeTruthy();
+  });
+
+  it('no warning when bank 64 matches, or when it isn’t protected', () => {
+    renderSheet({ ...hosts(), presetNames: bankNames(), bank64Protected: true });
+    expect(screen.queryByText(/Bank 64 changed on the pedal/)).toBeNull();
+    cleanup();
+    renderSheet({ ...hosts(), presetNames: bankNames('Mr. Brown') });
+    expect(screen.queryByText(/Bank 64 changed on the pedal/)).toBeNull();
+  });
+});
