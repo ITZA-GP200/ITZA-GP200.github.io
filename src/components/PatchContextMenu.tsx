@@ -30,6 +30,8 @@ const GAP = 6;
 const EDGE = 8;
 const NOT_BUILT = 'Not built yet';
 
+const patchCount = (count: number) => (count === 1 ? '1 patch' : `${count} patches`);
+
 export type PasteMethod = 'overwrite' | 'swap';
 
 /** Actions that ask first, inside the menu (per the design). */
@@ -54,6 +56,10 @@ export interface PatchContextMenuProps {
   swapBlocked: string | null;
   /** Slot swaps copy through ("64D"), or null when none is set. */
   swapSlotLabel: string | null;
+  /** How many patches are copied (the clip line and paste text). */
+  clipboardCount?: number;
+  /** The slots a paste would overwrite ("3A–3D"); defaults to the selection. */
+  pasteRangeLabel?: string;
   /** The single selected slot is the swap slot: flagged at the top. */
   isSwapSlot?: boolean;
   /** Why RENAME can't run right now, or null when it can. */
@@ -96,6 +102,8 @@ export function PatchContextMenu({
   swapBlocked,
   swapSlotLabel,
   isSwapSlot = false,
+  clipboardCount = 1,
+  pasteRangeLabel,
   renameBlocked,
   onRename,
   setDefaultBlocked,
@@ -204,6 +212,8 @@ export function PatchContextMenu({
   const pasteState = pasteBlocked ?? (clipboardLabel === null ? 'Copy a patch first' : null);
   const hidden = placement === null;
 
+  const pasteRange = pasteRangeLabel ?? selectionLabel;
+
   const selectionText = selectionCount === 1
     ? `1 patch selected (${selectionLabel})`
     : `${selectionCount} patches selected · ${selectionLabel}`;
@@ -247,7 +257,7 @@ export function PatchContextMenu({
         </div>
         {clipboardLabel !== null && (
           <div className="text-caption px-2 pb-1.5" style={{ color: 'var(--accent)' }}>
-            clip: {clipboardLabel} · 1 patch
+            clip: {clipboardLabel} · {patchCount(clipboardCount)}
           </div>
         )}
         {confirming === 'reset' && (
@@ -325,12 +335,12 @@ export function PatchContextMenu({
           }}
         >
           <div className="text-caption px-1 pb-2.5" style={{ color: 'var(--text-muted)' }}>
-            Paste 1 patch starting at {selectionLabel}
+            Paste {patchCount(clipboardCount)} starting at {selectionLabel}
           </div>
           <div role="radiogroup" aria-label="Paste method">
             <PasteOption
               label="OVERWRITE"
-              description={`Replaces ${selectionLabel} with ${clipboardLabel}`}
+              description={`Replaces ${pasteRange} with ${clipboardLabel}`}
               checked={pasteMethod === 'overwrite'}
               onSelect={() => setPasteMethod('overwrite')}
             />
