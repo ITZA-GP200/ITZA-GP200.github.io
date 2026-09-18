@@ -1036,8 +1036,18 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     if (typeChanges.length > 0) await new Promise(r => setTimeout(r, 500));
 
     // Step 3: knobs, then on/off, block order, patch VOL/PAN/TEMPO, author.
+    // On hardware (fw 1.8.0) the first knob message addressed to a block is
+    // dropped when the previous one went to another block: every block's
+    // FIRST knob was lost, even when all knobs were sent twice, while a knob
+    // dragged in the editor (many messages) always lands. So each block gets
+    // its first knob once as a throwaway, then every knob as normal.
     const sendKnobs = async () => {
       for (const eff of preset.effects) {
+        const first = eff.params.findIndex(value => value !== undefined);
+        if (first >= 0) {
+          output.send(SysExCodec.buildParamChange(eff.slotIndex, first, eff.effectId, eff.params[first]));
+          await new Promise(r => setTimeout(r, 20));
+        }
         for (let p = 0; p < eff.params.length; p++) {
           if (eff.params[p] !== undefined) {
             output.send(SysExCodec.buildParamChange(eff.slotIndex, p, eff.effectId, eff.params[p]));
@@ -1077,7 +1087,7 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     await new Promise(r => setTimeout(r, 200));
     console.log(
       `[GP-200] writeToSlot: ${typeChanges.length} effect type change(s)`
-      + `${typeChanges.length ? ' (' + typeChanges.map(e => e.slotIndex).join(',') + ')' : ''}; knobs sent twice`,
+      + `${typeChanges.length ? ' (' + typeChanges.map(e => e.slotIndex).join(',') + ')' : ''}; knobs sent twice, each block primed`,
     );
 
     // The proven save: 0x5a commit, then a preset change to the slot.
