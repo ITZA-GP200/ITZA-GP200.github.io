@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/Button';
  * Right-click menu for the Patch Manager's slot list, laid out per the
  * "Patch List Context Menu" design handoff: selection and clipboard info, then
  * UNDO/REDO, COPY/CUT, PASTE ▸ (Overwrite / Insert / Swap), INSERT ▸, then the
- * slot tools (RENAME, SET AS DEFAULT PATCH, SET AS SWAP SLOT) and RESET.
+ * slot tools (RENAME, SET AS DEFAULT PATCH, USE FOR SWAP SLOT) and RESET.
  *
  * Only actions that are built and hardware-verified are live. The rest are
  * shown greyed out with a "Not built yet" tooltip and do nothing, so the menu
@@ -62,7 +62,7 @@ export interface PatchContextMenuProps {
   setDefaultBlocked: string | null;
   /** Make the selected slot the template RESET copies. */
   onSetDefault: () => void;
-  /** Why SET AS SWAP SLOT can't run right now, or null when it can. */
+  /** Why USE FOR SWAP SLOT can't run right now, or null when it can. */
   setSwapSlotBlocked: string | null;
   /** Make the selected slot the scratch space swaps copy through. */
   onSetSwapSlot: () => void;
@@ -257,7 +257,7 @@ export function PatchContextMenu({
         {confirming === 'swapSlot' && (
           <Confirmation
             label="Confirm swap slot"
-            actionLabel="Use as swap slot"
+            actionLabel="Use for swap slot"
             onCancel={() => setConfirming(null)}
             onConfirm={onSetSwapSlot}
           >
@@ -291,7 +291,7 @@ export function PatchContextMenu({
             <MenuItem label="RENAME" blocked={renameBlocked} onSelect={onRename} />
             <MenuItem label="SET AS DEFAULT PATCH" blocked={setDefaultBlocked} onSelect={onSetDefault} />
             <MenuItem
-              label="SET AS SWAP SLOT"
+              label="USE FOR SWAP SLOT"
               blocked={setSwapSlotBlocked}
               onSelect={() => setConfirming('swapSlot')}
             />

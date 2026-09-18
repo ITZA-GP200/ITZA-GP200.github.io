@@ -711,7 +711,7 @@ function App() {
     }
   }
 
-  // SET AS SWAP SLOT: remember the scratch slot (the menu has already asked).
+  // USE FOR SWAP SLOT: remember the scratch slot (the menu has already asked).
   async function handleSetSwapSlot(slot: number) {
     saveSwapSlot(slot);
     setSwapSlot(slot);
