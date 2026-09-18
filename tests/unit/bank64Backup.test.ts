@@ -107,11 +107,16 @@ describe('restoreBank64', () => {
     expect(seen).toEqual(['1/4', '2/4', '3/4', '4/4']);
   });
 
-  it('stops when a slot doesn’t take the backup', async () => {
+  it('finishes when the pedal keeps a value its own way, and says which', async () => {
     const pedal = fakePedal(252);
-    await expect(restoreBank64(pedal.device, [named('x'), named('y'), named('z')]))
-      .rejects.toThrow('64A didn’t take the backup');
-    // 64A is written twice (a value-only miss is retried once), then it stops.
-    expect(pedal.log).toEqual(['write 254 as ITZA GP-200', 'write 252 as UTILITY-1', 'write 252 as UTILITY-1']);
+    const missed: string[] = [];
+    await restoreBank64(pedal.device, [named('x'), named('y'), named('z')], undefined, missed);
+    // 64A is written twice (a value-only miss is retried once), then it carries on.
+    expect(pedal.log).toEqual([
+      'write 254 as ITZA GP-200', 'write 252 as UTILITY-1', 'write 252 as UTILITY-1',
+      'write 253 as UTILITY-2', '254->255 as SWAP SLOT',
+    ]);
+    expect(missed).toHaveLength(1);
+    expect(missed[0]).toMatch(/^64A PRE param 0 99 vs /);
   });
 });

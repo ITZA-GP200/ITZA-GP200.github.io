@@ -62,26 +62,34 @@ export function saveBankProtected(on: boolean): void {
 
 /**
  * Write a patch from app data into a slot and check it against what was
- * sent. A wrong name or effect type fails at once; if only knob values are
- * off, the slot is written once more first: on hardware a long restore once
- * left a single knob at its default (PRE Clipping 10 instead of 0) while the
- * same backup had restored cleanly minutes before. Returns the read-back.
- * `problem` builds the error message from the differences.
+ * sent. A wrong name or effect type fails at once (`problem` builds that
+ * message). If only knob values are off, the slot is written once more; any
+ * still off after that are added to `missed` ("64A PRE param 3 10 vs 0")
+ * rather than failing: on hardware COMP's Clipping stays at its default 10
+ * whatever is sent once COMP is freshly loaded, so a value the pedal won't
+ * accept must not stop a whole restore. Returns the read-back.
  */
 export async function writeChecked(
   device: Pick<ProtectDevice, 'writePresetToSlot'>,
   sent: GP200Preset,
   slot: number,
   problem: (differences: string) => string,
+  missed: string[] = [],
 ): Promise<GP200Preset> {
   for (let attempt = 1; ; attempt++) {
     const written = await device.writePresetToSlot(sent, slot);
     const { identity, values } = describeWriteFidelity(written, sent);
-    if (identity.length === 0 && values.length === 0) return written;
-    const wrong = [...identity, ...values];
-    const summary = `${wrong.slice(0, 3).join('; ')}${wrong.length > 3 ? '; …' : ''}`;
-    if (identity.length > 0 || attempt >= 2) throw new Error(problem(summary));
-    console.warn(`[GP-200] ${SysExCodec.slotToLabel(slot)} write missed ${wrong.length} value(s), writing again:`, wrong);
+    if (identity.length > 0) {
+      const wrong = [...identity, ...values];
+      throw new Error(problem(`${wrong.slice(0, 3).join('; ')}${wrong.length > 3 ? '; …' : ''}`));
+    }
+    if (values.length === 0) return written;
+    if (attempt >= 2) {
+      console.warn(`[GP-200] ${SysExCodec.slotToLabel(slot)} kept ${values.length} value(s) its own way:`, values);
+      missed.push(...values.map((line) => `${SysExCodec.slotToLabel(slot)} ${line}`));
+      return written;
+    }
+    console.warn(`[GP-200] ${SysExCodec.slotToLabel(slot)} write missed ${values.length} value(s), writing again:`, values);
   }
 }
 
@@ -106,6 +114,8 @@ export async function protectBank64(
   device: ProtectDevice,
   shipped: GP200Preset,
   onProgress?: (done: number, total: number) => void,
+  /** Filled with any values the pedal kept its own way (see writeChecked). */
+  missed: string[] = [],
 ): Promise<GP200Preset> {
   const total = PROTECTED_LAYOUT.length;
   const sent = { ...structuredClone(shipped), patchName: DEFAULT_SLOT_NAME };
@@ -113,7 +123,7 @@ export async function protectBank64(
   try {
     written = await writeChecked(device, sent, PROTECTED_DEFAULT_SLOT, (differences) =>
       `${label(PROTECTED_DEFAULT_SLOT)} didn’t take the shipped patch (${differences}); `
-      + 'bank 64 is not protected, run PROTECT 64 again');
+      + 'bank 64 is not protected, run PROTECT 64 again', missed);
   } catch (err) {
     if (err instanceof Error && err.message.includes('didn’t take the shipped patch')) throw err;
     const detail = err instanceof Error ? err.message : String(err);

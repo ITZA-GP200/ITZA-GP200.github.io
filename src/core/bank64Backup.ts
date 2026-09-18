@@ -135,6 +135,8 @@ export async function restoreBank64(
   device: RestoreDevice,
   patches: GP200Preset[],
   onProgress?: (done: number, total: number) => void,
+  /** Filled with any values the pedal kept its own way (see writeChecked). */
+  missed: string[] = [],
 ): Promise<GP200Preset> {
   const total = BACKUP_SLOTS.length + 1;
   const order = [PROTECTED_DEFAULT_SLOT, 252, 253];
@@ -146,7 +148,7 @@ export async function restoreBank64(
     let written: GP200Preset;
     try {
       written = await writeChecked(device, sent, slot, (differences) =>
-        `${label(slot)} didn’t take the backup (${differences}); run RESTORE 64 again`);
+        `${label(slot)} didn’t take the backup (${differences}); run RESTORE 64 again`, missed);
     } catch (err) {
       if (err instanceof Error && err.message.includes('didn’t take the backup')) throw err;
       const detail = err instanceof Error ? err.message : String(err);

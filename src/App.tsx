@@ -832,8 +832,9 @@ function App() {
     // Stopping halfway would leave bank 64 half-written, so no cancel link.
     setBulkProgress({ done: 0, total: 4, cancellable: false });
     try {
+      const missed: string[] = [];
       const preset = await protectBank64(
-        midiDevice, loadShippedPatch(), (done, total) => setBulkProgress({ done, total, cancellable: false }),
+        midiDevice, loadShippedPatch(), (done, total) => setBulkProgress({ done, total, cancellable: false }), missed,
       );
       const next = { slot: PROTECTED_DEFAULT_SLOT, preset };
       saveDefaultPatch(next);
@@ -845,7 +846,8 @@ function App() {
       // Leave the pedal on the new default, and show it.
       midiDevice.sendSlotChange(PROTECTED_DEFAULT_SLOT);
       loadPreset(preset);
-      setLoadError(null);
+      setLoadError(missed.length === 0 ? null
+        : `PROTECT 64 done. The pedal kept ${missed.length} value(s) its own way: ${missed.join('; ')}`);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       setLoadError(`PROTECT 64 failed: ${detail}`);
@@ -906,8 +908,9 @@ function App() {
     setBulkProgress({ done: 0, total: 4, cancellable: false });
     try {
       const { patches } = readBank64Backup(text);
+      const missed: string[] = [];
       const preset = await restoreBank64(
-        midiDevice, patches, (done, total) => setBulkProgress({ done, total, cancellable: false }),
+        midiDevice, patches, (done, total) => setBulkProgress({ done, total, cancellable: false }), missed,
       );
       const next = { slot: PROTECTED_DEFAULT_SLOT, preset };
       saveDefaultPatch(next);
@@ -918,7 +921,8 @@ function App() {
       setBank64Protected(true);
       midiDevice.sendSlotChange(PROTECTED_DEFAULT_SLOT);
       loadPreset(preset);
-      setLoadError(null);
+      setLoadError(missed.length === 0 ? null
+        : `RESTORE 64 done. The pedal kept ${missed.length} value(s) its own way: ${missed.join('; ')}`);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       setLoadError(`RESTORE 64 failed: ${detail}`);
