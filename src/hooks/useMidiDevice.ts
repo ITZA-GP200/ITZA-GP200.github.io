@@ -1046,12 +1046,18 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     // re-sends slot 0, but a block's first real knob can sit elsewhere: a
     // cab's is slot 1 (Volume), and WRITE TEST on hardware lost exactly that
     // one (75 -> 0) once every slot-0 knob was landing.
+    //
+    // Switches and selectors go before the knobs: on hardware, M-Vibe Rate and
+    // Vintage Rack Feedback were lost (kept the target's old value) while the
+    // same values saved fine from the editor. Both effects have a Sync switch,
+    // which the slot-order send delivered after those knobs.
     for (const eff of preset.effects) {
-      const defined = getEffectParams(eff.effectId)
-        .map(param => param.idx)
-        .filter(idx => eff.params[idx] !== undefined);
-      if (defined.length === 0) continue;
-      for (const idx of [defined[0], ...defined, defined[0]]) {
+      const params = getEffectParams(eff.effectId).filter(param => eff.params[param.idx] !== undefined);
+      if (params.length === 0) continue;
+      const modes = params.filter(param => param.type !== 'knob').map(param => param.idx);
+      const knobs = params.filter(param => param.type === 'knob').map(param => param.idx);
+      const first = params[0].idx;
+      for (const idx of [first, ...modes, ...knobs, first]) {
         send.sendParamChange(eff.slotIndex, idx, eff.effectId, eff.params[idx]);
         await new Promise(r => setTimeout(r, 40));
       }
