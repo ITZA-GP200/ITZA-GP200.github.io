@@ -2260,6 +2260,18 @@
   letter-spacing: 0.08em;
 }
 
+.patch-picker .pp-swap {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px dashed color-mix(in srgb, var(--pp-accent) 45%, transparent);
+  color: color-mix(in srgb, var(--pp-accent) 70%, var(--text-muted));
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
 @media (max-width: 640px) {
   .patch-picker .pp-body {
     grid-template-columns: 1fr;

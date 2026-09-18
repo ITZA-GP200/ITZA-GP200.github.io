@@ -40,7 +40,7 @@ export interface PatchManagerSheetProps {
   /** Write the clipboard into a slot. */
   onPasteToSlot: (slot: number) => Promise<void>;
   /** Exchange the contents of two slots. */
-  onSwapSlots: (first: number, second: number) => Promise<void>;
+  onSwapSlots: (first: number, second: number) => Promise<boolean | void>;
   /** Label of whatever is on the clipboard, or null when it is empty. */
   clipboardLabel: string | null;
   onRenameSlot: (slot: number, name: string) => Promise<void>;
@@ -191,7 +191,8 @@ export function PatchManagerSheet({
   if (!setDefaultBlocked && selectedSlots.length !== 1) setDefaultBlocked = 'Pick one patch as the default';
   // The template and the scratch slot must differ: a swap would overwrite
   // the template, and every later RESET would refuse.
-  if (!setDefaultBlocked && selectedLabel === swapSlotLabel) setDefaultBlocked = 'This is your swap slot';
+  if (!setDefaultBlocked && selectedLabel === swapSlotLabel) setDefaultBlocked = 'Swap Slot cannot be the Default Patch';
+  if (!setDefaultBlocked && selectedLabel === defaultPatchLabel) setDefaultBlocked = 'Already set as default patch';
   let setSwapSlotBlocked = onSetSwapSlot ? slotActionBlocked : 'Not built yet';
   if (!setSwapSlotBlocked && selectedSlots.length !== 1) setSwapSlotBlocked = 'Pick one slot as the swap slot';
   if (!setSwapSlotBlocked && selectedLabel === defaultPatchLabel) setSwapSlotBlocked = 'This is your default patch';
@@ -211,13 +212,15 @@ export function PatchManagerSheet({
   if (!resetBlocked && selectedSlots.length !== 1) resetBlocked = 'Reset works on one patch at a time for now';
   // Resetting the template onto itself would rename it, and every later
   // RESET would then refuse because the default patch "changed".
-  if (!resetBlocked && selectedLabel === defaultPatchLabel) resetBlocked = 'This is the default patch';
+  if (!resetBlocked && selectedLabel === defaultPatchLabel) resetBlocked = 'We can’t reset the default patch';
+  // Flags the swap slot at the top of the menu: swaps overwrite it.
+  const selectionIsSwapSlot = selectedSlots.length === 1 && selectedLabel === swapSlotLabel;
 
   function handleActivateFromPicker(slot: number) {
     if (connected) void runBusy(() => onActivate(slot));
   }
 
-  async function runBusy(action: () => Promise<void>) {
+  async function runBusy(action: () => Promise<unknown>) {
     setBusy(true);
     try {
       await action();
@@ -470,6 +473,7 @@ export function PatchManagerSheet({
           onSelect={handleSelect}
           onActivate={handleActivateFromPicker}
           onRowContextMenu={handleRowContextMenu}
+          swapSlotLabel={swapSlotLabel}
         />
       </div>
 
@@ -651,8 +655,9 @@ export function PatchManagerSheet({
               if (selected !== null && selected > 0) {
                 const target = selected - 1;
                 void runBusy(async () => {
-                  await onSwapSlots(target, selected);
-                  setSelection({ anchor: target, extra: new Set() });
+                  // Follow the patch only if it actually moved.
+                  const swapped = await onSwapSlots(target, selected);
+                  if (swapped !== false) setSelection({ anchor: target, extra: new Set() });
                 });
               }
             }}
@@ -668,8 +673,9 @@ export function PatchManagerSheet({
               if (selected !== null && selected < 255) {
                 const target = selected + 1;
                 void runBusy(async () => {
-                  await onSwapSlots(selected, target);
-                  setSelection({ anchor: target, extra: new Set() });
+                  // Follow the patch only if it actually moved.
+                  const swapped = await onSwapSlots(selected, target);
+                  if (swapped !== false) setSelection({ anchor: target, extra: new Set() });
                 });
               }
             }}
@@ -798,6 +804,7 @@ export function PatchManagerSheet({
         }}
         swapBlocked={swapBlocked}
         swapSlotLabel={swapSlotLabel}
+        isSwapSlot={selectionIsSwapSlot}
         setSwapSlotBlocked={setSwapSlotBlocked}
         onSetSwapSlot={() => {
           setMenuAt(null);

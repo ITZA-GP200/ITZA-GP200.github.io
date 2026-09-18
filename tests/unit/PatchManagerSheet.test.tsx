@@ -182,6 +182,23 @@ describe('PatchManagerSheet: selection and arrange', () => {
     expect(props.onSwapSlots).toHaveBeenCalledWith(0, 1);
   });
 
+  it('DOWN keeps the highlight in place when the swap fails', async () => {
+    const { props } = renderSheet({ onSwapSlots: vi.fn().mockResolvedValue(false) });
+    fireEvent.click(screen.getByText('Clean'));
+    fireEvent.click(screen.getByRole('button', { name: '▼ DOWN' }));
+    await vi.waitFor(() => expect(props.onSwapSlots).toHaveBeenCalled());
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: '▼ DOWN' })).not.toBeDisabled());
+    expect(screen.getByText('Clean').closest('button')).toHaveClass('selected');
+  });
+
+  it('DOWN moves the highlight with the patch when the swap succeeds', async () => {
+    renderSheet({ onSwapSlots: vi.fn().mockResolvedValue(true) });
+    fireEvent.click(screen.getByText('Clean'));
+    fireEvent.click(screen.getByRole('button', { name: '▼ DOWN' }));
+    await vi.waitFor(() => expect(screen.getByText('Crunch').closest('button')).toHaveClass('selected'));
+    expect(screen.getByText('Clean').closest('button')).not.toHaveClass('selected');
+  });
+
   it('UP is unavailable on the very first slot', () => {
     renderSheet();
     fireEvent.click(screen.getByText('Clean'));
@@ -386,7 +403,14 @@ describe('PatchManagerSheet: default patch and RESET', () => {
     renderSheet({ onSetDefaultPatch: vi.fn(), onResetSlot: vi.fn(), defaultPatchLabel: '1B' });
     const reset = within(openMenuOn('Crunch')).getByRole('menuitem', { name: 'RESET' });
     expect(reset).toHaveAttribute('aria-disabled', 'true');
-    expect(reset).toHaveAttribute('title', 'This is the default patch');
+    expect(reset).toHaveAttribute('title', 'We can’t reset the default patch');
+  });
+
+  it('greys SET AS DEFAULT PATCH on the patch that already is the default', () => {
+    renderSheet({ onSetDefaultPatch: vi.fn(), onResetSlot: vi.fn(), defaultPatchLabel: '1B' });
+    const setDefault = within(openMenuOn('Crunch')).getByRole('menuitem', { name: 'SET AS DEFAULT PATCH' });
+    expect(setDefault).toHaveAttribute('aria-disabled', 'true');
+    expect(setDefault).toHaveAttribute('title', 'Already set as default patch');
   });
 });
 
@@ -417,7 +441,17 @@ describe('PatchManagerSheet: swap slot and PASTE ▸ SWAP', () => {
     expect(onDefault).toHaveAttribute('title', 'This is your default patch');
     fireEvent.keyDown(document, { key: 'Escape' });
     const onSwapSlot = within(openMenuOn('Clean')).getByRole('menuitem', { name: 'SET AS DEFAULT PATCH' });
-    expect(onSwapSlot).toHaveAttribute('title', 'This is your swap slot');
+    expect(onSwapSlot).toHaveAttribute('title', 'Swap Slot cannot be the Default Patch');
+  });
+
+  it('tags the swap slot in the list and flags it at the top of its menu', () => {
+    renderSheet({ ...swapHosts(), swapSlotLabel: '1B' });
+    const row = screen.getByText('Crunch').closest('button')!;
+    expect(within(row).getByText('SWAP SLOT')).toBeTruthy();
+    expect(within(screen.getByText('Clean').closest('button')!).queryByText('SWAP SLOT')).toBeNull();
+    expect(openMenuOn('Crunch')).toHaveTextContent(/^In Use for Swap Slot/);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(openMenuOn('Clean')).not.toHaveTextContent('In Use for Swap Slot');
   });
 
   it('PASTE ▸ SWAP explains how to set a swap slot when there is none', () => {

@@ -17,6 +17,8 @@ export interface PatchPickerProps {
   /** Right-click on a row, with the viewport point to open a menu at. Omit
    *  to keep the browser's own context menu (the LOAD/SAVE AS picker). */
   onRowContextMenu?: (slot: number, x: number, y: number) => void;
+  /** The user's swap slot ("64D"), tagged in the list since swaps overwrite it. */
+  swapSlotLabel?: string | null;
 }
 
 interface PatchRow {
@@ -104,6 +106,7 @@ export function PatchPicker({
   onSelect,
   onActivate,
   onRowContextMenu,
+  swapSlotLabel = null,
 }: PatchPickerProps) {
   const rows = useMemo(() => buildRows(presetNames), [presetNames]);
   const categories = useMemo(() => buildBankCategories(rows), [rows]);
@@ -237,6 +240,9 @@ export function PatchPicker({
                   >
                     <span className="pp-badge">{row.label}</span>
                     <span className="pp-name">{slotName(row.name, namesLoadProgress)}</span>
+                    {row.label === swapSlotLabel && (
+                      <span className="pp-swap" title="In use for swap slot: swaps overwrite this patch">SWAP SLOT</span>
+                    )}
                     {isCurrent && <span className="pp-now">NOW</span>}
                   </button>
                 );
