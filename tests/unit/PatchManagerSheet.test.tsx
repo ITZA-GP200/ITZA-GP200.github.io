@@ -378,7 +378,7 @@ describe('PatchManagerSheet: default patch and RESET', () => {
     fireEvent.click(within(menu).getByRole('menuitem', { name: 'RESET' }));
     const confirm = screen.getByRole('alertdialog', { name: 'Confirm reset' });
     expect(confirm).toHaveTextContent('Reset 1B to your default patch (from 1A)');
-    expect(confirm).toHaveTextContent('Itza GP200');
+    expect(confirm).toHaveTextContent('Itza GP-200');
     expect(onResetSlot).not.toHaveBeenCalled();
     fireEvent.click(within(confirm).getByRole('button', { name: 'Reset' }));
     expect(onResetSlot).toHaveBeenCalledWith(1);
@@ -539,5 +539,73 @@ describe('PatchManagerSheet: multi-slot COPY and PASTE', () => {
     renderSheet({ clipboardLabel: '1A, 1B +8', clipboardSlots: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] });
     expect(within(openMenuOn('American Idiot')).getByRole('menuitem', { name: /^PASTE/ }))
       .toHaveAttribute('title', 'Not enough room: 10 patches from 63A would run past 64D');
+  });
+});
+
+describe('PatchManagerSheet: PROTECT 64', () => {
+  const hosts = () => ({
+    onProtectBank64: vi.fn().mockResolvedValue(undefined),
+    onReleaseBank64: vi.fn().mockResolvedValue(undefined),
+    onSetDefaultPatch: vi.fn(),
+    onSetSwapSlot: vi.fn().mockResolvedValue(undefined),
+  });
+
+  it('needs a default patch first', () => {
+    renderSheet(hosts());
+    const protect = screen.getByRole('button', { name: 'PROTECT 64' });
+    expect(protect).toBeDisabled();
+    expect(protect.getAttribute('title')).toContain('Set a default patch first');
+  });
+
+  it('asks first; Cancel changes nothing, OK protects', async () => {
+    const h = hosts();
+    renderSheet({ ...h, defaultPatchLabel: '1A' });
+    fireEvent.click(screen.getByRole('button', { name: 'PROTECT 64' }));
+    const confirm = screen.getByRole('alertdialog', { name: 'Confirm protect bank 64' });
+    expect(confirm).toHaveTextContent('Are you sure? This will overwrite and protect patch bank 64.');
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Cancel' }));
+    expect(h.onProtectBank64).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'PROTECT 64' }));
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }));
+    expect(h.onProtectBank64).toHaveBeenCalledTimes(1);
+  });
+
+  it('when protected: red RELEASE 64, bank 64 marked, default and swap slot locked', () => {
+    const h = hosts();
+    renderSheet({ ...h, bank64Protected: true, defaultPatchLabel: '64C', swapSlotLabel: '64D' });
+    expect(screen.queryByRole('button', { name: 'PROTECT 64' })).toBeNull();
+    expect(screen.getByText('American Idiot').closest('section')).not.toHaveClass('pp-protected');
+    fireEvent.contextMenu(screen.getByText('Crunch'), { clientX: 120, clientY: 140 });
+    const menu = screen.getByRole('menu', { name: 'Patch actions' });
+    expect(within(menu).getByRole('menuitem', { name: 'SET AS DEFAULT PATCH' }).getAttribute('title'))
+      .toContain('Bank 64 is protected');
+    expect(within(menu).getByRole('menuitem', { name: 'USE FOR SWAP SLOT' }).getAttribute('title'))
+      .toContain('Bank 64 is protected');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.click(screen.getByRole('button', { name: 'RELEASE 64' }));
+    expect(h.onReleaseBank64).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a multi-patch paste out of the protected bank', () => {
+    const presetNames = makeNames();
+    presetNames[251] = 'Last Song';
+    renderSheet({ ...hosts(), presetNames, bank64Protected: true, clipboardLabel: '1A–1B', clipboardSlots: [0, 1] });
+    fireEvent.contextMenu(screen.getByText('Last Song'), { clientX: 120, clientY: 140 });
+    expect(within(screen.getByRole('menu', { name: 'Patch actions' })).getByRole('menuitem', { name: /^PASTE/ }))
+      .toHaveAttribute('title', 'Not enough room: 2 patches from 63D would run into protected bank 64');
+  });
+});
+
+describe('PatchPicker: protected bank', () => {
+  it('paints the protected bank and labels it', async () => {
+    const { PatchPicker } = await import('@/components/PatchPicker');
+    const names = makeNames();
+    names[252] = 'Itza GP-200';
+    render(<PatchPicker presetNames={names} namesLoadProgress={256} currentSlot={null} selected={null}
+      onSelect={vi.fn()} protectedBank={64} />);
+    const section = screen.getByText('Itza GP-200').closest('section')!;
+    expect(section).toHaveClass('pp-protected');
+    expect(section).toHaveTextContent('BANK 64 · PROTECTED');
+    expect(screen.getByText('American Idiot').closest('section')).not.toHaveClass('pp-protected');
   });
 });

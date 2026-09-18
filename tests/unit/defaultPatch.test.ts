@@ -9,8 +9,8 @@ describe('default patch storage', () => {
     localStorage.clear();
   });
 
-  it('names reset patches "Itza GP200", distinct from the factory "It\'s GP-200"', () => {
-    expect(DEFAULT_PATCH_NAME).toBe('Itza GP200');
+  it('names reset patches "Itza GP-200", distinct from the factory "It\'s GP-200"', () => {
+    expect(DEFAULT_PATCH_NAME).toBe('Itza GP-200');
     expect(DEFAULT_PATCH_NAME.length).toBeLessThanOrEqual(16);
   });
 

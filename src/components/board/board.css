@@ -2260,6 +2260,18 @@
   letter-spacing: 0.08em;
 }
 
+/* PROTECT 64: the app's bank takes the danger red in place of the accent. */
+.patch-picker .pp-protected {
+  --pp-accent: var(--accent-red);
+}
+.patch-picker .pp-cat.pp-protected,
+.patch-picker .pp-group.pp-protected .pp-group-head,
+.patch-picker .pp-group.pp-protected .pp-badge {
+  color: var(--accent-red);
+}
+.patch-picker .pp-group.pp-protected .pp-badge {
+  background: color-mix(in srgb, var(--accent-red) 12%, transparent);
+}
 .patch-picker .pp-swap {
   flex-shrink: 0;
   padding: 2px 8px;

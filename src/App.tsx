@@ -6,6 +6,14 @@ import { useMidiDevice } from '@/hooks/useMidiDevice';
 import { SourceChangedError } from '@/core/samePatch';
 import { swapThroughScratch } from '@/core/swapThrough';
 import { describeRange, pasteMany, type ClipItem } from '@/core/multiPaste';
+import {
+  loadBankProtected,
+  PROTECTED_DEFAULT_SLOT,
+  PROTECTED_SWAP_SLOT,
+  protectBank64,
+  saveBankProtected,
+  SWAP_SLOT_NAME,
+} from '@/core/protectBank';
 import { DEFAULT_PATCH_NAME, loadDefaultPatch, saveDefaultPatch } from '@/core/defaultPatch';
 import { loadSwapSlot, saveSwapSlot } from '@/core/swapSlot';
 import { useLooper } from '@/hooks/useLooper';
@@ -193,6 +201,8 @@ function App() {
   const [defaultPatch, setDefaultPatch] = useState(loadDefaultPatch);
   // Scratch space swaps copy through (see core/swapSlot.ts), kept across reloads.
   const [swapSlot, setSwapSlot] = useState(loadSwapSlot);
+  // PROTECT 64: bank 64 set aside for the app (see core/protectBank.ts).
+  const [bank64Protected, setBank64Protected] = useState(loadBankProtected);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [firmwareWarningDismissed, setFirmwareWarningDismissed] = useState(false);
@@ -651,6 +661,7 @@ function App() {
     if (multi) setBulkProgress({ done: 0, total: items.length });
     try {
       const result = await pasteMany(midiDevice, items, slot, {
+        bank64Protected,
         onProgress: (done, total) => { if (multi) setBulkProgress({ done, total }); },
         shouldStop: () => bulkCancelRef.current,
       });
@@ -707,8 +718,25 @@ function App() {
   // Exchange two slots on the pedal through the user's swap slot (see
   // core/swapThrough.ts). Replaces the flash upload used here before, which
   // the hardware ignores.
-  function swapOnPedal(first: number, second: number, expectedFirst?: GP200Preset): Promise<GP200Preset> {
-    return swapThroughScratch(midiDevice, { first, second, scratch: swapSlot, expectedFirst });
+  // With bank 64 protected, the swap slot is then put back to the default
+  // patch as "SWAP SLOT" (the patch parked there is a duplicate by now), and
+  // the pedal returns to `first`. A failure there doesn't undo the swap, so
+  // it comes back as a warning rather than an error.
+  async function swapOnPedal(
+    first: number, second: number, expectedFirst?: GP200Preset,
+  ): Promise<{ preset: GP200Preset; warning: string | null }> {
+    const preset = await swapThroughScratch(midiDevice, { first, second, scratch: swapSlot, expectedFirst });
+    let warning: string | null = null;
+    if (bank64Protected && swapSlot === PROTECTED_SWAP_SLOT && defaultPatch) {
+      try {
+        await midiDevice.copySlotOnDevice(defaultPatch.slot, swapSlot, defaultPatch.preset, SWAP_SLOT_NAME);
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        warning = `Swap done, but 64D couldn’t be reset to SWAP SLOT: ${detail}`;
+      }
+      midiDevice.sendSlotChange(first);
+    }
+    return { preset, warning };
   }
 
   // Toolbar SWAP (two selected slots) and ▲UP / ▼DOWN (swap with the neighbour).
@@ -716,8 +744,9 @@ function App() {
   async function handleSwapSlots(first: number, second: number): Promise<boolean> {
     if (first === second) return false;
     try {
-      loadPreset(await swapOnPedal(first, second));
-      setLoadError(null);
+      const { preset: swapped, warning } = await swapOnPedal(first, second);
+      loadPreset(swapped);
+      setLoadError(warning);
       return true;
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
@@ -735,15 +764,51 @@ function App() {
     try {
       if (clipboard.items.length !== 1) throw new Error('Swap works with one copied patch');
       const [copied] = clipboard.items;
-      loadPreset(await swapOnPedal(copied.slot, slot, copied.preset));
+      const { preset: swapped, warning } = await swapOnPedal(copied.slot, slot, copied.preset);
+      loadPreset(swapped);
       // The copied slot now holds the other patch, so the clipboard is stale.
       setClipboard(null);
-      setLoadError(null);
+      setLoadError(warning);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       const advice = err instanceof SourceChangedError ? '; copy it again, then swap' : '';
       setLoadError(`Failed to swap ${clipboard.label} and ${SysExCodec.slotToLabel(slot)}: ${detail}${advice}`);
     }
+  }
+
+  // PROTECT 64 (the sheet has already asked): fill bank 64 from the default
+  // patch, then make 64C the default and 64D the swap slot.
+  async function handleProtectBank64() {
+    if (!defaultPatch || bulkProgress) return;
+    setBulkProgress({ done: 0, total: 4 });
+    try {
+      const preset = await protectBank64(midiDevice, defaultPatch, (done, total) => setBulkProgress({ done, total }));
+      const next = { slot: PROTECTED_DEFAULT_SLOT, preset };
+      saveDefaultPatch(next);
+      setDefaultPatch(next);
+      saveSwapSlot(PROTECTED_SWAP_SLOT);
+      setSwapSlot(PROTECTED_SWAP_SLOT);
+      saveBankProtected(true);
+      setBank64Protected(true);
+      // Leave the pedal on the new default, and show it.
+      midiDevice.sendSlotChange(PROTECTED_DEFAULT_SLOT);
+      loadPreset(preset);
+      setLoadError(null);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      const cause = err instanceof Error ? err.cause : undefined;
+      const advice = cause instanceof SourceChangedError ? ' (the default patch changed: set it again first)' : '';
+      setLoadError(`PROTECT 64 failed: ${detail}${advice}`);
+    } finally {
+      setBulkProgress(null);
+    }
+  }
+
+  // RELEASE 64: lift the protection only; the patches and settings stay.
+  async function handleReleaseBank64() {
+    saveBankProtected(false);
+    setBank64Protected(false);
+    setLoadError(null);
   }
 
   // USE FOR SWAP SLOT: remember the scratch slot (the menu has already asked).
@@ -1180,6 +1245,9 @@ function App() {
         onSetSwapSlot={handleSetSwapSlot}
         onSwapWithClipboard={handleSwapWithClipboard}
         swapSlotLabel={swapSlot === null ? null : SysExCodec.slotToLabel(swapSlot)}
+        bank64Protected={bank64Protected}
+        onProtectBank64={handleProtectBank64}
+        onReleaseBank64={handleReleaseBank64}
       />
 
       {slotBrowserMode && (
