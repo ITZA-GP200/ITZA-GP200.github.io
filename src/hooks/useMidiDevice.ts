@@ -22,6 +22,7 @@ import {
 } from '@/core/midiPortDiagnostics';
 import { useMidiSend } from './useMidiSend';
 import { pushPresetToDevice } from '@/core/devicePush';
+import { getEffectParams } from '@/core/effectParams';
 
 const READ_TIMEOUT_MS = 3000;
 
@@ -1039,6 +1040,23 @@ export function useMidiDevice(): UseMidiDeviceReturn {
       sendCtrlAssignment: send.sendCtrlAssignment,
     });
     await new Promise(r => setTimeout(r, 300));
+
+    // Finishing pass over each block's REAL knobs (the effect's defined
+    // params), with its first one sent first and again last. devicePush only
+    // re-sends slot 0, but a block's first real knob can sit elsewhere: a
+    // cab's is slot 1 (Volume), and WRITE TEST on hardware lost exactly that
+    // one (75 -> 0) once every slot-0 knob was landing.
+    for (const eff of preset.effects) {
+      const defined = getEffectParams(eff.effectId)
+        .map(param => param.idx)
+        .filter(idx => eff.params[idx] !== undefined);
+      if (defined.length === 0) continue;
+      for (const idx of [defined[0], ...defined, defined[0]]) {
+        send.sendParamChange(eff.slotIndex, idx, eff.effectId, eff.params[idx]);
+        await new Promise(r => setTimeout(r, 40));
+      }
+    }
+    await new Promise(r => setTimeout(r, 200));
 
     // The proven save: 0x5a commit, then a preset change to the slot.
     await saveToSlot(preset.patchName, slot);

@@ -24,3 +24,19 @@ describe('describeWriteFidelity', () => {
     expect(summary).toContain('Knobs/volume: 4 differ (a; b; c; …)');
   });
 });
+
+describe('describeWriteFidelity: knob slots', () => {
+  it('ignores leftover slots the effect doesn’t use, but flags its real knobs', () => {
+    const sent = createDefaultPreset();
+    const cab = sent.effects.find((effect) => effect.slotIndex === 6)!;
+    cab.effectId = 167772200; // Solo cab: Volume (1), Low Cut (5), High Cut (6)
+    const actual = structuredClone(sent);
+    const got = actual.effects.find((effect) => effect.slotIndex === 6)!;
+    got.params[0] = (cab.params[0] ?? 0) + 1; // leftover slot
+    got.params[2] = (cab.params[2] ?? 0) + 30; // leftover slot
+    got.params[1] = 0;
+    cab.params[1] = 75; // Volume, real
+    const { values } = describeWriteFidelity(actual, sent);
+    expect(values).toEqual(['CAB param 1 0 vs 75']);
+  });
+});
