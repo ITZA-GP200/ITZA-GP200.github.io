@@ -1,3 +1,5 @@
+import { getEffectParams } from './effectParams';
+import { getSlotModule } from './effectNames';
 import { describePatchDifferences, type PatchDifferences } from './samePatch';
 import type { GP200Preset } from './types';
 
@@ -15,8 +17,32 @@ export interface WriteFidelity extends PatchDifferences {
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
+/**
+ * Knob differences only for knobs the block's effect actually has. The pedal
+ * stores 15 slots per block whatever the effect; the unused ones hold
+ * leftovers from earlier effects and mean nothing (M-Vibe has 3 knobs, yet
+ * slot 4 differed on hardware). Unknown effects compare every slot.
+ */
+function knobDifferences(actual: GP200Preset, sent: GP200Preset): string[] {
+  const out: string[] = [];
+  for (const want of sent.effects) {
+    const got = actual.effects.find((effect) => effect.slotIndex === want.slotIndex);
+    if (!got) continue;
+    const defined = getEffectParams(want.effectId).map((param) => param.idx);
+    const slots = defined.length > 0 ? defined : want.params.map((_, index) => index);
+    for (const index of slots) {
+      if (!Object.is(got.params[index], want.params[index])) {
+        out.push(`${getSlotModule(want.slotIndex)} param ${index} ${got.params[index]} vs ${want.params[index]}`);
+      }
+    }
+  }
+  return out;
+}
+
 export function describeWriteFidelity(actual: GP200Preset, sent: GP200Preset): WriteFidelity {
-  const { identity, values } = describePatchDifferences(actual, sent);
+  const { identity, values: allValues } = describePatchDifferences(actual, sent);
+  // Patch volume / pan / tempo lines, then the knobs that exist.
+  const values = [...allValues.filter((line) => !line.includes(' param ')), ...knobDifferences(actual, sent)];
   const extras: string[] = [];
   const order = (preset: GP200Preset) => preset.effects.map((effect) => effect.slotIndex).join(',');
   if (order(actual) !== order(sent)) extras.push(`block order ${order(actual)} vs ${order(sent)}`);
