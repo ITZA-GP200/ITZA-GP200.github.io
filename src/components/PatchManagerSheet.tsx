@@ -195,7 +195,7 @@ export function PatchManagerSheet({
   if (!setDefaultBlocked && selectedLabel === defaultPatchLabel) setDefaultBlocked = 'Already set as default patch';
   let setSwapSlotBlocked = onSetSwapSlot ? slotActionBlocked : 'Not built yet';
   if (!setSwapSlotBlocked && selectedSlots.length !== 1) setSwapSlotBlocked = 'Pick one slot as the swap slot';
-  if (!setSwapSlotBlocked && selectedLabel === defaultPatchLabel) setSwapSlotBlocked = 'This is your default patch';
+  if (!setSwapSlotBlocked && selectedLabel === defaultPatchLabel) setSwapSlotBlocked = 'Cannot use Default as Swap Slot';
   if (!setSwapSlotBlocked && selectedLabel === swapSlotLabel) setSwapSlotBlocked = 'This is already the swap slot';
   let swapBlocked = onSwapWithClipboard ? pasteBlocked : 'Not built yet';
   if (!swapBlocked && swapSlotLabel === null) {
