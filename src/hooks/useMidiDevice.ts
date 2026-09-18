@@ -1056,6 +1056,27 @@ export function useMidiDevice(): UseMidiDeviceReturn {
         await new Promise(r => setTimeout(r, 40));
       }
     }
+
+    // Footswitch (CTRL) masks and expression-pedal (EXP) targets, last and
+    // each sent twice: every frame carries the whole value, so a repeat is
+    // harmless, and the pedal swallows the first message of a burst.
+    // devicePush sent CTRL already, yet WRITE TEST still found it differing.
+    // EXP has no live "unassign" message, so only assigned slots can be set.
+    const twice = async (sendIt: () => void) => {
+      for (let n = 0; n < 2; n++) {
+        sendIt();
+        await new Promise(r => setTimeout(r, 40));
+      }
+    };
+    for (const ctrl of preset.ctrlAssignments ?? []) {
+      await twice(() => send.sendCtrlAssignment(ctrl.ctrlIndex, ctrl.blockMask, ctrl.state ?? 0));
+    }
+    for (const exp of preset.expAssignments ?? []) {
+      if (exp.blockIndex === null) continue;
+      const blockIndex = exp.blockIndex;
+      await twice(() => send.sendExpParamSelect(exp.page, exp.item, blockIndex, exp.paramIndex));
+      await twice(() => send.sendExpMinMax(exp.page, exp.item, exp.min, exp.max));
+    }
     await new Promise(r => setTimeout(r, 200));
 
     // The proven save: 0x5a commit, then a preset change to the slot.
