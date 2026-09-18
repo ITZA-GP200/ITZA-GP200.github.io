@@ -61,6 +61,12 @@ export interface PatchManagerSheetProps {
   onResetSlot?: (slot: number) => Promise<void>;
   /** Slot holding the default patch ("5B"), or null when none is set. */
   defaultPatchLabel?: string | null;
+  /** Make a slot the scratch space swaps copy through. */
+  onSetSwapSlot?: (slot: number) => Promise<void>;
+  /** Exchange the clipboard's slot with this one (PASTE ▸ SWAP). */
+  onSwapWithClipboard?: (slot: number) => Promise<void>;
+  /** The swap slot ("64D"), or null when none is set. */
+  swapSlotLabel?: string | null;
 }
 
 function bankSlotsOf(slot: number): number[] {
@@ -118,6 +124,9 @@ export function PatchManagerSheet({
   onSetDefaultPatch,
   onResetSlot,
   defaultPatchLabel = null,
+  onSetSwapSlot,
+  onSwapWithClipboard,
+  swapSlotLabel = null,
 }: PatchManagerSheetProps) {
   // Anchor + extras. The anchor is what every single-slot action acts on, so
   // multi-select sits on top of those buttons without changing them.
@@ -180,6 +189,21 @@ export function PatchManagerSheet({
   // Hosts that don't pass the handlers keep these greyed out as not built.
   let setDefaultBlocked = onSetDefaultPatch ? slotActionBlocked : 'Not built yet';
   if (!setDefaultBlocked && selectedSlots.length !== 1) setDefaultBlocked = 'Pick one patch as the default';
+  // The template and the scratch slot must differ: a swap would overwrite
+  // the template, and every later RESET would refuse.
+  if (!setDefaultBlocked && selectedLabel === swapSlotLabel) setDefaultBlocked = 'This is your swap slot';
+  let setSwapSlotBlocked = onSetSwapSlot ? slotActionBlocked : 'Not built yet';
+  if (!setSwapSlotBlocked && selectedSlots.length !== 1) setSwapSlotBlocked = 'Pick one slot as the swap slot';
+  if (!setSwapSlotBlocked && selectedLabel === defaultPatchLabel) setSwapSlotBlocked = 'This is your default patch';
+  if (!setSwapSlotBlocked && selectedLabel === swapSlotLabel) setSwapSlotBlocked = 'This is already the swap slot';
+  let swapBlocked = onSwapWithClipboard ? pasteBlocked : 'Not built yet';
+  if (!swapBlocked && swapSlotLabel === null) {
+    swapBlocked = 'Set a swap slot first: right-click a spare slot, then SET AS SWAP SLOT';
+  }
+  if (!swapBlocked && selectedLabel === clipboardLabel) swapBlocked = 'The copied patch is already here';
+  if (!swapBlocked && (selectedLabel === swapSlotLabel || clipboardLabel === swapSlotLabel)) {
+    swapBlocked = 'The swap slot can’t take part in a swap';
+  }
   let resetBlocked = onResetSlot ? slotActionBlocked : 'Not built yet';
   if (!resetBlocked && defaultPatchLabel === null) {
     resetBlocked = 'Set a default patch first: right-click a patch, then SET AS DEFAULT PATCH';
@@ -763,9 +787,21 @@ export function PatchManagerSheet({
           setMenuAt(null);
           if (selected !== null) void runBusy(() => onCopySlot(selected));
         }}
-        onPaste={() => {
+        onPaste={(method) => {
           setMenuAt(null);
-          if (selected !== null) void runBusy(() => onPasteToSlot(selected));
+          if (selected === null) return;
+          if (method === 'swap') {
+            if (onSwapWithClipboard) void runBusy(() => onSwapWithClipboard(selected));
+            return;
+          }
+          void runBusy(() => onPasteToSlot(selected));
+        }}
+        swapBlocked={swapBlocked}
+        swapSlotLabel={swapSlotLabel}
+        setSwapSlotBlocked={setSwapSlotBlocked}
+        onSetSwapSlot={() => {
+          setMenuAt(null);
+          if (selected !== null && onSetSwapSlot) void runBusy(() => onSetSwapSlot(selected));
         }}
         renameBlocked={renameBlocked}
         setDefaultBlocked={setDefaultBlocked}

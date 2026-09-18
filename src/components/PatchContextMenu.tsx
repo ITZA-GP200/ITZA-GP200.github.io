@@ -13,11 +13,12 @@ import { Button } from '@/components/ui/Button';
 /**
  * Right-click menu for the Patch Manager's slot list, laid out per the
  * "Patch List Context Menu" design handoff: selection and clipboard info, then
- * UNDO/REDO, COPY/CUT, PASTE ▸ (Overwrite / Insert / Swap), INSERT ▸, RESET.
+ * UNDO/REDO, COPY/CUT, PASTE ▸ (Overwrite / Insert / Swap), INSERT ▸, then the
+ * slot tools (RENAME, SET AS DEFAULT PATCH, SET AS SWAP SLOT) and RESET.
  *
- * Only actions that are built and hardware-verified are live (COPY, and PASTE
- * as Overwrite). The rest are shown greyed out with a "Not built yet" tooltip
- * and do nothing, so the menu never offers a broken action.
+ * Only actions that are built and hardware-verified are live. The rest are
+ * shown greyed out with a "Not built yet" tooltip and do nothing, so the menu
+ * never offers a broken action. Unavailable live actions say why.
  *
  * Styled with the app's own theme variables rather than the handoff's colours,
  * and without keyboard-shortcut hints, since none are wired up yet.
@@ -28,6 +29,11 @@ const SUBMENU_WIDTH = 280;
 const GAP = 6;
 const EDGE = 8;
 const NOT_BUILT = 'Not built yet';
+
+export type PasteMethod = 'overwrite' | 'swap';
+
+/** Actions that ask first, inside the menu (per the design). */
+type Confirming = 'reset' | 'swapSlot';
 
 export interface PatchContextMenuProps {
   /** Viewport point to open at; null when closed. */
@@ -42,8 +48,12 @@ export interface PatchContextMenuProps {
   /** Why PASTE can't run right now, or null when it can. */
   pasteBlocked: string | null;
   onCopy: () => void;
-  /** Paste the clipboard over the selected slot. */
-  onPaste: () => void;
+  /** Paste the clipboard onto the selected slot, by the chosen method. */
+  onPaste: (method: PasteMethod) => void;
+  /** Why PASTE ▸ SWAP can't run right now, or null when it can. */
+  swapBlocked: string | null;
+  /** Slot swaps copy through ("64D"), or null when none is set. */
+  swapSlotLabel: string | null;
   /** Why RENAME can't run right now, or null when it can. */
   renameBlocked: string | null;
   /** Open the Patch Manager's inline rename for the selected slot. */
@@ -52,6 +62,10 @@ export interface PatchContextMenuProps {
   setDefaultBlocked: string | null;
   /** Make the selected slot the template RESET copies. */
   onSetDefault: () => void;
+  /** Why SET AS SWAP SLOT can't run right now, or null when it can. */
+  setSwapSlotBlocked: string | null;
+  /** Make the selected slot the scratch space swaps copy through. */
+  onSetSwapSlot: () => void;
   /** Slot holding the default patch ("5B"), or null when none is set. */
   defaultPatchLabel: string | null;
   /** Name reset patches are saved under. */
@@ -77,10 +91,14 @@ export function PatchContextMenu({
   pasteBlocked,
   onCopy,
   onPaste,
+  swapBlocked,
+  swapSlotLabel,
   renameBlocked,
   onRename,
   setDefaultBlocked,
   onSetDefault,
+  setSwapSlotBlocked,
+  onSetSwapSlot,
   defaultPatchLabel,
   resetName,
   resetBlocked,
@@ -88,8 +106,8 @@ export function PatchContextMenu({
   onClose,
 }: PatchContextMenuProps) {
   const [pasteOpen, setPasteOpen] = useState(false);
-  // RESET overwrites a patch, so it asks first, inside the menu (per the design).
-  const [confirmReset, setConfirmReset] = useState(false);
+  const [pasteMethod, setPasteMethod] = useState<PasteMethod>('overwrite');
+  const [confirming, setConfirming] = useState<Confirming | null>(null);
   const [placement, setPlacement] = useState<Placement | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const submenuRef = useRef<HTMLDivElement>(null);
@@ -102,7 +120,8 @@ export function PatchContextMenu({
   if (position !== openedAt) {
     setOpenedAt(position);
     setPasteOpen(false);
-    setConfirmReset(false);
+    setPasteMethod('overwrite');
+    setConfirming(null);
     setPlacement(null);
   }
 
@@ -127,18 +146,18 @@ export function PatchContextMenu({
       subTop = Math.max(EDGE, window.innerHeight - submenuHeight - EDGE);
     }
     setPlacement({ menu: { left, top }, submenu: { left: subLeft, top: subTop } });
-  }, [position, pasteOpen, confirmReset]);
+  }, [position, pasteOpen, confirming]);
 
   // Focus the first available action when the menu appears.
   useEffect(() => {
-    if (!position || !placement || pasteOpen || confirmReset) return;
+    if (!position || !placement || pasteOpen || confirming) return;
     const first = menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not([aria-disabled="true"])');
     first?.focus();
-  }, [position, placement, pasteOpen, confirmReset]);
+  }, [position, placement, pasteOpen, confirming]);
 
-  // Escape steps back (paste options, then the menu) and Tab closes it. Caught
-  // in the capture phase: the Patch Manager closes itself on Escape at the
-  // document, and would otherwise close underneath the menu.
+  // Escape steps back (paste options or a confirmation, then the menu) and
+  // Tab closes it. Caught in the capture phase: the Patch Manager closes
+  // itself on Escape at the document, and would otherwise close underneath.
   useEffect(() => {
     if (!position) return;
     function onKeyDown(event: globalThis.KeyboardEvent) {
@@ -150,8 +169,8 @@ export function PatchContextMenu({
         pasteItemRef.current?.focus();
         return;
       }
-      if (event.key === 'Escape' && confirmReset) {
-        setConfirmReset(false);
+      if (event.key === 'Escape' && confirming) {
+        setConfirming(null);
         return;
       }
       onClose();
@@ -162,7 +181,7 @@ export function PatchContextMenu({
       window.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('resize', onClose);
     };
-  }, [position, pasteOpen, confirmReset, onClose]);
+  }, [position, pasteOpen, confirming, onClose]);
 
   if (!position) return null;
 
@@ -185,6 +204,9 @@ export function PatchContextMenu({
   const selectionText = selectionCount === 1
     ? `1 patch selected (${selectionLabel})`
     : `${selectionCount} patches selected · ${selectionLabel}`;
+
+  let swapDescription = `Exchanges ${clipboardLabel} and ${selectionLabel} · nothing lost`;
+  if (swapSlotLabel !== null) swapDescription += ` (copies through ${swapSlotLabel})`;
 
   return createPortal(
     <>
@@ -220,47 +242,62 @@ export function PatchContextMenu({
             clip: {clipboardLabel} · 1 patch
           </div>
         )}
-        {confirmReset ? (
-          <div role="alertdialog" aria-label="Confirm reset" className="px-1.5 pt-1 pb-0.5">
+        {confirming === 'reset' && (
+          <Confirmation
+            label="Confirm reset"
+            actionLabel="Reset"
+            danger
+            onCancel={() => setConfirming(null)}
+            onConfirm={onReset}
+          >
+            Reset {selectionLabel} to your default patch (from {defaultPatchLabel}) as
+            “{resetName}”? The patch there is overwritten, and there’s no undo yet.
+          </Confirmation>
+        )}
+        {confirming === 'swapSlot' && (
+          <Confirmation
+            label="Confirm swap slot"
+            actionLabel="Use as swap slot"
+            onCancel={() => setConfirming(null)}
+            onConfirm={onSetSwapSlot}
+          >
+            Use {selectionLabel} as the swap slot? SWAP copies a patch through it, so
+            whatever is in {selectionLabel} is overwritten by every swap.
+          </Confirmation>
+        )}
+        {confirming === null && (
+          <>
             <Divider />
-            <p className="text-caption pt-1.5 pb-2.5" style={{ color: 'var(--text-primary)', lineHeight: 1.5 }}>
-              Reset {selectionLabel} to your default patch (from {defaultPatchLabel}) as
-              “{resetName}”? The patch there is overwritten, and there’s no undo yet.
-            </p>
-            <div className="flex justify-end gap-2">
-              <Button size="sm" variant="ghost" autoFocus onClick={() => setConfirmReset(false)}>
-                Cancel
-              </Button>
-              <Button size="sm" variant="danger" onClick={onReset}>
-                Reset
-              </Button>
-            </div>
-          </div>
-        ) : (
-        <>
-        <Divider />
-        <MenuItem label="UNDO" blocked={NOT_BUILT} />
-        <MenuItem label="REDO" blocked={NOT_BUILT} />
-        <Divider />
-        <MenuItem label="COPY" blocked={copyBlocked} onSelect={onCopy} />
-        <MenuItem label="CUT" danger blocked={NOT_BUILT} />
-        <Divider />
-        <MenuItem
-          ref={pasteItemRef}
-          label="PASTE"
-          trailing="▸"
-          blocked={pasteState}
-          expanded={pasteOpen}
-          onSelect={() => setPasteOpen(true)}
-        />
-        <Divider />
-        <MenuItem label="INSERT" trailing="▸" blocked={NOT_BUILT} />
-        <Divider />
-        <MenuItem label="RENAME" blocked={renameBlocked} onSelect={onRename} />
-        <MenuItem label="SET AS DEFAULT PATCH" blocked={setDefaultBlocked} onSelect={onSetDefault} />
-        <Divider />
-        <MenuItem label="RESET" danger blocked={resetBlocked} onSelect={() => setConfirmReset(true)} />
-        </>
+            <MenuItem label="UNDO" blocked={NOT_BUILT} />
+            <MenuItem label="REDO" blocked={NOT_BUILT} />
+            <Divider />
+            <MenuItem label="COPY" blocked={copyBlocked} onSelect={onCopy} />
+            <MenuItem label="CUT" danger blocked={NOT_BUILT} />
+            <Divider />
+            <MenuItem
+              ref={pasteItemRef}
+              label="PASTE"
+              trailing="▸"
+              blocked={pasteState}
+              expanded={pasteOpen}
+              onSelect={() => {
+                setPasteMethod('overwrite');
+                setPasteOpen(true);
+              }}
+            />
+            <Divider />
+            <MenuItem label="INSERT" trailing="▸" blocked={NOT_BUILT} />
+            <Divider />
+            <MenuItem label="RENAME" blocked={renameBlocked} onSelect={onRename} />
+            <MenuItem label="SET AS DEFAULT PATCH" blocked={setDefaultBlocked} onSelect={onSetDefault} />
+            <MenuItem
+              label="SET AS SWAP SLOT"
+              blocked={setSwapSlotBlocked}
+              onSelect={() => setConfirming('swapSlot')}
+            />
+            <Divider />
+            <MenuItem label="RESET" danger blocked={resetBlocked} onSelect={() => setConfirming('reset')} />
+          </>
         )}
       </div>
 
@@ -286,13 +323,16 @@ export function PatchContextMenu({
             <PasteOption
               label="OVERWRITE"
               description={`Replaces ${selectionLabel} with ${clipboardLabel}`}
-              checked
+              checked={pasteMethod === 'overwrite'}
+              onSelect={() => setPasteMethod('overwrite')}
             />
             <PasteOption label="INSERT" description="Shifts the list down · last patch lost" blocked={NOT_BUILT} />
             <PasteOption
               label="SWAP"
-              description={`Exchanges ${clipboardLabel} and ${selectionLabel} · nothing lost`}
-              blocked={NOT_BUILT}
+              description={swapDescription}
+              checked={pasteMethod === 'swap'}
+              blocked={swapBlocked ?? undefined}
+              onSelect={() => setPasteMethod('swap')}
             />
           </div>
           <div
@@ -309,7 +349,7 @@ export function PatchContextMenu({
             >
               Cancel
             </Button>
-            <Button size="sm" autoFocus onClick={onPaste}>
+            <Button size="sm" autoFocus onClick={() => onPaste(pasteMethod)}>
               OK
             </Button>
           </div>
@@ -334,6 +374,36 @@ const panelStyle = {
 
 function Divider() {
   return <div role="separator" style={{ height: 1, background: 'var(--border-subtle)', margin: '4px 2px' }} />;
+}
+
+interface ConfirmationProps {
+  /** Accessible name of the confirmation ("Confirm reset"). */
+  label: string;
+  actionLabel: string;
+  danger?: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+  children: ReactNode;
+}
+
+/** Replaces the menu body with a question, Cancel and the action (per the design). */
+function Confirmation({ label, actionLabel, danger = false, onCancel, onConfirm, children }: ConfirmationProps) {
+  return (
+    <div role="alertdialog" aria-label={label} className="px-1.5 pt-1 pb-0.5">
+      <Divider />
+      <p className="text-caption pt-1.5 pb-2.5" style={{ color: 'var(--text-primary)', lineHeight: 1.5 }}>
+        {children}
+      </p>
+      <div className="flex justify-end gap-2">
+        <Button size="sm" variant="ghost" autoFocus onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button size="sm" variant={danger ? 'danger' : 'primary'} onClick={onConfirm}>
+          {actionLabel}
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 interface MenuItemProps {
@@ -383,22 +453,29 @@ interface PasteOptionProps {
   label: string;
   description: string;
   checked?: boolean;
+  /** Why the option is unavailable; undefined when it can be chosen. */
   blocked?: string;
+  onSelect?: () => void;
 }
 
-function PasteOption({ label, description, checked = false, blocked }: PasteOptionProps) {
+// A button with the radio role, so it is reachable and selectable by keyboard.
+function PasteOption({ label, description, checked = false, blocked, onSelect }: PasteOptionProps) {
   const available = blocked === undefined;
   return (
-    <div
+    <button
+      type="button"
       role="radio"
       aria-checked={checked}
       aria-disabled={!available}
       title={blocked}
-      className="flex gap-2.5 items-start px-3 py-2.5 rounded"
+      onClick={() => {
+        if (available) onSelect?.();
+      }}
+      className="w-full flex gap-2.5 items-start px-3 py-2.5 rounded text-left focus:outline-none hover:bg-bg-hover focus:bg-bg-hover"
       style={{
-        background: checked ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : 'transparent',
+        background: checked ? 'color-mix(in srgb, var(--accent) 12%, transparent)' : undefined,
         opacity: available ? 1 : 0.45,
-        cursor: available ? 'default' : 'not-allowed',
+        cursor: available ? 'pointer' : 'not-allowed',
       }}
     >
       <span
@@ -421,6 +498,6 @@ function PasteOption({ label, description, checked = false, blocked }: PasteOpti
         </span>
         <span className="text-caption" style={{ color: 'var(--text-muted)' }}>{description}</span>
       </span>
-    </div>
+    </button>
   );
 }
