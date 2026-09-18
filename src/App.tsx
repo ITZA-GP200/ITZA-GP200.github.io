@@ -813,7 +813,10 @@ function App() {
     try {
       const readback = await midiDevice.writePresetToSlot(sent, slot);
       const result = describeWriteFidelity(readback, sent);
-      console.log(`[GP-200] WRITE TEST ${label}: sent`, sent, 'read back', readback, 'differences', result);
+      console.log(`[GP-200] WRITE TEST ${label}: sent`, sent, 'read back', readback);
+      // Plain text, one difference per line, so nothing needs expanding.
+      const lines = [...result.identity, ...result.values, ...result.extras];
+      console.log(`[GP-200] WRITE TEST ${label} differences (${lines.length}):\n${lines.join('\n') || 'none'}`);
       loadPreset(readback);
       setLoadError(summarizeWriteFidelity(label, readback.patchName, result));
     } catch (err) {
