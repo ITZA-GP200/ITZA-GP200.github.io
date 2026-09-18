@@ -520,52 +520,6 @@ export function PatchManagerSheet({
           swapSlotLabel={swapSlotLabel}
           protectedBank={bank64Protected ? 64 : null}
         />
-        {onProtectBank64 && onReleaseBank64 && (
-          <div className="flex items-center gap-2 pt-2 px-2 font-mono-display text-caption">
-            {bank64Protected && (
-              <Button
-                size="sm"
-                variant="danger"
-                disabled={busy || bulkRunning}
-                onClick={() => void runBusy(onReleaseBank64)}
-                title="Stop protecting bank 64; its patches stay as they are"
-              >
-                RELEASE 64
-              </Button>
-            )}
-            {!bank64Protected && !confirmingProtect && (
-              <Button
-                size="sm"
-                disabled={protectBlocked !== null}
-                onClick={() => setConfirmingProtect(true)}
-                title={protectBlocked ?? 'Set bank 64 aside for the app: blanks, DEFAULT and SWAP SLOT'}
-              >
-                PROTECT 64
-              </Button>
-            )}
-            {!bank64Protected && confirmingProtect && (
-              <div role="alertdialog" aria-label="Confirm protect bank 64" className="flex items-center gap-2 flex-wrap">
-                <span style={{ color: 'var(--text-primary)' }}>
-                  Are you sure? This will overwrite and protect patch bank 64.
-                </span>
-                <Button size="sm" variant="ghost" onClick={() => setConfirmingProtect(false)}>
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  autoFocus
-                  disabled={protectBlocked !== null}
-                  onClick={() => {
-                    setConfirmingProtect(false);
-                    void runBusy(onProtectBank64);
-                  }}
-                >
-                  OK
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       {/* Selected-slot actions */}
@@ -670,7 +624,53 @@ export function PatchManagerSheet({
           >
             RENAME
           </Button>
+          {onProtectBank64 && onReleaseBank64 && bank64Protected && (
+            <Button
+              size="sm"
+              variant="danger"
+              disabled={busy || bulkRunning}
+              onClick={() => void runBusy(onReleaseBank64)}
+              title="Stop protecting bank 64; its patches stay as they are"
+            >
+              RELEASE 64
+            </Button>
+          )}
+          {onProtectBank64 && onReleaseBank64 && !bank64Protected && (
+            <Button
+              size="sm"
+              disabled={protectBlocked !== null || confirmingProtect}
+              onClick={() => setConfirmingProtect(true)}
+              title={protectBlocked ?? 'Set bank 64 aside for the app: blanks, DEFAULT and SWAP SLOT'}
+            >
+              PROTECT 64
+            </Button>
+          )}
         </div>
+        {onProtectBank64 && !bank64Protected && confirmingProtect && (
+          <div
+            role="alertdialog"
+            aria-label="Confirm protect bank 64"
+            className="flex items-center gap-2 flex-wrap font-mono-display text-caption"
+          >
+            <span style={{ color: 'var(--text-primary)' }}>
+              Are you sure? This will overwrite and protect patch bank 64.
+            </span>
+            <Button size="sm" variant="ghost" onClick={() => setConfirmingProtect(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              autoFocus
+              disabled={protectBlocked !== null}
+              onClick={() => {
+                setConfirmingProtect(false);
+                void runBusy(onProtectBank64);
+              }}
+            >
+              OK
+            </Button>
+          </div>
+        )}
 
         {/* Selection + arrange. Shift-click a second row for a range,
             ctrl/cmd-click to pick slots one at a time. */}
