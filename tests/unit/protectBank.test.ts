@@ -41,13 +41,13 @@ describe('protectBank64', () => {
     const pedal = fakePedal({ 252: 'Mr. Brown', 253: 'Mr. Brown', 254: 'Mr. Brown', 255: 'Mr. Brown' });
     const result = await protectBank64(pedal.device, patch("It's GP-200"));
     expect(pedal.log).toEqual([
-      'write 254 as ITZA GP-200 dflt',
+      'write 254 as ITZA GP-200',
       '254->252 as UTILITY-1',
       '254->253 as UTILITY-2',
       '254->255 as SWAP SLOT',
     ]);
-    expect([252, 253, 254, 255].map(pedal.nameAt)).toEqual(['UTILITY-1', 'UTILITY-2', 'ITZA GP-200 dflt', 'SWAP SLOT']);
-    expect(result.patchName).toBe('ITZA GP-200 dflt');
+    expect([252, 253, 254, 255].map(pedal.nameAt)).toEqual(['UTILITY-1', 'UTILITY-2', 'ITZA GP-200', 'SWAP SLOT']);
+    expect(result.patchName).toBe('ITZA GP-200');
   });
 
   it('needs nothing on the pedal first and leaves the shipped patch untouched', async () => {
@@ -61,7 +61,8 @@ describe('protectBank64', () => {
     const pedal = fakePedal({}, { dropKnob: true });
     await expect(protectBank64(pedal.device, patch("It's GP-200")))
       .rejects.toThrow('64C didn’t take the shipped patch');
-    expect(pedal.log).toEqual(['write 254 as ITZA GP-200 dflt']);
+    // Written twice (a value-only miss is retried once), never copied.
+    expect(pedal.log).toEqual(['write 254 as ITZA GP-200', 'write 254 as ITZA GP-200']);
   });
 
   it('says where it stopped and that bank 64 is not protected', async () => {
@@ -128,5 +129,35 @@ describe('protected bank 64 pastes', () => {
     saved.length = 0;
     await pasteMany(device, [{ slot: 0, preset: patch('Clean') }], 251, { bank64Protected: true });
     expect(saved).toEqual(['251:Clean']);
+  });
+});
+
+describe('writeChecked', () => {
+  it('writes once more when only knob values missed, then succeeds', async () => {
+    let calls = 0;
+    const device = {
+      async writePresetToSlot(preset: GP200Preset) {
+        calls += 1;
+        const stored = structuredClone(preset);
+        if (calls === 1) stored.effects[0].params[0] = 99;
+        return stored;
+      },
+    };
+    const { writeChecked } = await import('@/core/protectBank');
+    const result = await writeChecked(device, patch('X'), 252, (d) => `bad: ${d}`);
+    expect(calls).toBe(2);
+    expect(result.patchName).toBe('X');
+  });
+
+  it('gives up after the second miss, and at once on a wrong name', async () => {
+    const { writeChecked } = await import('@/core/protectBank');
+    let calls = 0;
+    const alwaysOff = { async writePresetToSlot(preset: GP200Preset) { calls += 1; const s = structuredClone(preset); s.effects[0].params[0] = 99; return s; } };
+    await expect(writeChecked(alwaysOff, patch('X'), 252, (d) => `bad: ${d}`)).rejects.toThrow('bad:');
+    expect(calls).toBe(2);
+    calls = 0;
+    const wrongName = { async writePresetToSlot(preset: GP200Preset) { calls += 1; return { ...preset, patchName: 'other' }; } };
+    await expect(writeChecked(wrongName, patch('X'), 252, (d) => `bad: ${d}`)).rejects.toThrow('bad:');
+    expect(calls).toBe(1);
   });
 });

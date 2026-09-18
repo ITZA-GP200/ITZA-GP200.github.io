@@ -19,7 +19,7 @@ export const SWAP_SLOT_NAME = 'SWAP SLOT';
 export const LAST_UNPROTECTED_SLOT = 251; // 63D
 
 /** The default patch's fixed name in 64C. */
-export const DEFAULT_SLOT_NAME = 'ITZA GP-200 dflt';
+export const DEFAULT_SLOT_NAME = 'ITZA GP-200';
 
 /**
  * What PROTECT 64 writes, slot by slot, and each slot's fixed name while the
@@ -60,6 +60,31 @@ export function saveBankProtected(on: boolean): void {
   }
 }
 
+/**
+ * Write a patch from app data into a slot and check it against what was
+ * sent. A wrong name or effect type fails at once; if only knob values are
+ * off, the slot is written once more first: on hardware a long restore once
+ * left a single knob at its default (PRE Clipping 10 instead of 0) while the
+ * same backup had restored cleanly minutes before. Returns the read-back.
+ * `problem` builds the error message from the differences.
+ */
+export async function writeChecked(
+  device: Pick<ProtectDevice, 'writePresetToSlot'>,
+  sent: GP200Preset,
+  slot: number,
+  problem: (differences: string) => string,
+): Promise<GP200Preset> {
+  for (let attempt = 1; ; attempt++) {
+    const written = await device.writePresetToSlot(sent, slot);
+    const { identity, values } = describeWriteFidelity(written, sent);
+    if (identity.length === 0 && values.length === 0) return written;
+    const wrong = [...identity, ...values];
+    const summary = `${wrong.slice(0, 3).join('; ')}${wrong.length > 3 ? '; …' : ''}`;
+    if (identity.length > 0 || attempt >= 2) throw new Error(problem(summary));
+    console.warn(`[GP-200] ${SysExCodec.slotToLabel(slot)} write missed ${wrong.length} value(s), writing again:`, wrong);
+  }
+}
+
 /** The pedal operations PROTECT 64 needs (useMidiDevice provides them). */
 export interface ProtectDevice {
   /** Write a patch from app data into a slot; resolves with the read-back. */
@@ -86,18 +111,13 @@ export async function protectBank64(
   const sent = { ...structuredClone(shipped), patchName: DEFAULT_SLOT_NAME };
   let written: GP200Preset;
   try {
-    written = await device.writePresetToSlot(sent, PROTECTED_DEFAULT_SLOT);
+    written = await writeChecked(device, sent, PROTECTED_DEFAULT_SLOT, (differences) =>
+      `${label(PROTECTED_DEFAULT_SLOT)} didn’t take the shipped patch (${differences}); `
+      + 'bank 64 is not protected, run PROTECT 64 again');
   } catch (err) {
+    if (err instanceof Error && err.message.includes('didn’t take the shipped patch')) throw err;
     const detail = err instanceof Error ? err.message : String(err);
     throw new Error(`${detail}. Stopped at ${label(PROTECTED_DEFAULT_SLOT)}; bank 64 is not protected, run PROTECT 64 again`, { cause: err });
-  }
-  const { identity, values } = describeWriteFidelity(written, sent);
-  const wrong = [...identity, ...values];
-  if (wrong.length > 0) {
-    throw new Error(
-      `${label(PROTECTED_DEFAULT_SLOT)} didn’t take the shipped patch (${wrong.slice(0, 3).join('; ')}`
-      + `${wrong.length > 3 ? '; …' : ''}); bank 64 is not protected, run PROTECT 64 again`,
-    );
   }
   onProgress?.(1, total);
 

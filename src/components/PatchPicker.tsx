@@ -19,6 +19,8 @@ export interface PatchPickerProps {
   onRowContextMenu?: (slot: number, x: number, y: number) => void;
   /** The user's swap slot ("64D"), tagged in the list since swaps overwrite it. */
   swapSlotLabel?: string | null;
+  /** The default patch's slot ("64C"), tagged like the swap slot. */
+  defaultSlotLabel?: string | null;
   /** A bank set aside for the app (PROTECT 64), painted red. */
   protectedBank?: number | null;
 }
@@ -110,6 +112,7 @@ export function PatchPicker({
   onRowContextMenu,
   swapSlotLabel = null,
   protectedBank = null,
+  defaultSlotLabel = null,
 }: PatchPickerProps) {
   const rows = useMemo(() => buildRows(presetNames), [presetNames]);
   const categories = useMemo(() => buildBankCategories(rows), [rows]);
@@ -246,6 +249,9 @@ export function PatchPicker({
                   >
                     <span className="pp-badge">{row.label}</span>
                     <span className="pp-name">{slotName(row.name, namesLoadProgress)}</span>
+                    {row.label === defaultSlotLabel && (
+                      <span className="pp-swap" title="The default patch: RESET copies it">DEFAULT PATCH</span>
+                    )}
                     {row.label === swapSlotLabel && (
                       <span className="pp-swap" title="In use for swap slot: swaps overwrite this patch">SWAP SLOT</span>
                     )}
