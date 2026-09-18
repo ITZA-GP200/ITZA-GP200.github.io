@@ -5,6 +5,7 @@ import { PatchPicker } from './PatchPicker';
 import { PatchContextMenu } from './PatchContextMenu';
 import { DEFAULT_PATCH_NAME } from '@/core/defaultPatch';
 import { describeRange, pasteProblem } from '@/core/multiPaste';
+import { bank64NameChanges } from '@/core/bank64Backup';
 import { SysExCodec } from '@/core/SysExCodec';
 import {
   EMPTY_SELECTION,
@@ -55,6 +56,12 @@ export interface PatchManagerSheetProps {
   onProtectBank64?: () => Promise<void>;
   /** RELEASE 64: lift the protection only. */
   onReleaseBank64?: () => Promise<void>;
+  /** SAVE 64: back up 64A–64C (browser copy + downloaded file). */
+  onSaveBank64?: () => Promise<void>;
+  /** RESTORE 64 from the last save in this browser, or from a file's text. */
+  onRestoreBank64?: (source: 'browser' | { text: string }) => Promise<void>;
+  /** When the last SAVE 64 in this browser was made (ISO), or null. */
+  bank64SavedAt?: string | null;
   /** EXPERIMENT: write the editor's patch into a slot from app data. */
   onWriteTest?: (slot: number) => Promise<void>;
   /** The patch in the editor, named in WRITE TEST's confirm. */
@@ -139,6 +146,9 @@ export function PatchManagerSheet({
   onReleaseBank64,
   onWriteTest,
   editorPatchName = null,
+  onSaveBank64,
+  onRestoreBank64,
+  bank64SavedAt = null,
   onRenameSlot,
   onRefreshNames,
   onImportFile,
@@ -180,6 +190,8 @@ export function PatchManagerSheet({
   const selectedSlots = slotsOf(selection);
   const [confirmingProtect, setConfirmingProtect] = useState(false);
   const [confirmingWriteTest, setConfirmingWriteTest] = useState(false);
+  const [choosingRestore, setChoosingRestore] = useState(false);
+  const restoreFileRef = useRef<HTMLInputElement>(null);
 
   function handleSelect(slot: number, modifiers?: { shift: boolean; toggle: boolean }) {
     setRenaming(false);
@@ -262,6 +274,8 @@ export function PatchManagerSheet({
   if (!resetBlocked && selectedLabel === defaultPatchLabel) resetBlocked = 'We can’t reset the default patch';
   if (!resetBlocked && selected === 255 && bank64Protected) resetBlocked = 'Bank 64 is protected: 64D is the swap slot';
   // Flags the swap slot at the top of the menu: swaps overwrite it.
+  // Protected bank 64 renamed or overwritten on the pedal itself.
+  const bank64Changes = bank64Protected ? bank64NameChanges(presetNames) : [];
   const selectionIsSwapSlot = selectedSlots.length === 1 && selectedLabel === swapSlotLabel;
 
   let pasteToolbarTitle = 'Copy a patch first';
@@ -546,6 +560,20 @@ export function PatchManagerSheet({
         className="px-4 py-3 space-y-2 flex-shrink-0"
         style={{ borderTop: '1px solid var(--border-active)' }}
       >
+        {bank64Changes.length > 0 && !busy && !bulkRunning && (
+          <div
+            role="alert"
+            className="flex items-center justify-between gap-3 px-3 py-2 rounded font-mono-display text-caption"
+            style={{ color: 'var(--accent)', border: '1px solid var(--accent)' }}
+          >
+            <span>Bank 64 changed on the pedal: {bank64Changes.join(', ')}.</span>
+            {onRestoreBank64 && !choosingRestore && (
+              <Button size="sm" variant="secondary" disabled={!connected} onClick={() => setChoosingRestore(true)}>
+                RESTORE 64
+              </Button>
+            )}
+          </div>
+        )}
         {(busy || bulkRunning) && (
           // Fades in after a moment (CSS), so quick actions don't flicker it.
           <div role="status" className="pm-working font-mono-display text-caption">
@@ -672,6 +700,28 @@ export function PatchManagerSheet({
               PROTECT 64
             </Button>
           )}
+          {onSaveBank64 && bank64Protected && (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={!connected || busy || bulkRunning}
+              onClick={() => void runBusy(onSaveBank64)}
+              title="Back up 64A–64C: kept in this browser and downloaded as a file"
+            >
+              SAVE 64
+            </Button>
+          )}
+          {onRestoreBank64 && (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={!connected || busy || bulkRunning || choosingRestore}
+              onClick={() => setChoosingRestore(true)}
+              title="Put a SAVE 64 backup back into bank 64, and protect it"
+            >
+              RESTORE 64
+            </Button>
+          )}
           {onWriteTest && (
             <Button
               size="sm"
@@ -684,6 +734,48 @@ export function PatchManagerSheet({
             </Button>
           )}
         </div>
+        {onRestoreBank64 && choosingRestore && (
+          <div
+            role="alertdialog"
+            aria-label="Restore bank 64"
+            className="flex items-center gap-2 flex-wrap font-mono-display text-caption"
+          >
+            <span style={{ color: 'var(--text-primary)' }}>
+              Restore bank 64 from a backup? This overwrites bank 64 on the pedal.
+            </span>
+            <Button
+              size="sm"
+              disabled={bank64SavedAt === null}
+              title={bank64SavedAt === null ? 'Nothing saved in this browser yet' : undefined}
+              onClick={() => {
+                setChoosingRestore(false);
+                void runBusy(() => onRestoreBank64('browser'));
+              }}
+            >
+              LAST SAVE{bank64SavedAt ? ` (${new Date(bank64SavedAt).toLocaleString()})` : ''}
+            </Button>
+            <Button size="sm" onClick={() => restoreFileRef.current?.click()}>
+              FROM FILE…
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setChoosingRestore(false)}>
+              Cancel
+            </Button>
+            <input
+              ref={restoreFileRef}
+              type="file"
+              accept=".json,application/json"
+              hidden
+              data-testid="restore-file-input"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                if (!file) return;
+                setChoosingRestore(false);
+                void runBusy(async () => onRestoreBank64({ text: await file.text() }));
+              }}
+            />
+          </div>
+        )}
         {onWriteTest && confirmingWriteTest && selected !== null && (
           <div
             role="alertdialog"

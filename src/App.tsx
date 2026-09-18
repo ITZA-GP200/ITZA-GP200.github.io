@@ -9,6 +9,15 @@ import { describeRange, pasteMany, type ClipItem } from '@/core/multiPaste';
 import { describeWriteFidelity, summarizeWriteFidelity } from '@/core/writeFidelity';
 import { loadShippedPatch } from '@/core/shippedPatch';
 import {
+  BACKUP_SLOTS,
+  backupFilename,
+  loadBrowserBackupText,
+  makeBank64Backup,
+  readBank64Backup,
+  restoreBank64,
+  saveBrowserBackup,
+} from '@/core/bank64Backup';
+import {
   loadBankProtected,
   PROTECTED_DEFAULT_SLOT,
   PROTECTED_SWAP_SLOT,
@@ -207,6 +216,16 @@ function App() {
   const [swapSlot, setSwapSlot] = useState(loadSwapSlot);
   // PROTECT 64: bank 64 set aside for the app (see core/protectBank.ts).
   const [bank64Protected, setBank64Protected] = useState(loadBankProtected);
+  // When the last SAVE 64 in this browser was made (ISO), for RESTORE's menu.
+  const [bank64SavedAt, setBank64SavedAt] = useState<string | null>(() => {
+    const text = loadBrowserBackupText();
+    if (!text) return null;
+    try {
+      return readBank64Backup(text).savedAt;
+    } catch {
+      return null;
+    }
+  });
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [firmwareWarningDismissed, setFirmwareWarningDismissed] = useState(false);
@@ -857,6 +876,57 @@ function App() {
     }
   }
 
+  // SAVE 64: read 64A–64C, keep the backup in this browser, and download it
+  // as a file (which survives clearing browser data).
+  async function handleSaveBank64() {
+    try {
+      const patches: GP200Preset[] = [];
+      for (const slot of BACKUP_SLOTS) patches.push(await midiDevice.pullPreset(slot));
+      const now = new Date();
+      const backup = makeBank64Backup(patches, now);
+      saveBrowserBackup(backup);
+      setBank64SavedAt(backup.savedAt);
+      downloadBlob(new TextEncoder().encode(JSON.stringify(backup, null, 2)), backupFilename(now));
+      setLoadError(null);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      setLoadError(`SAVE 64 failed: ${detail}`);
+    }
+  }
+
+  // RESTORE 64 (the sheet has already asked): write a backup, from this
+  // browser or a file, back into bank 64 and protect it again.
+  async function handleRestoreBank64(source: 'browser' | { text: string }) {
+    if (bulkProgress) return;
+    const text = source === 'browser' ? loadBrowserBackupText() : source.text;
+    if (!text) {
+      setLoadError('RESTORE 64 failed: nothing saved in this browser yet (use SAVE 64, or restore from a file)');
+      return;
+    }
+    setBulkProgress({ done: 0, total: 4, cancellable: false });
+    try {
+      const { patches } = readBank64Backup(text);
+      const preset = await restoreBank64(
+        midiDevice, patches, (done, total) => setBulkProgress({ done, total, cancellable: false }),
+      );
+      const next = { slot: PROTECTED_DEFAULT_SLOT, preset };
+      saveDefaultPatch(next);
+      setDefaultPatch(next);
+      saveSwapSlot(PROTECTED_SWAP_SLOT);
+      setSwapSlot(PROTECTED_SWAP_SLOT);
+      saveBankProtected(true);
+      setBank64Protected(true);
+      midiDevice.sendSlotChange(PROTECTED_DEFAULT_SLOT);
+      loadPreset(preset);
+      setLoadError(null);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      setLoadError(`RESTORE 64 failed: ${detail}`);
+    } finally {
+      setBulkProgress(null);
+    }
+  }
+
   // RELEASE 64: lift the protection only; the patches and settings stay.
   async function handleReleaseBank64() {
     saveBankProtected(false);
@@ -1302,6 +1372,9 @@ function App() {
         onProtectBank64={handleProtectBank64}
         onReleaseBank64={handleReleaseBank64}
         onWriteTest={handleWriteTest}
+        onSaveBank64={handleSaveBank64}
+        onRestoreBank64={handleRestoreBank64}
+        bank64SavedAt={bank64SavedAt}
         editorPatchName={preset?.patchName ?? null}
       />
 
