@@ -575,8 +575,8 @@ describe('PatchManagerSheet: PROTECT 64', () => {
     expect(screen.getByText('American Idiot').closest('section')).not.toHaveClass('pp-protected');
     fireEvent.contextMenu(screen.getByText('Crunch'), { clientX: 120, clientY: 140 });
     const menu = screen.getByRole('menu', { name: 'Patch actions' });
-    expect(within(menu).getByRole('menuitem', { name: 'SET AS DEFAULT PATCH' }).getAttribute('title'))
-      .toContain('Bank 64 is protected');
+    expect(within(menu).getByRole('menuitem', { name: 'USE FOR DEFAULT PATCH (64C)' }))
+      .not.toHaveAttribute('aria-disabled', 'true');
     expect(within(menu).getByRole('menuitem', { name: 'USE FOR SWAP SLOT' }).getAttribute('title'))
       .toContain('Bank 64 is protected');
     fireEvent.keyDown(document, { key: 'Escape' });
@@ -666,5 +666,29 @@ describe('PatchManagerSheet: protected bank 64 rules', () => {
     expect(screen.getByText(/Working with the pedal/)).toHaveClass('pm-working');
     finish();
     await vi.waitFor(() => expect(screen.queryByText(/Working with the pedal/)).toBeNull());
+  });
+});
+
+describe('PatchManagerSheet: USE FOR DEFAULT PATCH (64C)', () => {
+  it('asks first, then copies the selected patch into 64C', () => {
+    const onSetDefaultPatch = vi.fn().mockResolvedValue(undefined);
+    renderSheet({ bank64Protected: true, onSetDefaultPatch, defaultPatchLabel: '64C', swapSlotLabel: '64D' });
+    fireEvent.contextMenu(screen.getByText('Crunch'), { clientX: 120, clientY: 140 });
+    const menu = screen.getByRole('menu', { name: 'Patch actions' });
+    expect(within(menu).queryByRole('menuitem', { name: 'SET AS DEFAULT PATCH' })).toBeNull();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'USE FOR DEFAULT PATCH (64C)' }));
+    const confirm = screen.getByRole('alertdialog', { name: 'Confirm default patch' });
+    expect(confirm).toHaveTextContent('Copy 1B’s settings into 64C as the default patch? 64C’s current settings are overwritten.');
+    expect(onSetDefaultPatch).not.toHaveBeenCalled();
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Use for default' }));
+    expect(onSetDefaultPatch).toHaveBeenCalledWith(1);
+  });
+
+  it('keeps the old label and no confirm when bank 64 isn’t protected', () => {
+    const onSetDefaultPatch = vi.fn().mockResolvedValue(undefined);
+    renderSheet({ onSetDefaultPatch });
+    fireEvent.contextMenu(screen.getByText('Crunch'), { clientX: 120, clientY: 140 });
+    fireEvent.click(within(screen.getByRole('menu', { name: 'Patch actions' })).getByRole('menuitem', { name: 'SET AS DEFAULT PATCH' }));
+    expect(onSetDefaultPatch).toHaveBeenCalledWith(1);
   });
 });

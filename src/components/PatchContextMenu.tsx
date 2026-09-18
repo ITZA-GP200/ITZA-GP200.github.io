@@ -35,7 +35,7 @@ const patchCount = (count: number) => (count === 1 ? '1 patch' : `${count} patch
 export type PasteMethod = 'overwrite' | 'swap';
 
 /** Actions that ask first, inside the menu (per the design). */
-type Confirming = 'reset' | 'swapSlot';
+type Confirming = 'reset' | 'swapSlot' | 'setDefault';
 
 export interface PatchContextMenuProps {
   /** Viewport point to open at; null when closed. */
@@ -70,6 +70,9 @@ export interface PatchContextMenuProps {
   setDefaultBlocked: string | null;
   /** Make the selected slot the template RESET copies. */
   onSetDefault: () => void;
+  /** With bank 64 protected the default lives in 64C: the item copies the
+   *  selected patch there, so it's relabelled and asks first. */
+  defaultInSlot?: string | null;
   /** Why USE FOR SWAP SLOT can't run right now, or null when it can. */
   setSwapSlotBlocked: string | null;
   /** Make the selected slot the scratch space swaps copy through. */
@@ -108,6 +111,7 @@ export function PatchContextMenu({
   onRename,
   setDefaultBlocked,
   onSetDefault,
+  defaultInSlot = null,
   setSwapSlotBlocked,
   onSetSwapSlot,
   defaultPatchLabel,
@@ -272,6 +276,17 @@ export function PatchContextMenu({
             “{resetName}”? The patch there is overwritten, and there’s no undo yet.
           </Confirmation>
         )}
+        {confirming === 'setDefault' && defaultInSlot !== null && (
+          <Confirmation
+            label="Confirm default patch"
+            actionLabel="Use for default"
+            onCancel={() => setConfirming(null)}
+            onConfirm={onSetDefault}
+          >
+            Copy {selectionLabel}’s settings into {defaultInSlot} as the default patch?
+            {' '}{defaultInSlot}’s current settings are overwritten.
+          </Confirmation>
+        )}
         {confirming === 'swapSlot' && (
           <Confirmation
             label="Confirm swap slot"
@@ -307,7 +322,15 @@ export function PatchContextMenu({
             <MenuItem label="INSERT" trailing="▸" blocked={NOT_BUILT} />
             <Divider />
             <MenuItem label="RENAME" blocked={renameBlocked} onSelect={onRename} />
-            <MenuItem label="SET AS DEFAULT PATCH" blocked={setDefaultBlocked} onSelect={onSetDefault} />
+            {defaultInSlot === null
+              ? <MenuItem label="SET AS DEFAULT PATCH" blocked={setDefaultBlocked} onSelect={onSetDefault} />
+              : (
+                <MenuItem
+                  label={`USE FOR DEFAULT PATCH (${defaultInSlot})`}
+                  blocked={setDefaultBlocked}
+                  onSelect={() => setConfirming('setDefault')}
+                />
+              )}
             <MenuItem
               label="USE FOR SWAP SLOT"
               blocked={setSwapSlotBlocked}

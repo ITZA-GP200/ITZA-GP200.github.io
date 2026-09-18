@@ -233,7 +233,6 @@ export function PatchManagerSheet({
   // the template, and every later RESET would refuse.
   if (!setDefaultBlocked && selectedLabel === swapSlotLabel) setDefaultBlocked = 'Swap Slot cannot be the Default Patch';
   if (!setDefaultBlocked && selectedLabel === defaultPatchLabel) setDefaultBlocked = 'Already set as default patch';
-  if (!setDefaultBlocked && bank64Protected) setDefaultBlocked = 'Bank 64 is protected: 64C is the default (RELEASE 64 to change it)';
   let setSwapSlotBlocked = onSetSwapSlot ? slotActionBlocked : 'Not built yet';
   if (!setSwapSlotBlocked && selectedSlots.length !== 1) setSwapSlotBlocked = 'Pick one slot as the swap slot';
   if (!setSwapSlotBlocked && selectedLabel === defaultPatchLabel) setSwapSlotBlocked = 'Cannot use Default as Swap Slot';
@@ -966,6 +965,7 @@ export function PatchManagerSheet({
         }}
         renameBlocked={renameBlocked}
         setDefaultBlocked={setDefaultBlocked}
+        defaultInSlot={bank64Protected ? '64C' : null}
         onSetDefault={() => {
           setMenuAt(null);
           if (selected !== null && onSetDefaultPatch) void runBusy(() => onSetDefaultPatch(selected));

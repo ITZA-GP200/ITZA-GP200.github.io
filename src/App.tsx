@@ -12,6 +12,7 @@ import {
   loadBankProtected,
   PROTECTED_DEFAULT_SLOT,
   PROTECTED_SWAP_SLOT,
+  DEFAULT_SLOT_NAME,
   protectBank64,
   protectedNameFor,
   saveBankProtected,
@@ -697,7 +698,24 @@ function App() {
 
   // SET AS DEFAULT PATCH: remember a slot, and the patch as read now, as the
   // template RESET copies.
+  // With bank 64 protected the default always lives in 64C, so this copies the
+  // slot's settings there on the pedal (keeping 64C's fixed name) instead.
   async function handleSetDefaultPatch(slot: number) {
+    if (bank64Protected) {
+      try {
+        const source = await midiDevice.pullPreset(slot);
+        const preset = await midiDevice.copySlotOnDevice(slot, PROTECTED_DEFAULT_SLOT, source, DEFAULT_SLOT_NAME);
+        const next = { slot: PROTECTED_DEFAULT_SLOT, preset };
+        saveDefaultPatch(next);
+        setDefaultPatch(next);
+        loadPreset(preset);
+        setLoadError(null);
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        setLoadError(`Failed to copy ${SysExCodec.slotToLabel(slot)} into 64C as the default patch: ${detail}`);
+      }
+      return;
+    }
     try {
       const preset = await midiDevice.pullPreset(slot);
       const next = { slot, preset };
