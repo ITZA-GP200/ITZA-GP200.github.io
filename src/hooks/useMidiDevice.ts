@@ -176,7 +176,7 @@ export interface UseMidiDeviceReturn {
     copied: GP200Preset,
     saveAs?: string,
   ) => Promise<GP200Preset>;
-  writePresetToSlot: (preset: GP200Preset, slot: number) => Promise<void>;
+  writePresetToSlot: (preset: GP200Preset, slot: number) => Promise<GP200Preset>;
   saveToSlot: (presetName: string, slot?: number) => Promise<void>;
   /** Rename a slot without touching its effect data. Briefly switches the
    *  device to the target slot (required to load the editing buffer), then
@@ -996,12 +996,23 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     [pullPreset, saveToSlot, persistNames],
   );
 
-  const writePresetToSlot = useCallback(async (preset: GP200Preset, slot: number): Promise<void> => {
+  /**
+   * Write a patch from app data (not from another slot) into `slot`: select
+   * the slot, push every block into the pedal's live edit buffer, then save
+   * with the proven save-commit, and read the slot back. The read-back is
+   * returned so the caller can judge what the pedal kept. EXPERIMENTAL: the
+   * WRITE TEST button exercises it on hardware; nothing else relies on it yet.
+   */
+  const writePresetToSlot = useCallback(async (preset: GP200Preset, slot: number): Promise<GP200Preset> => {
     await pauseNameLoading();
     if (!outputRef.current) throw new Error('Not connected');
     const output = outputRef.current;
     const label = SysExCodec.slotToLabel(slot);
     console.log(`[GP-200] writeToSlot: slot=${slot} (${label}) name="${preset.patchName}"`);
+    // Selecting the slot re-reports block states and the slot; mute those
+    // echoes for the whole push so they can't flip blocks in the editor.
+    suppressFxFor(8000);
+    suppressSlotEchoUntilRef.current = Date.now() + 8000;
 
     // Step 1: Switch device to the target slot (loads current data into editing buffer)
     output.send(SysExCodec.buildPresetChange(slot));
@@ -1050,17 +1061,28 @@ export function useMidiDevice(): UseMidiDeviceReturn {
       output.send(SysExCodec.buildAuthorName(preset.author));
       await new Promise(r => setTimeout(r, 30));
     }
-    output.send(SysExCodec.buildSaveCommit(preset.patchName, slot));
-    // Wait for device to finish writing to flash before returning
-    await new Promise(r => setTimeout(r, 300));
-    console.log(`[GP-200] writeToSlot complete: ${label} → "${preset.patchName}"`);
+    // The proven save: 0x5a commit, then a preset change to the slot.
+    await saveToSlot(preset.patchName, slot);
 
-    // Update local state
-    presetNamesRef.current[slot] = preset.patchName;
+    // Record only what the pedal reports, so the list never shows a write
+    // the pedal didn't keep.
+    let readback: GP200Preset;
+    try {
+      readback = await pullPreset(slot);
+    } catch {
+      presetNamesRef.current[slot] = null;
+      setPresetNames([...presetNamesRef.current]);
+      persistNames();
+      throw new Error(`Couldn't read ${label} back to check the write`);
+    }
+    presetNamesRef.current[slot] = readback.patchName;
     setPresetNames([...presetNamesRef.current]);
     persistNames();
-    setCurrentSlot(slot); currentSlotRef.current = slot;
-  }, [pauseNameLoading, persistNames]);
+    console.log(`[GP-200] writeToSlot complete: ${label} = "${readback.patchName}"`);
+    return readback;
+    // suppressFxFor: see saveToSlot.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [pauseNameLoading, persistNames, saveToSlot, pullPreset]);
 
   /** Read one slot's name the way the official Valeton editor does
    *  (USB capture of it connecting, fw 1.8.0): a full read request, then the

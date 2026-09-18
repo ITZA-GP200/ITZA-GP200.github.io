@@ -53,6 +53,10 @@ export interface PatchManagerSheetProps {
   onProtectBank64?: () => Promise<void>;
   /** RELEASE 64: lift the protection only. */
   onReleaseBank64?: () => Promise<void>;
+  /** EXPERIMENT: write the editor's patch into a slot from app data. */
+  onWriteTest?: (slot: number) => Promise<void>;
+  /** The patch in the editor, named in WRITE TEST's confirm. */
+  editorPatchName?: string | null;
   /** The copied slots, in paste order (empty when nothing is copied). */
   clipboardSlots?: number[];
   onRenameSlot: (slot: number, name: string) => Promise<void>;
@@ -131,6 +135,8 @@ export function PatchManagerSheet({
   bank64Protected = false,
   onProtectBank64,
   onReleaseBank64,
+  onWriteTest,
+  editorPatchName = null,
   onRenameSlot,
   onRefreshNames,
   onImportFile,
@@ -171,6 +177,7 @@ export function PatchManagerSheet({
 
   const selectedSlots = slotsOf(selection);
   const [confirmingProtect, setConfirmingProtect] = useState(false);
+  const [confirmingWriteTest, setConfirmingWriteTest] = useState(false);
 
   function handleSelect(slot: number, modifiers?: { shift: boolean; toggle: boolean }) {
     setRenaming(false);
@@ -645,7 +652,42 @@ export function PatchManagerSheet({
               PROTECT 64
             </Button>
           )}
+          {onWriteTest && (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={actionsDisabled || editorPatchName === null || selectedSlots.length !== 1 || confirmingWriteTest}
+              onClick={() => setConfirmingWriteTest(true)}
+              title="Experiment: write the editor's patch into this slot from app data, then compare what the pedal kept"
+            >
+              WRITE TEST
+            </Button>
+          )}
         </div>
+        {onWriteTest && confirmingWriteTest && selected !== null && (
+          <div
+            role="alertdialog"
+            aria-label="Confirm write test"
+            className="flex items-center gap-2 flex-wrap font-mono-display text-caption"
+          >
+            <span style={{ color: 'var(--text-primary)' }}>
+              Experiment: overwrite {selectedLabel} with the editor’s patch “{editorPatchName}”?
+            </span>
+            <Button size="sm" variant="ghost" onClick={() => setConfirmingWriteTest(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              autoFocus
+              onClick={() => {
+                setConfirmingWriteTest(false);
+                void runBusy(() => onWriteTest(selected));
+              }}
+            >
+              Write
+            </Button>
+          </div>
+        )}
         {onProtectBank64 && !bank64Protected && confirmingProtect && (
           <div
             role="alertdialog"
