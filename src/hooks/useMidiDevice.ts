@@ -21,6 +21,7 @@ import {
   describeSysexDenied,
 } from '@/core/midiPortDiagnostics';
 import { useMidiSend } from './useMidiSend';
+import { pushPresetToDevice } from '@/core/devicePush';
 
 const READ_TIMEOUT_MS = 3000;
 
@@ -1010,91 +1011,34 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     const label = SysExCodec.slotToLabel(slot);
     console.log(`[GP-200] writeToSlot: slot=${slot} (${label}) name="${preset.patchName}"`);
     // Selecting the slot re-reports block states and the slot; mute those
-    // echoes for the whole push so they can't flip blocks in the editor.
-    suppressFxFor(8000);
-    suppressSlotEchoUntilRef.current = Date.now() + 8000;
+    // echoes for the whole push (~15-20 s) so they can't flip blocks in the editor.
+    suppressFxFor(30000);
+    suppressSlotEchoUntilRef.current = Date.now() + 30000;
 
-    // What the target holds now, so only blocks whose effect TYPE changes get
-    // an effect-change message.
-    const before = await pullPreset(slot);
-    const typeOf = (index: number) => before.effects.find(e => e.slotIndex === index)?.effectId;
-
-    // Step 1: Switch device to the target slot (loads current data into editing buffer)
+    // Select the target, so the edit buffer is that slot's stored patch.
     output.send(SysExCodec.buildPresetChange(slot));
-    await new Promise(r => setTimeout(r, 200));
+    setCurrentSlot(slot); currentSlotRef.current = slot;
+    await new Promise(r => setTimeout(r, 300));
 
-    // Step 2: effect TYPES, only where they change. Without the effect change
-    // the device keeps the algorithm it already had loaded and the params apply
-    // to the wrong effect (#80). Address each block by its fixed slotIndex
-    // (0=PRE..10=VOL), NOT the array position: PRSTDecoder returns effects in
-    // playback order (#90).
-    const typeChanges = preset.effects.filter(eff => typeOf(eff.slotIndex) !== eff.effectId);
-    for (const eff of typeChanges) {
-      output.send(SysExCodec.buildEffectChange(eff.slotIndex, eff.effectId));
-      await new Promise(r => setTimeout(r, 30));
-    }
-    if (typeChanges.length > 0) await new Promise(r => setTimeout(r, 500));
-
-    // Step 3: knobs, then on/off, block order, patch VOL/PAN/TEMPO, author.
-    // On hardware (fw 1.8.0) the first knob message addressed to a block is
-    // dropped when the previous one went to another block: every block's
-    // FIRST knob was lost, even when all knobs were sent twice, while a knob
-    // dragged in the editor (many messages) always lands. So each block gets
-    // its first knob once as a throwaway, then every knob as normal.
-    const sendKnobs = async () => {
-      for (const eff of preset.effects) {
-        // Priming with the same value didn't help either (hardware, 18/18
-        // still lost), so imitate a drag: one step off the target, then it.
-        const first = eff.params.findIndex(value => value !== undefined);
-        if (first >= 0) {
-          const target = eff.params[first];
-          const nudge = target > 0 ? target - 1 : target + 1;
-          output.send(SysExCodec.buildParamChange(eff.slotIndex, first, eff.effectId, nudge));
-          await new Promise(r => setTimeout(r, 40));
-          output.send(SysExCodec.buildParamChange(eff.slotIndex, first, eff.effectId, target));
-          await new Promise(r => setTimeout(r, 40));
-        }
-        for (let p = 0; p < eff.params.length; p++) {
-          if (eff.params[p] !== undefined) {
-            output.send(SysExCodec.buildParamChange(eff.slotIndex, p, eff.effectId, eff.params[p]));
-            await new Promise(r => setTimeout(r, 8));
-          }
-        }
-      }
-    };
-    await sendKnobs();
-    for (const eff of preset.effects) {
-      output.send(SysExCodec.buildToggleEffect(eff.slotIndex, eff.enabled));
-      await new Promise(r => setTimeout(r, 15));
-    }
-    await new Promise(r => setTimeout(r, 50));
-    output.send(SysExCodec.buildReorderEffects(
-      preset.effects.map(e => e.slotIndex), preset.fxLoopSend, preset.fxLoopReturn,
-    ));
-    await new Promise(r => setTimeout(r, 30));
-    // PAN is device-encoded (left = 256 + signed).
-    output.send(SysExCodec.buildPatchSetting(0x00, preset.patchVolume));
-    await new Promise(r => setTimeout(r, 30));
-    output.send(SysExCodec.buildPatchSetting(0x06, preset.patchPan & 0xFF));
-    await new Promise(r => setTimeout(r, 30));
-    output.send(SysExCodec.buildPatchSetting(0x01, preset.patchTempo));
-    await new Promise(r => setTimeout(r, 30));
-    if (preset.author) {
-      output.send(SysExCodec.buildAuthorName(preset.author));
-      await new Promise(r => setTimeout(r, 30));
-    }
-
-    // Step 4: every knob once more, last, so nothing sent after the first
-    // pass can undo one. On hardware (fw 1.8.0) the FIRST knob of every block
-    // was lost by the old sequence, while a knob edited and saved on its own
-    // keeps it: something later in the sequence reset it.
-    await new Promise(r => setTimeout(r, 200));
-    await sendKnobs();
-    await new Promise(r => setTimeout(r, 200));
-    console.log(
-      `[GP-200] writeToSlot: ${typeChanges.length} effect type change(s)`
-      + `${typeChanges.length ? ' (' + typeChanges.map(e => e.slotIndex).join(',') + ')' : ''}; knobs sent twice, first knobs nudged`,
-    );
+    // Push the patch into the edit buffer with upstream's live-preview push
+    // (core/devicePush.ts), which already carries the hardware fixes this
+    // sequence lacked: 40 ms between knobs (8 ms bursts are swallowed), each
+    // block's FIRST knob re-sent after the others (the first message to a
+    // block only opens it), a settle after every effect change, a second knob
+    // pass, then order, patch VOL/PAN/TEMPO and the CTRL assignments.
+    // WRITE TEST on hardware lost every block's first knob before this.
+    await pushPresetToDevice(preset, {
+      sendEffectChange: send.sendEffectChange,
+      sendParamChange: send.sendParamChange,
+      sendToggle: send.sendToggle,
+      sendReorder: send.sendReorder,
+      sendAuthor: send.sendAuthor,
+      sendPatchVolume: send.sendPatchVolume,
+      sendPatchPan: send.sendPatchPan,
+      sendPatchTempo: send.sendPatchTempo,
+      sendCtrlAssignment: send.sendCtrlAssignment,
+    });
+    await new Promise(r => setTimeout(r, 300));
 
     // The proven save: 0x5a commit, then a preset change to the slot.
     await saveToSlot(preset.patchName, slot);
@@ -1117,7 +1061,7 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     return readback;
     // suppressFxFor: see saveToSlot.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [pauseNameLoading, persistNames, saveToSlot, pullPreset]);
+  }, [pauseNameLoading, persistNames, saveToSlot, pullPreset, send]);
 
   /** Read one slot's name the way the official Valeton editor does
    *  (USB capture of it connecting, fw 1.8.0): a full read request, then the
