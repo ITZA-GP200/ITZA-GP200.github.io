@@ -1043,10 +1043,16 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     // its first knob once as a throwaway, then every knob as normal.
     const sendKnobs = async () => {
       for (const eff of preset.effects) {
+        // Priming with the same value didn't help either (hardware, 18/18
+        // still lost), so imitate a drag: one step off the target, then it.
         const first = eff.params.findIndex(value => value !== undefined);
         if (first >= 0) {
-          output.send(SysExCodec.buildParamChange(eff.slotIndex, first, eff.effectId, eff.params[first]));
-          await new Promise(r => setTimeout(r, 20));
+          const target = eff.params[first];
+          const nudge = target > 0 ? target - 1 : target + 1;
+          output.send(SysExCodec.buildParamChange(eff.slotIndex, first, eff.effectId, nudge));
+          await new Promise(r => setTimeout(r, 40));
+          output.send(SysExCodec.buildParamChange(eff.slotIndex, first, eff.effectId, target));
+          await new Promise(r => setTimeout(r, 40));
         }
         for (let p = 0; p < eff.params.length; p++) {
           if (eff.params[p] !== undefined) {
@@ -1087,7 +1093,7 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     await new Promise(r => setTimeout(r, 200));
     console.log(
       `[GP-200] writeToSlot: ${typeChanges.length} effect type change(s)`
-      + `${typeChanges.length ? ' (' + typeChanges.map(e => e.slotIndex).join(',') + ')' : ''}; knobs sent twice, each block primed`,
+      + `${typeChanges.length ? ' (' + typeChanges.map(e => e.slotIndex).join(',') + ')' : ''}; knobs sent twice, first knobs nudged`,
     );
 
     // The proven save: 0x5a commit, then a preset change to the slot.
