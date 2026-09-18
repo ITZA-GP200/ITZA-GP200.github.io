@@ -6,6 +6,7 @@ import { useMidiDevice } from '@/hooks/useMidiDevice';
 import { SourceChangedError } from '@/core/samePatch';
 import { swapThroughScratch } from '@/core/swapThrough';
 import { describeRange, pasteMany, type ClipItem } from '@/core/multiPaste';
+import { describeWriteFidelity, summarizeWriteFidelity } from '@/core/writeFidelity';
 import {
   loadBankProtected,
   PROTECTED_DEFAULT_SLOT,
@@ -802,6 +803,25 @@ function App() {
     }
   }
 
+  // WRITE TEST (experiment): write the editor's patch into a slot from app
+  // data, via the live edit buffer plus the proven save, then report what the
+  // pedal kept. The first step towards shipping "Itza GP-200" with the app.
+  async function handleWriteTest(slot: number) {
+    if (!preset) return;
+    const sent = structuredClone(preset);
+    const label = SysExCodec.slotToLabel(slot);
+    try {
+      const readback = await midiDevice.writePresetToSlot(sent, slot);
+      const result = describeWriteFidelity(readback, sent);
+      console.log(`[GP-200] WRITE TEST ${label}: sent`, sent, 'read back', readback, 'differences', result);
+      loadPreset(readback);
+      setLoadError(summarizeWriteFidelity(label, readback.patchName, result));
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      setLoadError(`WRITE TEST ${label} failed: ${detail}`);
+    }
+  }
+
   // RELEASE 64: lift the protection only; the patches and settings stay.
   async function handleReleaseBank64() {
     saveBankProtected(false);
@@ -1246,6 +1266,8 @@ function App() {
         bank64Protected={bank64Protected}
         onProtectBank64={handleProtectBank64}
         onReleaseBank64={handleReleaseBank64}
+        onWriteTest={handleWriteTest}
+        editorPatchName={preset?.patchName ?? null}
       />
 
       {slotBrowserMode && (
