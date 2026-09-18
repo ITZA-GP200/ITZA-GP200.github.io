@@ -13,7 +13,7 @@ import { presetNameCacheKey, loadCachedNames, saveCachedNames } from '@/core/pre
 import type { BulkApplyOptions, BulkApplyProgress } from '@/core/bulkApply';
 import { track } from '@/core/analytics';
 import { PRSTEncoder } from '@/core/PRSTEncoder';
-import { describePatchDifferences } from '@/core/samePatch';
+import { describePatchDifferences, SourceChangedError } from '@/core/samePatch';
 import {
   describeHandshakeSilence,
   describeMidiAccessDenied,
@@ -24,18 +24,6 @@ import { useMidiSend } from './useMidiSend';
 
 const READ_TIMEOUT_MS = 3000;
 
-/** Thrown by copySlotOnDevice when the source slot no longer holds the patch
- *  read from it earlier (by COPY, or when a default patch was set), so
- *  nothing was written. */
-export class SourceChangedError extends Error {
-  readonly slot: number;
-
-  constructor(slot: number, change: string) {
-    super(`${SysExCodec.slotToLabel(slot)} has changed since it was read (${change})`);
-    this.name = 'SourceChangedError';
-    this.slot = slot;
-  }
-}
 
 function isSysEx(data: Uint8Array, cmd: number, sub: number): boolean {
   return (

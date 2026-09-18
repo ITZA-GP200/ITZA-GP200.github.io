@@ -389,3 +389,72 @@ describe('PatchManagerSheet: default patch and RESET', () => {
     expect(reset).toHaveAttribute('title', 'This is the default patch');
   });
 });
+
+describe('PatchManagerSheet: swap slot and PASTE ▸ SWAP', () => {
+  function openMenuOn(text: string) {
+    fireEvent.contextMenu(screen.getByText(text), { clientX: 120, clientY: 140 });
+    return screen.getByRole('menu', { name: 'Patch actions' });
+  }
+  const swapHosts = () => ({
+    onSetSwapSlot: vi.fn().mockResolvedValue(undefined),
+    onSwapWithClipboard: vi.fn().mockResolvedValue(undefined),
+  });
+
+  it('SET AS SWAP SLOT warns that swaps overwrite the slot, then sets it', () => {
+    const hosts = swapHosts();
+    renderSheet(hosts);
+    fireEvent.click(within(openMenuOn('Crunch')).getByRole('menuitem', { name: 'SET AS SWAP SLOT' }));
+    const confirm = screen.getByRole('alertdialog', { name: 'Confirm swap slot' });
+    expect(confirm).toHaveTextContent('overwritten by every swap');
+    expect(hosts.onSetSwapSlot).not.toHaveBeenCalled();
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Use as swap slot' }));
+    expect(hosts.onSetSwapSlot).toHaveBeenCalledWith(1);
+  });
+
+  it('keeps the swap slot and the default patch apart', () => {
+    renderSheet({ ...swapHosts(), onSetDefaultPatch: vi.fn(), defaultPatchLabel: '1B', swapSlotLabel: '1A' });
+    const onDefault = within(openMenuOn('Crunch')).getByRole('menuitem', { name: 'SET AS SWAP SLOT' });
+    expect(onDefault).toHaveAttribute('title', 'This is your default patch');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    const onSwapSlot = within(openMenuOn('Clean')).getByRole('menuitem', { name: 'SET AS DEFAULT PATCH' });
+    expect(onSwapSlot).toHaveAttribute('title', 'This is your swap slot');
+  });
+
+  it('PASTE ▸ SWAP explains how to set a swap slot when there is none', () => {
+    renderSheet({ ...swapHosts(), clipboardLabel: '1A' });
+    fireEvent.click(within(openMenuOn('Crunch')).getByRole('menuitem', { name: /^PASTE/ }));
+    const swap = within(screen.getByRole('dialog', { name: 'Paste options' })).getByRole('radio', { name: /SWAP/ });
+    expect(swap).toHaveAttribute('aria-disabled', 'true');
+    expect(swap.getAttribute('title')).toContain('SET AS SWAP SLOT');
+  });
+
+  it('PASTE ▸ SWAP swaps with the clipboard instead of overwriting', () => {
+    const hosts = swapHosts();
+    const { props } = renderSheet({ ...hosts, clipboardLabel: '1A', swapSlotLabel: '64D' });
+    fireEvent.click(within(openMenuOn('Crunch')).getByRole('menuitem', { name: /^PASTE/ }));
+    const options = screen.getByRole('dialog', { name: 'Paste options' });
+    const swap = within(options).getByRole('radio', { name: /SWAP/ });
+    expect(swap).toHaveTextContent('copies through 64D');
+    fireEvent.click(swap);
+    expect(swap).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(within(options).getByRole('button', { name: 'OK' }));
+    expect(hosts.onSwapWithClipboard).toHaveBeenCalledWith(1);
+    expect(props.onPasteToSlot).not.toHaveBeenCalled();
+  });
+
+  it('OVERWRITE stays the default paste method', () => {
+    const hosts = swapHosts();
+    const { props } = renderSheet({ ...hosts, clipboardLabel: '1A', swapSlotLabel: '64D' });
+    fireEvent.click(within(openMenuOn('Crunch')).getByRole('menuitem', { name: /^PASTE/ }));
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Paste options' })).getByRole('button', { name: 'OK' }));
+    expect(props.onPasteToSlot).toHaveBeenCalledWith(1);
+    expect(hosts.onSwapWithClipboard).not.toHaveBeenCalled();
+  });
+
+  it('will not swap the swap slot itself, or a patch onto its own slot', () => {
+    renderSheet({ ...swapHosts(), clipboardLabel: '1B', swapSlotLabel: '64D' });
+    fireEvent.click(within(openMenuOn('Crunch')).getByRole('menuitem', { name: /^PASTE/ }));
+    const swap = within(screen.getByRole('dialog', { name: 'Paste options' })).getByRole('radio', { name: /SWAP/ });
+    expect(swap).toHaveAttribute('title', 'The copied patch is already here');
+  });
+});

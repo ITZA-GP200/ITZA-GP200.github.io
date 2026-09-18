@@ -1,5 +1,18 @@
 import { getSlotModule } from './effectNames';
+import { SysExCodec } from './SysExCodec';
 import type { GP200Preset } from './types';
+
+/** Thrown when a source slot no longer holds the patch read from it earlier
+ *  (by COPY, or when a default patch was set), so nothing was written. */
+export class SourceChangedError extends Error {
+  readonly slot: number;
+
+  constructor(slot: number, change: string) {
+    super(`${SysExCodec.slotToLabel(slot)} has changed since it was read (${change})`);
+    this.name = 'SourceChangedError';
+    this.slot = slot;
+  }
+}
 
 /**
  * Comparing two reads of a patch, split by what a difference means.

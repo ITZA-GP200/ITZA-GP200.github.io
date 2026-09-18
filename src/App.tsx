@@ -2,8 +2,11 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { usePreset } from '@/hooks/usePreset';
 import { applyFxScenario, findFxScenario } from '@/core/fxScenarios';
 import { patchStyleName } from '@/core/patchStyles';
-import { SourceChangedError, useMidiDevice } from '@/hooks/useMidiDevice';
+import { useMidiDevice } from '@/hooks/useMidiDevice';
+import { SourceChangedError } from '@/core/samePatch';
+import { swapThroughScratch } from '@/core/swapThrough';
 import { DEFAULT_PATCH_NAME, loadDefaultPatch, saveDefaultPatch } from '@/core/defaultPatch';
+import { loadSwapSlot, saveSwapSlot } from '@/core/swapSlot';
 import { useLooper } from '@/hooks/useLooper';
 import { useDrumMachine } from '@/hooks/useDrumMachine';
 import { useAudioEngine } from '@/components/AudioEngineProvider';
@@ -186,6 +189,8 @@ function App() {
   const [clipboard, setClipboard] = useState<{ preset: GP200Preset; slot: number; label: string } | null>(null);
   // The template RESET copies (see core/defaultPatch.ts), kept across reloads.
   const [defaultPatch, setDefaultPatch] = useState(loadDefaultPatch);
+  // Scratch space swaps copy through (see core/swapSlot.ts), kept across reloads.
+  const [swapSlot, setSwapSlot] = useState(loadSwapSlot);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [firmwareWarningDismissed, setFirmwareWarningDismissed] = useState(false);
@@ -669,15 +674,18 @@ function App() {
     }
   }
 
+  // Exchange two slots on the pedal through the user's swap slot (see
+  // core/swapThrough.ts). Replaces the flash upload used here before, which
+  // the hardware ignores.
+  function swapOnPedal(first: number, second: number, expectedFirst?: GP200Preset): Promise<GP200Preset> {
+    return swapThroughScratch(midiDevice, { first, second, scratch: swapSlot, expectedFirst });
+  }
+
+  // Toolbar SWAP (two selected slots) and ▲UP / ▼DOWN (swap with the neighbour).
   async function handleSwapSlots(first: number, second: number) {
     if (first === second) return;
     try {
-      // Read both before writing either: a failed read then leaves the pedal
-      // untouched instead of half-swapped.
-      const a = await midiDevice.pullPreset(first);
-      const b = await midiDevice.pullPreset(second);
-      await midiDevice.pushPreset({ ...b, slotIndex: first }, first);
-      await midiDevice.pushPreset({ ...a, slotIndex: second }, second);
+      loadPreset(await swapOnPedal(first, second));
       setLoadError(null);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
@@ -685,9 +693,29 @@ function App() {
         `Failed to swap ${SysExCodec.slotToLabel(first)} and `
         + `${SysExCodec.slotToLabel(second)}: ${detail}`,
       );
-    } finally {
-      if (midiDevice.status === 'connected') midiDevice.loadPresetNames();
     }
+  }
+
+  // PASTE ▸ SWAP: the copied patch and the target change places.
+  async function handleSwapWithClipboard(slot: number) {
+    if (!clipboard) return;
+    try {
+      loadPreset(await swapOnPedal(clipboard.slot, slot, clipboard.preset));
+      // The copied slot now holds the other patch, so the clipboard is stale.
+      setClipboard(null);
+      setLoadError(null);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      const advice = err instanceof SourceChangedError ? '; copy it again, then swap' : '';
+      setLoadError(`Failed to swap ${clipboard.label} and ${SysExCodec.slotToLabel(slot)}: ${detail}${advice}`);
+    }
+  }
+
+  // SET AS SWAP SLOT: remember the scratch slot (the menu has already asked).
+  async function handleSetSwapSlot(slot: number) {
+    saveSwapSlot(slot);
+    setSwapSlot(slot);
+    setLoadError(null);
   }
 
   async function handleRenameSlot(slot: number, name: string) {
@@ -1112,6 +1140,9 @@ function App() {
         onSetDefaultPatch={handleSetDefaultPatch}
         onResetSlot={handleResetSlot}
         defaultPatchLabel={defaultPatch ? SysExCodec.slotToLabel(defaultPatch.slot) : null}
+        onSetSwapSlot={handleSetSwapSlot}
+        onSwapWithClipboard={handleSwapWithClipboard}
+        swapSlotLabel={swapSlot === null ? null : SysExCodec.slotToLabel(swapSlot)}
       />
 
       {slotBrowserMode && (
