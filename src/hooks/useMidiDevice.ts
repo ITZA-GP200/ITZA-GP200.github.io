@@ -1014,52 +1014,49 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     suppressFxFor(8000);
     suppressSlotEchoUntilRef.current = Date.now() + 8000;
 
+    // What the target holds now, so only blocks whose effect TYPE changes get
+    // an effect-change message.
+    const before = await pullPreset(slot);
+    const typeOf = (index: number) => before.effects.find(e => e.slotIndex === index)?.effectId;
+
     // Step 1: Switch device to the target slot (loads current data into editing buffer)
     output.send(SysExCodec.buildPresetChange(slot));
     await new Promise(r => setTimeout(r, 200));
 
-    // Step 2: Send all effects via live editing for each slot.
-    // Per block: set the effect TYPE first (buildEffectChange, sub=0x14), then
-    // params, then on/off state. Without the effect change the device keeps the
-    // algorithm it already had loaded and the params/toggle apply to the wrong
-    // effect, so the saved slot ends up as "whatever was already there" (#80).
-    // IMPORTANT: address each block by its fixed slotIndex (0=PRE..10=VOL), NOT
-    // the array position. PRSTDecoder returns effects in playback order, so for
-    // a reordered preset the array position diverges from slotIndex and array
-    // addressing writes every effect to the wrong physical block (#90).
-    //
-    // Effect types go first, for every block, then a settle, then the knobs.
-    // On hardware (fw 1.8.0) a knob sent 30 ms after its block's effect change
-    // was lost for the FIRST knob of every block (stored as 0, or 1 on CAB),
-    // while the same knob sent on its own during editing always lands: the
-    // pedal is still loading the new effect when it arrives.
-    for (const eff of preset.effects) {
+    // Step 2: effect TYPES, only where they change. Without the effect change
+    // the device keeps the algorithm it already had loaded and the params apply
+    // to the wrong effect (#80). Address each block by its fixed slotIndex
+    // (0=PRE..10=VOL), NOT the array position: PRSTDecoder returns effects in
+    // playback order (#90).
+    const typeChanges = preset.effects.filter(eff => typeOf(eff.slotIndex) !== eff.effectId);
+    for (const eff of typeChanges) {
       output.send(SysExCodec.buildEffectChange(eff.slotIndex, eff.effectId));
       await new Promise(r => setTimeout(r, 30));
     }
-    await new Promise(r => setTimeout(r, 500));
-    for (let i = 0; i < preset.effects.length; i++) {
-      const eff = preset.effects[i];
-      for (let p = 0; p < eff.params.length; p++) {
-        if (eff.params[p] !== undefined) {
-          output.send(SysExCodec.buildParamChange(eff.slotIndex, p, eff.effectId, eff.params[p]));
-          await new Promise(r => setTimeout(r, 8));
+    if (typeChanges.length > 0) await new Promise(r => setTimeout(r, 500));
+
+    // Step 3: knobs, then on/off, block order, patch VOL/PAN/TEMPO, author.
+    const sendKnobs = async () => {
+      for (const eff of preset.effects) {
+        for (let p = 0; p < eff.params.length; p++) {
+          if (eff.params[p] !== undefined) {
+            output.send(SysExCodec.buildParamChange(eff.slotIndex, p, eff.effectId, eff.params[p]));
+            await new Promise(r => setTimeout(r, 8));
+          }
         }
       }
+    };
+    await sendKnobs();
+    for (const eff of preset.effects) {
       output.send(SysExCodec.buildToggleEffect(eff.slotIndex, eff.enabled));
       await new Promise(r => setTimeout(r, 15));
     }
-
-    // Step 3: mirror the signal-chain order so the saved slot keeps the preset's
-    // routing (the block writes above are slot-addressed and order-independent),
-    // then send author + save-commit to persist (#90).
     await new Promise(r => setTimeout(r, 50));
     output.send(SysExCodec.buildReorderEffects(
       preset.effects.map(e => e.slotIndex), preset.fxLoopSend, preset.fxLoopReturn,
     ));
     await new Promise(r => setTimeout(r, 30));
-    // Per-patch master VOL/PAN/TEMPO, so the saved slot doesn't inherit the
-    // editing buffer's previous values. PAN is device-encoded (left = 256 + signed).
+    // PAN is device-encoded (left = 256 + signed).
     output.send(SysExCodec.buildPatchSetting(0x00, preset.patchVolume));
     await new Promise(r => setTimeout(r, 30));
     output.send(SysExCodec.buildPatchSetting(0x06, preset.patchPan & 0xFF));
@@ -1070,6 +1067,19 @@ export function useMidiDevice(): UseMidiDeviceReturn {
       output.send(SysExCodec.buildAuthorName(preset.author));
       await new Promise(r => setTimeout(r, 30));
     }
+
+    // Step 4: every knob once more, last, so nothing sent after the first
+    // pass can undo one. On hardware (fw 1.8.0) the FIRST knob of every block
+    // was lost by the old sequence, while a knob edited and saved on its own
+    // keeps it: something later in the sequence reset it.
+    await new Promise(r => setTimeout(r, 200));
+    await sendKnobs();
+    await new Promise(r => setTimeout(r, 200));
+    console.log(
+      `[GP-200] writeToSlot: ${typeChanges.length} effect type change(s)`
+      + `${typeChanges.length ? ' (' + typeChanges.map(e => e.slotIndex).join(',') + ')' : ''}; knobs sent twice`,
+    );
+
     // The proven save: 0x5a commit, then a preset change to the slot.
     await saveToSlot(preset.patchName, slot);
 
