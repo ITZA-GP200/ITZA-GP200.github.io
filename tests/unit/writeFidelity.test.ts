@@ -28,10 +28,10 @@ describe('describeWriteFidelity', () => {
 describe('describeWriteFidelity: knob slots', () => {
   it('ignores leftover slots the effect doesn’t use, but flags its real knobs', () => {
     const sent = createDefaultPreset();
-    const cab = sent.effects.find((effect) => effect.slotIndex === 6)!;
+    const cab = sent.effects.find((effect) => effect.slotIndex === 5)!;
     cab.effectId = 167772200; // Solo cab: Volume (1), Low Cut (5), High Cut (6)
     const actual = structuredClone(sent);
-    const got = actual.effects.find((effect) => effect.slotIndex === 6)!;
+    const got = actual.effects.find((effect) => effect.slotIndex === 5)!;
     got.params[0] = (cab.params[0] ?? 0) + 1; // leftover slot
     got.params[2] = (cab.params[2] ?? 0) + 30; // leftover slot
     got.params[1] = 0;
