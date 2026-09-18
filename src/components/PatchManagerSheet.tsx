@@ -552,6 +552,7 @@ export function PatchManagerSheet({
           onRowContextMenu={handleRowContextMenu}
           swapSlotLabel={swapSlotLabel}
           protectedBank={bank64Protected ? 64 : null}
+          defaultSlotLabel={defaultPatchLabel}
         />
       </div>
 

@@ -614,7 +614,7 @@ describe('PatchManagerSheet: protected bank 64 rules', () => {
     names[251] = 'Last Song';
     names[252] = 'UTILITY-1';
     names[253] = 'UTILITY-2';
-    names[254] = 'ITZA GP-200 dflt';
+    names[254] = 'ITZA GP-200';
     names[255] = 'SWAP SLOT';
     return names;
   }
@@ -694,7 +694,7 @@ describe('PatchManagerSheet: USE FOR DEFAULT PATCH (64C)', () => {
 });
 
 describe('PatchManagerSheet: SAVE / RESTORE 64', () => {
-  const bankNames = (c = 'ITZA GP-200 dflt') => {
+  const bankNames = (c = 'ITZA GP-200') => {
     const names = makeNames();
     names[252] = 'UTILITY-1';
     names[253] = 'UTILITY-2';

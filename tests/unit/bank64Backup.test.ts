@@ -17,7 +17,7 @@ const named = (name: string): GP200Preset => ({ ...loadShippedPatch(), patchName
 
 describe('bank 64 backup file', () => {
   it('round-trips 64A–64C through JSON and .prst unchanged', () => {
-    const originals = [named('UTILITY-1'), named('UTILITY-2'), named('ITZA GP-200 dflt')];
+    const originals = [named('UTILITY-1'), named('UTILITY-2'), named('ITZA GP-200')];
     originals[0].effects[3].params[0] = 77;
     originals[0].effects[3].enabled = true;
     originals[2].patchVolume = 64;
@@ -56,7 +56,7 @@ describe('bank64NameChanges', () => {
     const list = new Array<string | null>(256).fill('x');
     list[252] = 'UTILITY-1';
     list[253] = 'UTILITY-2';
-    list[254] = 'ITZA GP-200 dflt';
+    list[254] = 'ITZA GP-200';
     list[255] = 'SWAP SLOT';
     return list;
   };
@@ -98,12 +98,12 @@ describe('restoreBank64', () => {
     const seen: string[] = [];
     const result = await restoreBank64(pedal.device, [named('x'), named('y'), named('z')], (d, t) => seen.push(`${d}/${t}`));
     expect(pedal.log).toEqual([
-      'write 254 as ITZA GP-200 dflt',
+      'write 254 as ITZA GP-200',
       'write 252 as UTILITY-1',
       'write 253 as UTILITY-2',
       '254->255 as SWAP SLOT',
     ]);
-    expect(result.patchName).toBe('ITZA GP-200 dflt');
+    expect(result.patchName).toBe('ITZA GP-200');
     expect(seen).toEqual(['1/4', '2/4', '3/4', '4/4']);
   });
 
@@ -111,6 +111,7 @@ describe('restoreBank64', () => {
     const pedal = fakePedal(252);
     await expect(restoreBank64(pedal.device, [named('x'), named('y'), named('z')]))
       .rejects.toThrow('64A didn’t take the backup');
-    expect(pedal.log).toEqual(['write 254 as ITZA GP-200 dflt', 'write 252 as UTILITY-1']);
+    // 64A is written twice (a value-only miss is retried once), then it stops.
+    expect(pedal.log).toEqual(['write 254 as ITZA GP-200', 'write 252 as UTILITY-1', 'write 252 as UTILITY-1']);
   });
 });

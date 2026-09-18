@@ -6,10 +6,10 @@ import {
   PROTECTED_SWAP_SLOT,
   protectedNameFor,
   SWAP_SLOT_NAME,
+  writeChecked,
 } from './protectBank';
 import { SysExCodec } from './SysExCodec';
 import type { GP200Preset } from './types';
-import { describeWriteFidelity } from './writeFidelity';
 
 /**
  * SAVE / RESTORE 64: a backup of the protected bank's settings.
@@ -145,18 +145,12 @@ export async function restoreBank64(
     const sent = { ...structuredClone(patches[index]), patchName: protectedNameFor(slot)! };
     let written: GP200Preset;
     try {
-      written = await device.writePresetToSlot(sent, slot);
+      written = await writeChecked(device, sent, slot, (differences) =>
+        `${label(slot)} didn’t take the backup (${differences}); run RESTORE 64 again`);
     } catch (err) {
+      if (err instanceof Error && err.message.includes('didn’t take the backup')) throw err;
       const detail = err instanceof Error ? err.message : String(err);
       throw new Error(`${detail}. Stopped at ${label(slot)}; run RESTORE 64 again`, { cause: err });
-    }
-    const { identity, values } = describeWriteFidelity(written, sent);
-    const wrong = [...identity, ...values];
-    if (wrong.length > 0) {
-      throw new Error(
-        `${label(slot)} didn’t take the backup (${wrong.slice(0, 3).join('; ')}${wrong.length > 3 ? '; …' : ''}); `
-        + 'run RESTORE 64 again',
-      );
     }
     if (slot === PROTECTED_DEFAULT_SLOT) restoredDefault = written;
     done += 1;
