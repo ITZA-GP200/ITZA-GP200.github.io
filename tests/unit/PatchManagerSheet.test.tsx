@@ -784,3 +784,29 @@ describe('PatchManagerSheet: paste options on double-click', () => {
     expect(onSwapWithClipboard).not.toHaveBeenCalled();
   });
 });
+
+describe('PatchManagerSheet: SAVE and REFRESH buttons', () => {
+  it('SAVE asks first, then writes the editor’s patch into the pedal’s current slot', () => {
+    const onSaveEditorToPedal = vi.fn().mockResolvedValue(undefined);
+    renderSheet({ onSaveEditorToPedal, editorPatchName: 'MAMA 1A', currentSlot: 1 });
+    fireEvent.click(screen.getByRole('button', { name: 'SAVE' }));
+    const confirm = screen.getByRole('alertdialog', { name: 'Confirm save to pedal' });
+    expect(confirm).toHaveTextContent('Save the editor’s patch “MAMA 1A” into 1B on the pedal?');
+    expect(onSaveEditorToPedal).not.toHaveBeenCalled();
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Save' }));
+    expect(onSaveEditorToPedal).toHaveBeenCalledWith(1);
+  });
+
+  it('REFRESH sits in the button row (not the header) and re-reads the names', () => {
+    const { props } = renderSheet();
+    const buttons = screen.getAllByRole('button', { name: 'REFRESH' });
+    expect(buttons).toHaveLength(1);
+    fireEvent.click(buttons[0]);
+    expect(props.onRefreshNames).toHaveBeenCalledTimes(1);
+  });
+
+  it('WRITE TEST is gone', () => {
+    renderSheet();
+    expect(screen.queryByRole('button', { name: 'WRITE TEST' })).toBeNull();
+  });
+});

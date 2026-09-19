@@ -6,7 +6,6 @@ import { useMidiDevice } from '@/hooks/useMidiDevice';
 import { SourceChangedError } from '@/core/samePatch';
 import { swapThroughScratch } from '@/core/swapThrough';
 import { describeRange, pasteMany, type ClipItem } from '@/core/multiPaste';
-import { describeWriteFidelity, summarizeWriteFidelity } from '@/core/writeFidelity';
 import { loadShippedPatch } from '@/core/shippedPatch';
 import {
   BACKUP_SLOTS,
@@ -24,6 +23,7 @@ import {
   DEFAULT_SLOT_NAME,
   protectBank64,
   protectedNameFor,
+  writeChecked,
   saveBankProtected,
   SWAP_SLOT_NAME,
 } from '@/core/protectBank';
@@ -856,25 +856,26 @@ function App() {
     }
   }
 
-  // WRITE TEST (experiment): write the editor's patch into a slot from app
-  // data, via the live edit buffer plus the proven save, then report what the
-  // pedal kept. The first step towards shipping "Itza GP-200" with the app.
-  async function handleWriteTest(slot: number) {
+  // SAVE (Patches panel): make the pedal match the editor, by writing the
+  // editor's patch from app data into the pedal's current slot (checked, and
+  // retried once like RESTORE 64). REFRESH is the other direction.
+  async function handleSaveEditorToPedal(slot: number) {
     if (!preset) return;
-    const sent = structuredClone(preset);
     const label = SysExCodec.slotToLabel(slot);
+    const sent = structuredClone(preset);
+    // A protected bank-64 slot keeps its fixed name.
+    const fixedName = bank64Protected ? protectedNameFor(slot) : undefined;
+    if (fixedName) sent.patchName = fixedName;
+    const missed: string[] = [];
     try {
-      const readback = await midiDevice.writePresetToSlot(sent, slot);
-      const result = describeWriteFidelity(readback, sent);
-      console.log(`[GP-200] WRITE TEST ${label}: sent`, sent, 'read back', readback);
-      // Plain text, one difference per line, so nothing needs expanding.
-      const lines = [...result.identity, ...result.values, ...result.extras];
-      console.log(`[GP-200] WRITE TEST ${label} differences (${lines.length}):\n${lines.join('\n') || 'none'}`);
-      loadPreset(readback);
-      setLoadError(summarizeWriteFidelity(label, readback.patchName, result));
+      const saved = await writeChecked(midiDevice, sent, slot,
+        (differences) => `${label} didn’t take the editor’s patch (${differences})`, missed);
+      loadPreset(saved);
+      setLoadError(missed.length === 0 ? null
+        : `Saved to ${label}. The pedal kept ${missed.length} value(s) its own way: ${missed.join('; ')}`);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
-      setLoadError(`WRITE TEST ${label} failed: ${detail}`);
+      setLoadError(`SAVE to ${label} failed: ${detail}`);
     }
   }
 
@@ -1375,7 +1376,7 @@ function App() {
         bank64Protected={bank64Protected}
         onProtectBank64={handleProtectBank64}
         onReleaseBank64={handleReleaseBank64}
-        onWriteTest={handleWriteTest}
+        onSaveEditorToPedal={handleSaveEditorToPedal}
         onSaveBank64={handleSaveBank64}
         onRestoreBank64={handleRestoreBank64}
         bank64SavedAt={bank64SavedAt}

@@ -62,9 +62,10 @@ export interface PatchManagerSheetProps {
   onRestoreBank64?: (source: 'browser' | { text: string }) => Promise<void>;
   /** When the last SAVE 64 in this browser was made (ISO), or null. */
   bank64SavedAt?: string | null;
-  /** EXPERIMENT: write the editor's patch into a slot from app data. */
-  onWriteTest?: (slot: number) => Promise<void>;
-  /** The patch in the editor, named in WRITE TEST's confirm. */
+  /** SAVE: write the editor's patch into this slot on the pedal (the pedal's
+   *  current slot), so the pedal matches the editor. */
+  onSaveEditorToPedal?: (slot: number) => Promise<void>;
+  /** The patch in the editor, named in SAVE's confirm. */
   editorPatchName?: string | null;
   /** The copied slots, in paste order (empty when nothing is copied). */
   clipboardSlots?: number[];
@@ -144,7 +145,7 @@ export function PatchManagerSheet({
   bank64Protected = false,
   onProtectBank64,
   onReleaseBank64,
-  onWriteTest,
+  onSaveEditorToPedal,
   editorPatchName = null,
   onSaveBank64,
   onRestoreBank64,
@@ -189,7 +190,7 @@ export function PatchManagerSheet({
 
   const selectedSlots = slotsOf(selection);
   const [confirmingProtect, setConfirmingProtect] = useState(false);
-  const [confirmingWriteTest, setConfirmingWriteTest] = useState(false);
+  const [confirmingSave, setConfirmingSave] = useState(false);
   const [choosingRestore, setChoosingRestore] = useState(false);
   const restoreFileRef = useRef<HTMLInputElement>(null);
 
@@ -397,16 +398,6 @@ export function PatchManagerSheet({
             syncing…
           </span>
         )}
-        <button
-          type="button"
-          onClick={onRefreshNames}
-          disabled={!connected || namesLoading || namesSyncing || bulkRunning}
-          className="font-mono-display text-caption px-2 py-0.5 rounded disabled:opacity-40"
-          style={{ border: '1px solid rgba(0,0,0,0.20)', color: 'var(--text-muted)' }}
-          title="Re-read all slot names from the device"
-        >
-          REFRESH
-        </button>
         <button
           type="button"
           onClick={onClose}
@@ -723,17 +714,26 @@ export function PatchManagerSheet({
               RESTORE 64
             </Button>
           )}
-          {onWriteTest && (
+          {onSaveEditorToPedal && (
             <Button
               size="sm"
               variant="secondary"
-              disabled={actionsDisabled || editorPatchName === null || selectedSlots.length !== 1 || confirmingWriteTest}
-              onClick={() => setConfirmingWriteTest(true)}
-              title="Experiment: write the editor's patch into this slot from app data, then compare what the pedal kept"
+              disabled={!connected || currentSlot === null || editorPatchName === null || busy || bulkRunning || confirmingSave}
+              onClick={() => setConfirmingSave(true)}
+              title={`Make the pedal match the editor: write the editor's patch into ${currentLabel}`}
             >
-              WRITE TEST
+              SAVE
             </Button>
           )}
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={onRefreshNames}
+            disabled={!connected || namesLoading || namesSyncing || bulkRunning}
+            title="Make the list match the pedal: re-read every slot name"
+          >
+            REFRESH
+          </Button>
         </div>
         {onRestoreBank64 && choosingRestore && (
           <div
@@ -777,27 +777,27 @@ export function PatchManagerSheet({
             />
           </div>
         )}
-        {onWriteTest && confirmingWriteTest && selected !== null && (
+        {onSaveEditorToPedal && confirmingSave && currentSlot !== null && (
           <div
             role="alertdialog"
-            aria-label="Confirm write test"
+            aria-label="Confirm save to pedal"
             className="flex items-center gap-2 flex-wrap font-mono-display text-caption"
           >
             <span style={{ color: 'var(--text-primary)' }}>
-              Experiment: overwrite {selectedLabel} with the editor’s patch “{editorPatchName}”?
+              Save the editor’s patch “{editorPatchName}” into {currentLabel} on the pedal? It replaces what {currentLabel} holds.
             </span>
-            <Button size="sm" variant="ghost" onClick={() => setConfirmingWriteTest(false)}>
+            <Button size="sm" variant="ghost" onClick={() => setConfirmingSave(false)}>
               Cancel
             </Button>
             <Button
               size="sm"
               autoFocus
               onClick={() => {
-                setConfirmingWriteTest(false);
-                void runBusy(() => onWriteTest(selected));
+                setConfirmingSave(false);
+                void runBusy(() => onSaveEditorToPedal(currentSlot));
               }}
             >
-              Write
+              Save
             </Button>
           </div>
         )}

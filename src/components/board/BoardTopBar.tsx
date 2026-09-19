@@ -326,6 +326,18 @@ export function BoardTopBar({
             <span className="db-label">CONNECT GP-200</span>
           </button>
         )}
+        {/* Reload the page, re-checking every file with the server (the
+            closest a page can get to Ctrl+Shift+R: browsers don't let it
+            clear its own cache, but the dev server marks app code no-cache). */}
+        <button
+          type="button"
+          className="deck-btn quiet"
+          title="Reload the app (like Ctrl+Shift+R)"
+          aria-label="Reload the app"
+          onClick={() => window.location.reload()}
+        >
+          <ActionIcon name="reload" />
+        </button>
         <a
           className="deck-btn quiet"
           href={COFFEE_URL}

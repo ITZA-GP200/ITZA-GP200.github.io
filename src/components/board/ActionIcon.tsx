@@ -67,6 +67,11 @@ const ACTIONS: Record<string, ActionSpec> = {
     d: '<path d="m4.2 4.2 7.6 7.6M11.8 4.2l-7.6 7.6" />',
     color: '#b4423a',
   },
+  // reload the app (the owner's Ctrl+Shift+R shortcut): a lightning bolt
+  reload: {
+    d: '<path d="M9.2 1.8 3.8 9h4.1l-1.1 5.2L12.2 7H8.1z" />',
+    color: '#2563b0',
+  },
   // guide
   guide: {
     d: '<circle cx="8" cy="8" r="5.8" /><path d="M6.3 6.2a1.8 1.8 0 1 1 2.3 2.2c-.4.2-.6.5-.6.9v.3" /><path d="M8 12.1h.01" />',
