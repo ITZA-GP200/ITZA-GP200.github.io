@@ -8,8 +8,9 @@ editor's **PATCHES** slide-out. Free and open source under GPL-3.0, like the
 original. Built and hardware-tested on one GP-200 (firmware 1.8.0), Windows 11
 and Chrome.
 
-Version 1.1.0 (cleanup round, in progress). Version 1.0: 19 September 2026 (tag
-`fork2-done-2026-09-19`). See [CHANGELOG.md](CHANGELOG.md).
+Version 1.0.0: 19 September 2026 (tags `v1.0.0`, `fork2-done-2026-09-19`); 1.0.1 in
+progress. See [CHANGELOG.md](CHANGELOG.md) (versions are X.Y.Z: major feature /
+functional / iterative).
 
 ## What this fork adds
 
