@@ -39,7 +39,7 @@ latest Chrome and a GP-200 on firmware 1.8.0.
 
 ## The PATCHES slide-out
 
-- Open with **PATCHES** (top row). **now: 63C** = the slot the pedal is on.
+- Open with **PATCHES** (top row). **active: 63C** = the slot the pedal is on.
 - Select: click; **Shift-click** a range; **Ctrl-click** (⌘ on Mac) single
   patches; **SELECT BANK**; **CLEAR**. **Double-click** a row to switch the pedal
   to it and open it.

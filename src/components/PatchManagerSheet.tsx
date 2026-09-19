@@ -74,7 +74,7 @@ export interface PatchManagerSheetProps {
   /** SAVE: write the editor's patch into this slot on the pedal (the pedal's
    *  current slot), so the pedal matches the editor. */
   onSaveEditorToPedal?: (slot: number) => Promise<void>;
-  /** SAVE PATCH: commit the pedal's edit buffer to this slot (the NOW
+  /** SAVE PATCH: commit the pedal's edit buffer to this slot (the ACTIVE
    *  slot) under the editor's name, like SAVE on the pedal. Quick. */
   onSavePatch?: (slot: number) => Promise<void>;
   /** The patch in the editor, named in SAVE's confirm. */
@@ -474,7 +474,7 @@ export function PatchManagerSheet({
           className="font-mono-display text-caption"
           style={{ color: 'var(--text-muted)' }}
         >
-          now: {currentLabel}
+          active: {currentLabel}
         </span>
         {namesSyncing && !namesLoading && (
           <span

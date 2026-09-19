@@ -45,7 +45,7 @@ describe('PatchManagerSheet', () => {
     renderSheet();
     expect(screen.getByText('Clean')).toBeTruthy();
     expect(screen.getByText('American Idiot')).toBeTruthy();
-    expect(screen.getByText('now: 1A')).toBeTruthy();
+    expect(screen.getByText('active: 1A')).toBeTruthy();
   });
 
   it('filters slots via search', () => {
