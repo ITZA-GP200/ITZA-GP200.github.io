@@ -869,3 +869,32 @@ describe('PatchManagerSheet: UNDO / REDO', () => {
     expect(onUndo).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('PatchManagerSheet: importing files', () => {
+  const prst = () => new File([new Uint8Array([1, 2, 3])], 'My Tone.prst');
+
+  it('FILE > IMPORT .PRST loads into the editor, then asks before saving it into the pedal’s slot', async () => {
+    const onImportFile = vi.fn();
+    const onImportToSlot = vi.fn().mockResolvedValue(undefined);
+    const { container } = renderSheet({ onImportFile, onImportToSlot, currentSlot: 1 });
+    const input = container.ownerDocument.querySelector<HTMLInputElement>('input[type="file"][accept=".prst"]')!;
+    fireEvent.change(input, { target: { files: [prst()] } });
+    const ask = await screen.findByRole('alertdialog', { name: 'Save import to pedal' });
+    expect(onImportFile).toHaveBeenCalledTimes(1);
+    expect(ask).toHaveTextContent('“My Tone” is in the editor. Also save it into 1B on the pedal? It replaces “Crunch”.');
+    expect(onImportToSlot).not.toHaveBeenCalled();
+    fireEvent.click(within(ask).getByRole('button', { name: 'Save to 1B' }));
+    expect(onImportToSlot).toHaveBeenCalledWith(1, expect.any(Uint8Array));
+  });
+
+  it('“Editor only” leaves the pedal alone', async () => {
+    const onImportToSlot = vi.fn();
+    const { container } = renderSheet({ onImportToSlot, currentSlot: 1 });
+    const input = container.ownerDocument.querySelector<HTMLInputElement>('input[type="file"][accept=".prst"]')!;
+    fireEvent.change(input, { target: { files: [prst()] } });
+    fireEvent.click(within(await screen.findByRole('alertdialog', { name: 'Save import to pedal' }))
+      .getByRole('button', { name: 'Editor only' }));
+    expect(onImportToSlot).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alertdialog', { name: 'Save import to pedal' })).toBeNull();
+  });
+});

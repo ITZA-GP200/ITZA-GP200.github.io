@@ -523,9 +523,6 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [midiDevice.status]);
 
-  // Stable reference (useCallback([]) inside useMidiDevice), safe to close over.
-  const saveToSlot = midiDevice.saveToSlot;
-  const refreshSlotName = midiDevice.refreshSlotName;
   const handleFile = useCallback((buffer: Uint8Array) => {
     try {
       const decoded = new PRSTDecoder(buffer).decode();
@@ -533,26 +530,18 @@ function App() {
       loadPreset(decoded);
       setLoadError(null);
       track('preset_import', { target: 'editor', ok: true });
-      // Live-push the import, then commit it to the active slot (the SAVE
-      // flow), so an import lands on the pedal permanently without a
-      // separate save step. Both no-op while disconnected; saveToSlot
-      // resolves the active slot from its own ref, so no stale closure.
-      // CTRL footswitch masks ride along: pushPresetToDevice writes all 8
-      // records in its tail pass, so the save-commit picks them up too.
-      void (async () => {
-        await sendPresetToDevice(decoded);
-        await new Promise((settle) => setTimeout(settle, 250));
-        await saveToSlot(decoded.patchName);
-        // The save doesn't touch the Patch Manager's list; read the name back.
-        await refreshSlotName();
-      })().catch(() => setLoadError('Failed to save to device'));
+      // Into the editor, and live on the pedal so it can be heard (not saved).
+      // The Patch Manager then asks whether to save it into the pedal's
+      // current slot too (handleImportToSlot's checked write), rather than
+      // overwriting that slot unasked.
+      void sendPresetToDevice(decoded).catch(() => {});
     } catch (err) {
       let message = String(err);
       if (err instanceof Error) message = err.message;
       setLoadError(`Error loading file: ${message}`);
       track('preset_import', { target: 'editor', ok: false });
     }
-  }, [loadPreset, sendPresetToDevice, saveToSlot, refreshSlotName, markEditorEntry]);
+  }, [loadPreset, sendPresetToDevice, markEditorEntry]);
 
   function handleExportConfirm(name: string, author: string | undefined, slot: number) {
     if (!preset) return;
@@ -649,11 +638,22 @@ function App() {
   async function handleImportToSlot(slot: number, bytes: Uint8Array) {
     try {
       const decoded = new PRSTDecoder(bytes).decode();
-      // Flash-upload path (chunked 0x12/0x20, mirrors the official editor):
-      // full fidelity including the CTRL/EXP controls tail, and much faster
-      // than the per-parameter writePresetToSlot fallback.
-      await midiDevice.pushPreset(decoded, slot);
-      setLoadError(null);
+      const label = SysExCodec.slotToLabel(slot);
+      await stopLivePreview();
+      if (bank64Protected && slot === PROTECTED_SWAP_SLOT) throw new Error('Bank 64 is protected: 64D is the swap slot');
+      // The checked write from app data (live push + save, read back, retried
+      // once), as SAVE and RESTORE 64 use. The flash upload used here before
+      // is ignored by the pedal (fw 1.8.0). A protected slot keeps its name.
+      const sent = { ...decoded };
+      const fixedName = bank64Protected ? protectedNameFor(slot) : undefined;
+      if (fixedName) sent.patchName = fixedName;
+      const missed: string[] = [];
+      const written = await writeChecked(midiDevice, sent, slot,
+        (differences) => `${label} didn’t take the file (${differences})`, missed);
+      loadPreset(written);
+      await refreshDefaultIfTouched([slot]);
+      setLoadError(missed.length === 0 ? null
+        : `Imported into ${label}. The pedal kept ${missed.length} value(s) its own way: ${missed.join('; ')}`);
       track('preset_import', { target: 'slot', ok: true });
     } catch (err) {
       let detail = String(err);
@@ -898,10 +898,12 @@ function App() {
     const fixedName = bank64Protected ? protectedNameFor(slot) : undefined;
     if (fixedName) sent.patchName = fixedName;
     const missed: string[] = [];
+    await stopLivePreview();
     try {
       const saved = await writeChecked(midiDevice, sent, slot,
         (differences) => `${label} didn’t take the editor’s patch (${differences})`, missed);
       loadPreset(saved);
+      await refreshDefaultIfTouched([slot]);
       setLoadError(missed.length === 0 ? null
         : `Saved to ${label}. The pedal kept ${missed.length} value(s) its own way: ${missed.join('; ')}`);
     } catch (err) {
@@ -1066,6 +1068,32 @@ function App() {
     if (!bank64Protected) return handleSetDefaultPatch(slot);
     return withOverwriteHistory(`Use ${slotLabel(slot)} for default patch (64C)`, [PROTECTED_DEFAULT_SLOT],
       () => handleSetDefaultPatch(slot));
+  }
+
+  // Stop a live preview still being sent (an imported file), so it can't
+  // interleave with a write. It checks for the stop only between effect
+  // blocks, so give its last block time to finish (up to ~15 knobs x 40 ms).
+  async function stopLivePreview() {
+    if (!pushAbortRef.current) return;
+    pushAbortRef.current.abort();
+    await new Promise((settle) => setTimeout(settle, 700));
+  }
+
+  // When an action writes the default patch's slot, re-read the default so
+  // RESET copies what's really there (and doesn't refuse it as changed).
+  async function refreshDefaultIfTouched(slots: number[]) {
+    if (!defaultPatch || !slots.includes(defaultPatch.slot)) return;
+    try {
+      const next = { slot: defaultPatch.slot, preset: await midiDevice.pullPreset(defaultPatch.slot) };
+      saveDefaultPatch(next);
+      setDefaultPatch(next);
+    } catch {
+      // Unreadable just now: RESET will say the default changed, and why.
+    }
+  }
+
+  function recordedImport(slot: number, bytes: Uint8Array) {
+    return withOverwriteHistory(`Import into ${slotLabel(slot)}`, [slot], () => handleImportToSlot(slot, bytes));
   }
 
   function recordedSaveToPedal(slot: number) {
@@ -1506,7 +1534,7 @@ function App() {
         onExportSlots={handleExportSlots}
         bulkProgress={bulkProgress}
         onCancelBulk={() => { bulkCancelRef.current = true; }}
-        onImportToSlot={handleImportToSlot}
+        onImportToSlot={recordedImport}
         onCopySlot={handleCopySlot}
         onCopySlots={handleCopySlots}
         onPasteToSlot={recordedPaste}

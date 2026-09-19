@@ -189,6 +189,10 @@ export function PatchManagerSheet({
   const [busy, setBusy] = useState(false);
   const [confirmImportSlot, setConfirmImportSlot] = useState<number | null>(null);
   const pendingImportRef = useRef<Uint8Array | null>(null);
+  // FILE > IMPORT .PRST: the file just loaded into the editor, waiting on
+  // "save it into the pedal's current slot too?"
+  const pendingEditorImportRef = useRef<{ bytes: Uint8Array; name: string } | null>(null);
+  const [confirmEditorImport, setConfirmEditorImport] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editorFileInputRef = useRef<HTMLInputElement>(null);
   // Where the right-click menu is open, or null.
@@ -382,7 +386,13 @@ export function PatchManagerSheet({
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
-      onImportFile(new Uint8Array(ev.target!.result as ArrayBuffer));
+      const bytes = new Uint8Array(ev.target!.result as ArrayBuffer);
+      onImportFile(bytes);
+      // Then ask whether the pedal's current slot should get it too.
+      if (connected && currentSlot !== null) {
+        pendingEditorImportRef.current = { bytes, name: file.name.replace(/\.prst$/i, '') };
+        setConfirmEditorImport(true);
+      }
       onClose();
     };
     reader.readAsArrayBuffer(file);
@@ -456,7 +466,7 @@ export function PatchManagerSheet({
           size="sm"
           variant="secondary"
           onClick={() => editorFileInputRef.current?.click()}
-          title="Load a .prst file into the editor (pushes + saves to the pedal when connected)"
+          title="Load a .prst file into the editor, then choose whether to save it into the pedal's current slot"
         >
           IMPORT .PRST
         </Button>
@@ -1038,8 +1048,7 @@ export function PatchManagerSheet({
         >
           <p className="font-mono-display text-sm mb-2" style={{ color: 'var(--text-primary)' }}>
             Overwrite {SysExCodec.slotToLabel(confirmImportSlot)}
-            {' '}“{presetNames[confirmImportSlot] ?? '-'}” on the device?
-            This cannot be undone.
+            {' '}“{presetNames[confirmImportSlot] ?? '-'}” on the pedal with the file? UNDO can reverse it.
           </p>
           <div className="flex justify-end gap-2">
             <Button
@@ -1051,6 +1060,42 @@ export function PatchManagerSheet({
             </Button>
             <Button size="sm" variant="danger" onClick={() => void confirmImport()}>
               Overwrite
+            </Button>
+          </div>
+        </div>
+      )}
+      {confirmEditorImport && currentSlot !== null && (
+        <div
+          role="alertdialog"
+          aria-label="Save import to pedal"
+          className="px-4 py-3 flex-shrink-0"
+          style={{ borderTop: '1px solid var(--accent)' }}
+        >
+          <p className="font-mono-display text-sm mb-2" style={{ color: 'var(--text-primary)' }}>
+            “{pendingEditorImportRef.current?.name}” is in the editor. Also save it into {currentLabel} on the
+            pedal? It replaces “{presetNames[currentSlot] ?? '-'}”.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setConfirmEditorImport(false);
+                pendingEditorImportRef.current = null;
+              }}
+            >
+              Editor only
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                const pending = pendingEditorImportRef.current;
+                setConfirmEditorImport(false);
+                pendingEditorImportRef.current = null;
+                if (pending) void runBusy(() => onImportToSlot(currentSlot, pending.bytes));
+              }}
+            >
+              Save to {currentLabel}
             </Button>
           </div>
         </div>
