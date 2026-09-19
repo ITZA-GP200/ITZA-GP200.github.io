@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/Button';
 /**
  * Right-click menu for the Patch Manager's slot list, laid out per the
  * "Patch List Context Menu" design handoff: selection and clipboard info, then
- * UNDO/REDO, COPY/CUT, PASTE ▸ (Overwrite / Insert / Swap), INSERT ▸, then the
+ * UNDO/REDO, COPY/CUT, PASTE ▸ (Overwrite / Swap), then the
  * slot tools (RENAME, SET AS DEFAULT PATCH, USE FOR SWAP SLOT) and RESET.
  *
  * Only actions that are built and hardware-verified are live. The rest are
@@ -319,8 +319,6 @@ export function PatchContextMenu({
               }}
             />
             <Divider />
-            <MenuItem label="INSERT" trailing="▸" blocked={NOT_BUILT} />
-            <Divider />
             <MenuItem label="RENAME" blocked={renameBlocked} onSelect={onRename} />
             {defaultInSlot === null
               ? <MenuItem label="SET AS DEFAULT PATCH" blocked={setDefaultBlocked} onSelect={onSetDefault} />
@@ -367,7 +365,6 @@ export function PatchContextMenu({
               checked={pasteMethod === 'overwrite'}
               onSelect={() => setPasteMethod('overwrite')}
             />
-            <PasteOption label="INSERT" description="Shifts the list down · last patch lost" blocked={NOT_BUILT} />
             <PasteOption
               label="SWAP"
               description={swapDescription}
