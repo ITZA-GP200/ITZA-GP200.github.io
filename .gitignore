@@ -23,7 +23,9 @@ CLAUDE.md
 .claude/
 
 # Internal notes and local fixtures (kept out of the public repo)
-docs/
+# (docs/* rather than docs/, so the fork's public docs can be re-included)
+docs/*
+!docs/fork/
 mockups/
 prst/
 
