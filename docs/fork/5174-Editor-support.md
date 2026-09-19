@@ -43,7 +43,7 @@ latest Chrome and a GP-200 on firmware 1.8.0.
 - Select: click; **Shift-click** a range; **Ctrl-click** (⌘ on Mac) single
   patches; **SELECT BANK**; **CLEAR**. **Double-click** a row to switch the pedal
   to it and open it.
-- Row tags: **NOW**, **DEFAULT PATCH**, **SWAP SLOT**. Protected bank 64 shows
+- Row tags: **ACTIVE**, **DEFAULT PATCH**, **SWAP SLOT**. Protected bank 64 shows
   red, labelled PROTECTED.
 - **Right-click** a patch: UNDO, REDO, SWAP (only with exactly two selected),
   COPY, CUT, PASTE ▸, RENAME, SET AS DEFAULT PATCH (USE FOR DEFAULT PATCH (64C)
@@ -80,9 +80,9 @@ when protected), then right-click a slot → RESET → confirm.
 slide-out is open. Last 20 actions, cleared on reload or disconnect. Hover shows
 what it will reverse. COPY and CUT alone aren't undoable.
 
-**Save**: **SAVE PATCH** stores what you're playing into the NOW slot (quick,
+**Save**: **SAVE PATCH** stores what you're playing into the ACTIVE slot (quick,
 like SAVE on the pedal; same as SAVE TO at the editor's bottom right). **SAVE
-ALL** writes every setting of the editor's patch into the NOW slot and checks it
+ALL** writes every setting of the editor's patch into the ACTIVE slot and checks it
 (10–20 s): use it if the pedal might not match the editor. Unsaved changes are
 lost when you switch patches, and a new name reaches the pedal only on save.
 
