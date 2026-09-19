@@ -47,6 +47,18 @@ export interface PatchContextMenuProps {
   clipboardLabel: string | null;
   /** Why COPY can't run right now, or null when it can. */
   copyBlocked: string | null;
+  /** Why CUT can't run right now, or null when it can. */
+  cutBlocked?: string | null;
+  onCut?: () => void;
+  /** The clipboard holds a CUT patch (the clip line says so). */
+  clipboardIsCut?: boolean;
+  /** What UNDO / REDO would reverse ("Paste into 61A–61D"), or null. */
+  undoLabel?: string | null;
+  redoLabel?: string | null;
+  /** Why UNDO / REDO can't run right now (busy, not connected), or null. */
+  historyBlocked?: string | null;
+  onUndo?: () => void;
+  onRedo?: () => void;
   /** Why PASTE can't run right now, or null when it can. */
   pasteBlocked: string | null;
   onCopy: () => void;
@@ -99,6 +111,14 @@ export function PatchContextMenu({
   selectionLabel,
   clipboardLabel,
   copyBlocked,
+  cutBlocked = NOT_BUILT,
+  onCut,
+  clipboardIsCut = false,
+  undoLabel = null,
+  redoLabel = null,
+  historyBlocked = null,
+  onUndo,
+  onRedo,
   pasteBlocked,
   onCopy,
   onPaste,
@@ -261,7 +281,7 @@ export function PatchContextMenu({
         </div>
         {clipboardLabel !== null && (
           <div className="text-caption px-2 pb-1.5" style={{ color: 'var(--accent)' }}>
-            clip: {clipboardLabel} · {patchCount(clipboardCount)}
+            {clipboardIsCut ? 'cut' : 'clip'}: {clipboardLabel} · {patchCount(clipboardCount)}
           </div>
         )}
         {confirming === 'reset' && (
@@ -301,11 +321,21 @@ export function PatchContextMenu({
         {confirming === null && (
           <>
             <Divider />
-            <MenuItem label="UNDO" blocked={NOT_BUILT} />
-            <MenuItem label="REDO" blocked={NOT_BUILT} />
+            <MenuItem
+              label="UNDO"
+              blocked={onUndo ? (historyBlocked ?? (undoLabel === null ? 'Nothing to undo' : null)) : NOT_BUILT}
+              title={undoLabel ? `Undo: ${undoLabel}` : undefined}
+              onSelect={onUndo}
+            />
+            <MenuItem
+              label="REDO"
+              blocked={onRedo ? (historyBlocked ?? (redoLabel === null ? 'Nothing to redo' : null)) : NOT_BUILT}
+              title={redoLabel ? `Redo: ${redoLabel}` : undefined}
+              onSelect={onRedo}
+            />
             <Divider />
             <MenuItem label="COPY" blocked={copyBlocked} onSelect={onCopy} />
-            <MenuItem label="CUT" danger blocked={NOT_BUILT} />
+            <MenuItem label="CUT" danger blocked={onCut ? cutBlocked : NOT_BUILT} onSelect={onCut} />
             <Divider />
             <MenuItem
               ref={pasteItemRef}
@@ -455,11 +485,13 @@ interface MenuItemProps {
   danger?: boolean;
   expanded?: boolean;
   ref?: Ref<HTMLButtonElement>;
+  /** Tooltip when available (a blocked item shows why instead). */
+  title?: string;
 }
 
 // aria-disabled rather than `disabled`, so the "why not" tooltip still shows
 // on hover (browsers suppress tooltips on disabled buttons).
-function MenuItem({ label, blocked, onSelect, trailing, danger = false, expanded, ref }: MenuItemProps) {
+function MenuItem({ label, blocked, onSelect, trailing, danger = false, expanded, ref, title }: MenuItemProps) {
   const available = blocked === null;
   let color = 'var(--text-primary)';
   if (danger) color = 'var(--accent-red)';
@@ -472,7 +504,7 @@ function MenuItem({ label, blocked, onSelect, trailing, danger = false, expanded
       aria-disabled={!available}
       aria-haspopup={trailing ? 'dialog' : undefined}
       aria-expanded={expanded}
-      title={blocked ?? undefined}
+      title={blocked ?? title}
       onClick={() => {
         if (available) onSelect?.();
       }}

@@ -46,6 +46,15 @@ export interface PatchManagerSheetProps {
   onCopySlots?: (slots: number[], label: string) => Promise<void>;
   /** Write the clipboard into a slot. */
   onPasteToSlot: (slot: number) => Promise<void>;
+  /** CUT one patch: copied like COPY; PASTE ▸ OVERWRITE then resets it. */
+  onCutSlot?: (slot: number) => Promise<void>;
+  /** The clipboard holds a CUT patch. */
+  clipboardIsCut?: boolean;
+  /** What UNDO / REDO would reverse ("Paste into 61A–61D"), or null. */
+  undoLabel?: string | null;
+  redoLabel?: string | null;
+  onUndo?: () => Promise<void>;
+  onRedo?: () => Promise<void>;
   /** Exchange the contents of two slots. */
   onSwapSlots: (first: number, second: number) => Promise<boolean | void>;
   /** Label of whatever is on the clipboard, or null when it is empty. */
@@ -139,6 +148,12 @@ export function PatchManagerSheet({
   onCopySlot,
   onCopySlots,
   onPasteToSlot,
+  onCutSlot,
+  clipboardIsCut = false,
+  undoLabel = null,
+  redoLabel = null,
+  onUndo,
+  onRedo,
   onSwapSlots,
   clipboardLabel,
   clipboardSlots = [],
@@ -227,6 +242,9 @@ export function PatchManagerSheet({
   if (!pasteBlocked && selected !== null && clipboardSlots.length > 0) {
     pasteBlocked = pasteProblem(clipboardSlots, selected, bank64Protected);
   }
+  if (!pasteBlocked && clipboardIsCut && selected !== null && clipboardSlots[0] === selected) {
+    pasteBlocked = 'The cut patch is already here';
+  }
   const clipboardCount = clipboardSlots.length || (clipboardLabel === null ? 0 : 1);
   let renameBlocked = slotActionBlocked;
   if (!renameBlocked && selectedSlots.length !== 1) renameBlocked = 'Rename works on one patch at a time';
@@ -265,6 +283,20 @@ export function PatchManagerSheet({
   if (!swapBlocked && (selectedLabel === swapSlotLabel || clipboardLabel === swapSlotLabel)) {
     swapBlocked = 'The swap slot can’t take part in a swap';
   }
+  // CUT: one patch; the default and swap slots stay put; OVERWRITE resets the
+  // source to the default patch, so one must be set.
+  let cutBlocked = slotActionBlocked;
+  if (!cutBlocked && selectedSlots.length !== 1) cutBlocked = 'Cut works on one patch at a time';
+  if (!cutBlocked && selected !== null && inBank64(selected)) cutBlocked = BANK64_NAMES_FIXED;
+  if (!cutBlocked && selectedLabel === defaultPatchLabel) cutBlocked = 'We can’t cut the default patch';
+  if (!cutBlocked && selectedLabel === swapSlotLabel) cutBlocked = 'The swap slot can’t be cut';
+  if (!cutBlocked && defaultPatchLabel === null) {
+    cutBlocked = 'Set a default patch first: CUT resets the emptied slot to it';
+  }
+  let historyBlocked: string | null = null;
+  if (!connected) historyBlocked = 'Connect the GP-200 first';
+  else if (busy || bulkRunning) historyBlocked = 'Wait for the current action to finish';
+
   let resetBlocked = onResetSlot ? slotActionBlocked : 'Not built yet';
   if (!resetBlocked && defaultPatchLabel === null) {
     resetBlocked = 'Set a default patch first: right-click a patch, then SET AS DEFAULT PATCH';
@@ -1034,6 +1066,23 @@ export function PatchManagerSheet({
         clipboardCount={clipboardCount}
         pasteRangeLabel={selected !== null ? describeRange(selected, clipboardCount) : undefined}
         copyBlocked={copyBlocked}
+        cutBlocked={cutBlocked}
+        onCut={onCutSlot ? () => {
+          setMenuAt(null);
+          if (selected !== null) void runBusy(() => onCutSlot(selected));
+        } : undefined}
+        clipboardIsCut={clipboardIsCut}
+        undoLabel={undoLabel}
+        redoLabel={redoLabel}
+        historyBlocked={historyBlocked}
+        onUndo={onUndo ? () => {
+          setMenuAt(null);
+          void runBusy(onUndo);
+        } : undefined}
+        onRedo={onRedo ? () => {
+          setMenuAt(null);
+          void runBusy(onRedo);
+        } : undefined}
         pasteBlocked={pasteBlocked}
         onCopy={() => {
           setMenuAt(null);

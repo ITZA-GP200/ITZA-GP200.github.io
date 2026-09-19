@@ -6,6 +6,14 @@ import { useMidiDevice } from '@/hooks/useMidiDevice';
 import { SourceChangedError } from '@/core/samePatch';
 import { swapThroughScratch } from '@/core/swapThrough';
 import { describeRange, pasteMany, type ClipItem } from '@/core/multiPaste';
+import {
+  applyHistory,
+  EMPTY_HISTORY,
+  recordAction,
+  samePatchOnPedal,
+  type History,
+  type UndoDevice,
+} from '@/core/undoHistory';
 import { loadShippedPatch } from '@/core/shippedPatch';
 import {
   BACKUP_SLOTS,
@@ -209,7 +217,11 @@ function App() {
   // `slot` is where the copied patch came from: paste copies it on the pedal
   // from there (see handlePasteToSlot).
   // Copied patches in slot order, each as read at COPY time.
-  const [clipboard, setClipboard] = useState<{ items: ClipItem[]; label: string } | null>(null);
+  // `cut`: CUT, not COPY: after PASTE ▸ OVERWRITE the source is reset to the
+  // default patch.
+  const [clipboard, setClipboard] = useState<{ items: ClipItem[]; label: string; cut?: boolean } | null>(null);
+  // UNDO / REDO of Patch Manager actions, this session only (core/undoHistory).
+  const [history, setHistory] = useState<History>(EMPTY_HISTORY);
   // The template RESET copies (see core/defaultPatch.ts), kept across reloads.
   const [defaultPatch, setDefaultPatch] = useState(loadDefaultPatch);
   // Scratch space swaps copy through (see core/swapSlot.ts), kept across reloads.
@@ -395,6 +407,11 @@ function App() {
     const id = setTimeout(() => setPushProgress(null), 2000);
     return () => clearTimeout(id);
   }, [pushProgress]);
+
+  // Undo history is for this session's pedal: clear it when the device drops.
+  useEffect(() => {
+    if (midiDevice.status !== 'connected') setHistory(EMPTY_HISTORY);
+  }, [midiDevice.status]);
 
   // Abort an in-flight push the moment the device drops.
   useEffect(() => {
@@ -657,7 +674,7 @@ function App() {
 
   // COPY of several slots reads each one now, so PASTE can refuse any that
   // change before it runs.
-  async function handleCopySlots(slots: number[], label: string) {
+  async function handleCopySlots(slots: number[], label: string, cut = false) {
     const items: ClipItem[] = [];
     for (const slot of [...slots].sort((a, b) => a - b)) {
       try {
@@ -667,8 +684,13 @@ function App() {
         return;
       }
     }
-    setClipboard({ items, label });
+    setClipboard({ items, label, cut });
     setLoadError(null);
+  }
+
+  // CUT: like COPY (one patch); PASTE ▸ OVERWRITE then resets the source.
+  async function handleCutSlot(slot: number) {
+    await handleCopySlots([slot], SysExCodec.slotToLabel(slot), true);
   }
 
   // PASTE is the pedal's own copy, as the official editor does it: select the
@@ -697,6 +719,13 @@ function App() {
         const next = { slot: PROTECTED_DEFAULT_SLOT, preset: await midiDevice.pullPreset(PROTECTED_DEFAULT_SLOT) };
         saveDefaultPatch(next);
         setDefaultPatch(next);
+      }
+      // CUT: the patch has moved, so reset where it came from to the default.
+      if (clipboard.cut && !result.stopped && result.done === items.length && defaultPatch) {
+        const source = items[0].slot;
+        await midiDevice.copySlotOnDevice(defaultPatch.slot, source, defaultPatch.preset, DEFAULT_PATCH_NAME);
+        setClipboard(null);
+        if (result.last) loadPreset(result.last);
       }
       if (result.stopped) {
         const pasted = result.done === 0 ? 'nothing pasted' : `${describeRange(slot, result.done)} pasted`;
@@ -807,8 +836,8 @@ function App() {
   }
 
   // PASTE ▸ SWAP: the copied patch and the target change places.
-  async function handleSwapWithClipboard(slot: number) {
-    if (!clipboard) return;
+  async function handleSwapWithClipboard(slot: number): Promise<boolean> {
+    if (!clipboard) return false;
     try {
       if (clipboard.items.length !== 1) throw new Error('Swap works with one copied patch');
       const [copied] = clipboard.items;
@@ -817,10 +846,12 @@ function App() {
       // The copied slot now holds the other patch, so the clipboard is stale.
       setClipboard(null);
       setLoadError(warning);
+      return true;
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       const advice = err instanceof SourceChangedError ? '; copy it again, then swap' : '';
       setLoadError(`Failed to swap ${clipboard.label} and ${SysExCodec.slotToLabel(slot)}: ${detail}${advice}`);
+      return false;
     }
   }
 
@@ -946,12 +977,134 @@ function App() {
     setLoadError(null);
   }
 
-  async function handleRenameSlot(slot: number, name: string) {
+  async function handleRenameSlot(slot: number, name: string): Promise<boolean> {
     try {
       await midiDevice.renameSlot(slot, name);
       setLoadError(null);
+      return true;
     } catch {
       setLoadError(`Failed to rename ${SysExCodec.slotToLabel(slot)}`);
+      return false;
+    }
+  }
+
+  // ── UNDO / REDO ──────────────────────────────────────────────────────
+  // Each Patch Manager action is wrapped so it can be undone: overwrites read
+  // the slots they'll change first and again after, and record only the slots
+  // that really changed (a cancelled or failed action records what happened).
+  async function readSlots(slots: number[]): Promise<GP200Preset[] | null> {
+    try {
+      const out: GP200Preset[] = [];
+      for (const slot of slots) out.push(await midiDevice.pullPreset(slot));
+      return out;
+    } catch {
+      return null; // unreadable: the action still runs, it just can't be undone
+    }
+  }
+
+  async function withOverwriteHistory(label: string, slots: number[], run: () => Promise<unknown>) {
+    const before = await readSlots(slots);
+    await run();
+    if (!before) return;
+    const after = await readSlots(slots);
+    if (!after) return;
+    const changed = slots
+      .map((slot, i) => ({ slot, before: before[i], after: after[i] }))
+      .filter((item) => !samePatchOnPedal(item.after, item.before));
+    if (changed.length > 0) setHistory((h) => recordAction(h, { kind: 'overwrite', label, slots: changed }));
+  }
+
+  async function withSwapHistory(label: string, first: number, second: number, run: () => Promise<boolean>) {
+    if (!(await run())) return false;
+    const after = await readSlots([first, second]);
+    if (after) {
+      setHistory((h) => recordAction(h, {
+        kind: 'swap', label, first, second, firstAfter: after[0], secondAfter: after[1],
+      }));
+    }
+    return true;
+  }
+
+  const slotLabel = (slot: number) => SysExCodec.slotToLabel(slot);
+
+  function recordedPaste(slot: number) {
+    if (!clipboard) return Promise.resolve();
+    const targets = clipboard.items.map((_, i) => slot + i);
+    const slots = clipboard.cut ? [...targets, clipboard.items[0].slot] : targets;
+    const verb = clipboard.cut ? 'Cut & paste' : 'Paste';
+    return withOverwriteHistory(`${verb} into ${describeRange(slot, targets.length)}`, slots, () => handlePasteToSlot(slot));
+  }
+
+  async function recordedSwapWithClipboard(slot: number) {
+    if (!clipboard || clipboard.items.length !== 1) {
+      await handleSwapWithClipboard(slot);
+      return;
+    }
+    const source = clipboard.items[0].slot;
+    await withSwapHistory(`Swap ${slotLabel(source)} and ${slotLabel(slot)}`, source, slot,
+      () => handleSwapWithClipboard(slot));
+  }
+
+  function recordedSwapSlots(first: number, second: number) {
+    return withSwapHistory(`Swap ${slotLabel(first)} and ${slotLabel(second)}`, first, second,
+      () => handleSwapSlots(first, second));
+  }
+
+  async function recordedRename(slot: number, name: string) {
+    const from = midiDevice.presetNames[slot] ?? '';
+    if (await handleRenameSlot(slot, name) && from.trim() !== name.trim()) {
+      setHistory((h) => recordAction(h, { kind: 'rename', label: `Rename ${slotLabel(slot)}`, slot, from, to: name }));
+    }
+  }
+
+  function recordedReset(slot: number) {
+    return withOverwriteHistory(`Reset ${slotLabel(slot)}`, [slot], () => handleResetSlot(slot));
+  }
+
+  function recordedSetDefault(slot: number) {
+    // Only the protected bank's version changes the pedal (it copies into 64C).
+    if (!bank64Protected) return handleSetDefaultPatch(slot);
+    return withOverwriteHistory(`Use ${slotLabel(slot)} for default patch (64C)`, [PROTECTED_DEFAULT_SLOT],
+      () => handleSetDefaultPatch(slot));
+  }
+
+  function recordedSaveToPedal(slot: number) {
+    return withOverwriteHistory(`Save editor to ${slotLabel(slot)}`, [slot], () => handleSaveEditorToPedal(slot));
+  }
+
+  const undoDevice: UndoDevice = {
+    pullPreset: midiDevice.pullPreset,
+    writePresetToSlot: midiDevice.writePresetToSlot,
+    renameSlot: midiDevice.renameSlot,
+    swap: async (first, second) => { await swapOnPedal(first, second); },
+  };
+
+  async function handleHistory(direction: 'undo' | 'redo') {
+    const list = direction === 'undo' ? history.undo : history.redo;
+    const entry = list[list.length - 1];
+    if (!entry || bulkProgress) return;
+    const missed: string[] = [];
+    try {
+      const updated = await applyHistory(undoDevice, entry, direction, missed);
+      setHistory((h) => (direction === 'undo'
+        ? { undo: h.undo.slice(0, -1), redo: [...h.redo, updated] }
+        : { undo: [...h.undo, updated], redo: h.redo.slice(0, -1) }));
+      // If the default patch's slot changed, re-read it so RESET stays in step.
+      let touched: number[];
+      if (updated.kind === 'overwrite') touched = updated.slots.map((item) => item.slot);
+      else if (updated.kind === 'swap') touched = [updated.first, updated.second];
+      else touched = [updated.slot];
+      if (defaultPatch && touched.includes(defaultPatch.slot)) {
+        const next = { slot: defaultPatch.slot, preset: await midiDevice.pullPreset(defaultPatch.slot) };
+        saveDefaultPatch(next);
+        setDefaultPatch(next);
+      }
+      const done = direction === 'undo' ? 'Undone' : 'Redone';
+      setLoadError(missed.length === 0 ? null
+        : `${done}: ${entry.label}. The pedal kept ${missed.length} value(s) its own way: ${missed.join('; ')}`);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      setLoadError(`Couldn’t ${direction} “${entry.label}”: ${detail}`);
     }
   }
 
@@ -1356,27 +1509,33 @@ function App() {
         onImportToSlot={handleImportToSlot}
         onCopySlot={handleCopySlot}
         onCopySlots={handleCopySlots}
-        onPasteToSlot={handlePasteToSlot}
-        onSwapSlots={handleSwapSlots}
+        onPasteToSlot={recordedPaste}
+        onSwapSlots={recordedSwapSlots}
+        onCutSlot={handleCutSlot}
+        clipboardIsCut={clipboard?.cut ?? false}
+        undoLabel={history.undo[history.undo.length - 1]?.label ?? null}
+        redoLabel={history.redo[history.redo.length - 1]?.label ?? null}
+        onUndo={() => handleHistory('undo')}
+        onRedo={() => handleHistory('redo')}
         clipboardLabel={clipboard?.label ?? null}
         clipboardSlots={clipboard?.items.map((item) => item.slot) ?? []}
-        onRenameSlot={handleRenameSlot}
+        onRenameSlot={recordedRename}
         onRefreshNames={() => void midiDevice.refreshNames()}
         onImportFile={handleFile}
         onExportRequest={() => setShowExportDialog(true)}
         userIrNames={midiDevice.userIrNames}
         errorMessage={loadError}
         onDismissError={() => setLoadError(null)}
-        onSetDefaultPatch={handleSetDefaultPatch}
-        onResetSlot={handleResetSlot}
+        onSetDefaultPatch={recordedSetDefault}
+        onResetSlot={recordedReset}
         defaultPatchLabel={defaultPatch ? SysExCodec.slotToLabel(defaultPatch.slot) : null}
         onSetSwapSlot={handleSetSwapSlot}
-        onSwapWithClipboard={handleSwapWithClipboard}
+        onSwapWithClipboard={recordedSwapWithClipboard}
         swapSlotLabel={swapSlot === null ? null : SysExCodec.slotToLabel(swapSlot)}
         bank64Protected={bank64Protected}
         onProtectBank64={handleProtectBank64}
         onReleaseBank64={handleReleaseBank64}
-        onSaveEditorToPedal={handleSaveEditorToPedal}
+        onSaveEditorToPedal={recordedSaveToPedal}
         onSaveBank64={handleSaveBank64}
         onRestoreBank64={handleRestoreBank64}
         bank64SavedAt={bank64SavedAt}
