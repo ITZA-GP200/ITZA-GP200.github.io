@@ -974,3 +974,13 @@ describe('PatchManagerSheet: Ctrl+Z / Ctrl+Y', () => {
     expect(onUndo).not.toHaveBeenCalled();
   });
 });
+
+describe('PatchPicker: the pedal’s current patch', () => {
+  it('is tagged ACTIVE', async () => {
+    const { PatchPicker } = await import('@/components/PatchPicker');
+    render(<PatchPicker presetNames={makeNames()} namesLoadProgress={256} currentSlot={1} selected={null} onSelect={vi.fn()} />);
+    const row = screen.getByText('Crunch').closest('button')!;
+    expect(within(row).getByText('ACTIVE')).toBeTruthy();
+    expect(screen.queryByText('NOW')).toBeNull();
+  });
+});

@@ -8,7 +8,8 @@ editor's **PATCHES** slide-out. Free and open source under GPL-3.0, like the
 original. Built and hardware-tested on one GP-200 (firmware 1.8.0), Windows 11
 and Chrome.
 
-Version 1.0: 19 September 2026 (tag `fork2-done-2026-09-19`).
+Version 1.1.0 (cleanup round, in progress). Version 1.0: 19 September 2026 (tag
+`fork2-done-2026-09-19`). See [CHANGELOG.md](CHANGELOG.md).
 
 ## What this fork adds
 
@@ -35,6 +36,7 @@ Version 1.0: 19 September 2026 (tag `fork2-done-2026-09-19`).
 | [patch-management-guide.html](patch-management-guide.html) | Users: the training guide (open it in a browser) |
 | [5174-Editor-support.md](5174-Editor-support.md) | Users: upload to ChatGPT or Claude to get a support assistant for this editor |
 | [AI-PROJECT-CONTEXT.md](AI-PROJECT-CONTEXT.md) | Developers and AI coding assistants: how the fork works and why |
+| [CHANGELOG.md](CHANGELOG.md) | Everyone: what changed in each version |
 | [lessons-from-fork-1.md](lessons-from-fork-1.md) | Developers: what went wrong in the first attempt |
 | [issue-to-kabir0st-2026-09-19.md](issue-to-kabir0st-2026-09-19.md) | The note posted to the original author, offering the fixes and features upstream |
 | [../../server/contact/README.md](../../server/contact/README.md) | Setting up the contact form on a PHP host |

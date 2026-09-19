@@ -255,7 +255,7 @@ export function PatchPicker({
                     {row.label === swapSlotLabel && (
                       <span className="pp-swap" title="In use for swap slot: swaps overwrite this patch">SWAP SLOT</span>
                     )}
-                    {isCurrent && <span className="pp-now">NOW</span>}
+                    {isCurrent && <span className="pp-now" title="The patch the pedal is on">ACTIVE</span>}
                   </button>
                 );
               })}
