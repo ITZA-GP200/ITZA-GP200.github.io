@@ -762,3 +762,25 @@ describe('PatchManagerSheet: SAVE / RESTORE 64', () => {
     expect(screen.queryByText(/Bank 64 changed on the pedal/)).toBeNull();
   });
 });
+
+describe('PatchManagerSheet: paste options on double-click', () => {
+  it('a double-click runs the option, like selecting it and pressing OK', () => {
+    const { props } = renderSheet({ clipboardLabel: '1A' });
+    fireEvent.contextMenu(screen.getByText('Crunch'), { clientX: 120, clientY: 140 });
+    fireEvent.click(within(screen.getByRole('menu', { name: 'Patch actions' })).getByRole('menuitem', { name: /^PASTE/ }));
+    const overwrite = within(screen.getByRole('dialog', { name: 'Paste options' })).getByRole('radio', { name: /OVERWRITE/ });
+    fireEvent.click(overwrite);
+    expect(props.onPasteToSlot).not.toHaveBeenCalled();
+    fireEvent.doubleClick(overwrite);
+    expect(props.onPasteToSlot).toHaveBeenCalledWith(1);
+  });
+
+  it('a double-click on a greyed option does nothing', () => {
+    const onSwapWithClipboard = vi.fn().mockResolvedValue(undefined);
+    renderSheet({ clipboardLabel: '1A', onSwapWithClipboard });
+    fireEvent.contextMenu(screen.getByText('Crunch'), { clientX: 120, clientY: 140 });
+    fireEvent.click(within(screen.getByRole('menu', { name: 'Patch actions' })).getByRole('menuitem', { name: /^PASTE/ }));
+    fireEvent.doubleClick(within(screen.getByRole('dialog', { name: 'Paste options' })).getByRole('radio', { name: /SWAP/ }));
+    expect(onSwapWithClipboard).not.toHaveBeenCalled();
+  });
+});
