@@ -72,6 +72,11 @@ const ACTIONS: Record<string, ActionSpec> = {
     d: '<path d="M9.2 1.8 3.8 9h4.1l-1.1 5.2L12.2 7H8.1z" />',
     color: '#2563b0',
   },
+  // contact form: an envelope
+  mail: {
+    d: '<rect x="2.2" y="3.6" width="11.6" height="8.8" rx="1.4" /><path d="m2.8 4.6 5.2 4 5.2-4" />',
+    color: '#2f7e4f',
+  },
   // guide
   guide: {
     d: '<circle cx="8" cy="8" r="5.8" /><path d="M6.3 6.2a1.8 1.8 0 1 1 2.3 2.2c-.4.2-.6.5-.6.9v.3" /><path d="M8 12.1h.01" />',

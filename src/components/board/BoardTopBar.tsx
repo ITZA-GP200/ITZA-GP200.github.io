@@ -6,6 +6,7 @@ import { COFFEE_URL } from '../Credits';
 import { ActionIcon } from './ActionIcon';
 import { PowerSwitch, SoundToggle } from './PowerSwitch';
 import { DeckPop } from './DeckPop';
+import { ContactDialog } from '../ContactDialog';
 
 interface BoardTopBarProps {
   connected: boolean;
@@ -118,6 +119,8 @@ export function BoardTopBar({
   // Patch name/author editor, moved up from the deck so patch identity sits with
   // the slot readout it belongs with.
   const [metaOpen, setMetaOpen] = useState(false);
+  // The contact form (feature requests / bug reports).
+  const [contactOpen, setContactOpen] = useState(false);
 
   let slotLabel = '-';
   if (currentSlot !== null) slotLabel = SysExCodec.slotToLabel(currentSlot);
@@ -338,6 +341,16 @@ export function BoardTopBar({
         >
           <ActionIcon name="reload" />
         </button>
+        <button
+          type="button"
+          className="deck-btn quiet"
+          title="Contact: feature requests and bug reports"
+          aria-label="Contact"
+          onClick={() => setContactOpen(true)}
+        >
+          <ActionIcon name="mail" />
+        </button>
+        <ContactDialog open={contactOpen} onClose={() => setContactOpen(false)} />
         <a
           className="deck-btn quiet"
           href={COFFEE_URL}
