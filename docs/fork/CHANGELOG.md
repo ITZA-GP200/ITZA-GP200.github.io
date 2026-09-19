@@ -2,7 +2,8 @@
 
 ## 1.1.0: cleanup round (in progress, not yet published)
 
-- PATCHES list: the tag on the patch the pedal is on reads **ACTIVE** (was NOW).
+- PATCHES: the patch the pedal is on is labelled **ACTIVE** (was NOW), both its tag in the list
+  and the header ("active: 63C", was "now: 63C").
 
 ## 1.0.0: 19 September 2026 (tag `fork2-done-2026-09-19`)
 
