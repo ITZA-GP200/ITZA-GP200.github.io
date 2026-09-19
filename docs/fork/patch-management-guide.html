@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Patch Management Guide</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #1c1f24; --muted: #5c6470;
+    --accent: #2563b0; --line: #dde1e7; --tag: #eaf1fb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14171b; --panel: #1c2026; --ink: #e8ebef; --muted: #9aa3ae;
+      --accent: #6ea8ff; --line: #2c323a; --tag: #1f2b3d;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14171b; --panel: #1c2026; --ink: #e8ebef; --muted: #9aa3ae;
+    --accent: #6ea8ff; --line: #2c323a; --tag: #1f2b3d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 64px; }
+  .status {
+    display: inline-block; font-size: 12px; letter-spacing: .08em; text-transform: uppercase;
+    background: var(--tag); color: var(--accent); padding: 3px 10px; border-radius: 999px;
+  }
+  h1 { font-size: 28px; line-height: 1.25; margin: 12px 0 8px; }
+  .summary { color: var(--muted); font-size: 17px; margin: 0 0 28px; }
+  section {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 18px 20px; margin: 0 0 14px;
+  }
+  h2 { font-size: 18px; margin: 0 0 8px; display: flex; gap: 10px; align-items: baseline; }
+  h2 .num { color: var(--accent); font-variant-numeric: tabular-nums; }
+  a { color: var(--accent); }
+  ul, ol { margin: 6px 0 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  .note { color: var(--muted); font-size: 14px; }
+  strong { font-weight: 650; }
+  footer { color: var(--muted); font-size: 14px; margin-top: 24px; }
+  h3 { font-size: 15px; margin: 18px 0 4px; color: var(--accent); }
+  section.drafted h3:first-of-type { margin-top: 6px; }
+  p { margin: 6px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 15px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; }
+  td:last-child { white-space: normal; }
+  td:first-child { width: 42%; }
+  @media (max-width: 560px) { td:last-child { white-space: normal; } }
+  table.ref td:first-child { width: auto; }
+  table.ref td:nth-child(3), table.ref td:nth-child(4) { white-space: nowrap; }
+</style>
+</head>
+<body>
+<main>
+  <span class="status">Version 1.0 · 19 September 2026</span>
+  <h1>GP200 Studio: Patch Management Guide</h1>
+  <p class="summary">How to organise your GP-200's patches from the PATCHES slide-out (copy, cut, paste, swap,
+    reset, undo), and how to set aside bank 64 as a protected workspace, with a short note on why actions
+    take the time they do.</p>
+
+  <section class="drafted">
+    <h2><span class="num">1</span> How it works (read this first)</h2>
+
+    <h3>One checked step at a time</h3>
+    <p>This editor organises your patches by asking the GP-200 to do one small job at a time, the same
+      way you would from the pedal itself: select a patch, save it to another slot, and so on. Valeton's
+      desktop software isn't available for this kind of work, so the editor talks to the pedal through the
+      steps the pedal already understands.</p>
+    <p>It's a simple method, and it's reliable. After every change, the editor reads the slot back from the
+      pedal to confirm the change really landed. If anything doesn't match, it stops and tells you exactly
+      what happened and where your patches are.</p>
+    <p>The trade-off is time. Some actions finish in a moment; others take a few seconds per patch.</p>
+
+    <h3>What to expect</h3>
+    <table>
+      <thead>
+        <tr><th>Action</th><th>Typical time</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Copy one or more patches</td><td>About a second per patch</td></tr>
+        <tr><td>Paste one patch</td><td>A few seconds</td></tr>
+        <tr><td>Paste several patches</td><td>A few seconds per patch</td></tr>
+        <tr><td>Swap two patches (SWAP, ▲UP, ▼DOWN)</td><td>About 10 seconds</td></tr>
+        <tr><td>Reset a slot to the default patch</td><td>A few seconds</td></tr>
+        <tr><td>Rename a slot · SAVE PATCH</td><td>A couple of seconds</td></tr>
+        <tr><td>SAVE ALL, IMPORT, or undoing a paste or reset (a patch written from the editor's own copy)</td>
+          <td>About 10–20 seconds per patch</td></tr>
+        <tr><td>PROTECT 64 · RESTORE 64</td><td>Under a minute</td></tr>
+      </tbody>
+    </table>
+    <p class="note">Times vary with the patches involved. Writing a patch takes longest when its effects differ
+      from what the slot held, because the pedal has to load each new effect first.</p>
+
+    <h3>The spinner</h3>
+    <p>While the editor is working, <strong>"Working with the pedal…"</strong> appears with a spinning ring
+      under the Patches buttons. Longer jobs also show their progress, for example <strong>2/4</strong>. Wait
+      for it to disappear before starting the next action.</p>
+    <p>Pasting several patches can be stopped partway with the <strong>cancel</strong> link beside the
+      progress count. The editor finishes the patch it's on, then stops cleanly and tells you which slots
+      were pasted and which are unchanged.</p>
+
+    <h3>Three rules</h3>
+    <ol>
+      <li><strong>Hands off the pedal while the spinner shows.</strong> Changing patches, turning knobs or
+        pressing footswitches mid-action can interrupt a step. The editor will notice and stop, but it's
+        better not to make it.</li>
+      <li><strong>Connect only one editor at a time.</strong> Close any other editor tab and Valeton's own
+        software first. Your computer may let several programs talk to the pedal at once, and two editors
+        talking over each other can confuse it.</li>
+      <li><strong>Back up your pedal first.</strong> Before you start, export all of your pedal's patches to your
+        computer with Valeton's official desktop software, so you have a fail-safe copy. Yes, this editor's
+        EXPORT ALL can do the same, but caveat emptor.</li>
+    </ol>
+  </section>
+
+  <section class="drafted">
+    <h2><span class="num">2</span> The PATCHES slide-out at a glance</h2>
+    <p>Click <strong>PATCHES</strong> in the editor's top row to open the slide-out on the right. Everything in
+      this guide happens here.</p>
+
+    <h3>Top of the panel</h3>
+    <ul>
+      <li><strong>now: 63C</strong> beside the title shows the slot the pedal is on.</li>
+      <li><strong>FILE</strong> works on the patch in the editor:
+        <strong>IMPORT .PRST</strong> loads a patch file into the editor and plays it on the pedal, then
+        asks whether to save it into the slot the pedal is on; <strong>EXPORT .PRST</strong> downloads the editor's patch;
+        <strong>PRINT</strong> makes a printable sheet of it.</li>
+      <li><strong>USER IRS</strong> lists the cabinet IRs stored on your pedal.</li>
+      <li>The <strong>search box</strong> finds patches by name or slot, for example "63B".</li>
+    </ul>
+
+    <h3>The patch list</h3>
+    <ul>
+      <li>The <strong>bank column</strong> on the left jumps to a bank; <strong>All banks</strong> shows
+        everything.</li>
+      <li>Each row shows the slot and the patch name. Tags on the right mark special slots:
+        <strong>NOW</strong> (the pedal's current slot), <strong>DEFAULT PATCH</strong> (what RESET copies) and
+        <strong>SWAP SLOT</strong> (where swaps park a patch).</li>
+      <li>When bank 64 is protected, it's shown in red and labelled <strong>PROTECTED</strong>.</li>
+      <li><strong>Double-click</strong> a row to switch the pedal to that patch and open it in the editor.</li>
+    </ul>
+
+    <h3>Selecting patches</h3>
+    <table>
+      <tbody>
+        <tr><td><strong>Click</strong></td><td>Select one patch</td></tr>
+        <tr><td><strong>Shift-click</strong></td><td>Select a range, from the first click to this one</td></tr>
+        <tr><td><strong>Ctrl-click</strong> (⌘-click on a Mac)</td><td>Add or remove single patches anywhere</td></tr>
+        <tr><td><strong>SELECT BANK</strong></td><td>Select all four patches in the bank</td></tr>
+        <tr><td><strong>CLEAR</strong></td><td>Go back to the one patch you clicked first</td></tr>
+      </tbody>
+    </table>
+
+    <h3>The right-click menu</h3>
+    <p>Right-click any patch for the full set of actions: <strong>UNDO, REDO, SWAP</strong> (with exactly two patches selected),
+      <strong>COPY, CUT, PASTE ▸, RENAME, SET AS
+      DEFAULT PATCH, USE FOR SWAP SLOT</strong> and <strong>RESET</strong>. The top lines show what's selected
+      and what's on the clipboard.</p>
+    <p>An action that can't run right now is greyed out. <strong>Hover over it to see why</strong>, for example
+      "Copy a patch first". Press <strong>Esc</strong> to close the menu.</p>
+
+    <h3>The buttons</h3>
+    <table>
+      <tbody>
+        <tr><td><strong>ACTIVATE</strong></td><td>Switch the pedal to the selected patch</td></tr>
+        <tr><td><strong>OPEN</strong></td><td>Load the selected patch into the editor</td></tr>
+        <tr><td><strong>EXPORT</strong></td><td>Download the selected patch as a .prst file</td></tr>
+        <tr><td><strong>IMPORT→[slot]</strong></td><td>Put a .prst file into the selected slot (asks first)</td></tr>
+        <tr><td><strong>RENAME</strong></td><td>Rename the selected patch</td></tr>
+        <tr><td><strong>PROTECT 64</strong> · <strong>RELEASE 64</strong> · <strong>SAVE 64</strong> ·
+          <strong>RESTORE 64</strong></td><td>Bank 64 tools (section 4)</td></tr>
+        <tr><td><strong>SAVE ALL</strong></td><td>Write every setting of the editor's patch into the NOW slot,
+          and check it</td></tr>
+        <tr><td><strong>SAVE PATCH</strong></td><td>Save the patch you're playing into the NOW slot, like SAVE on
+          the pedal</td></tr>
+        <tr><td><strong>REFRESH</strong></td><td>Make the list match the pedal: re-reads every patch name</td></tr>
+        <tr><td><strong>COPY · PASTE · SWAP · ▲UP · ▼DOWN</strong></td><td>Shortcuts for the everyday tasks
+          (section 3)</td></tr>
+        <tr><td><strong>EXPORT SELECTED · EXPORT BANK · EXPORT ALL</strong></td><td>Download patches as .prst
+          files in one ZIP</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Messages</h3>
+    <p>Results and problems appear in a box just above the buttons. Errors say what happened and where your
+      patches are; notes explain anything unusual. Close the box with its <strong>✕</strong>.</p>
+  </section>
+
+  <section class="drafted">
+    <h2><span class="num">3</span> Everyday tasks</h2>
+
+    <h3>3.1 Copy and paste</h3>
+    <ol>
+      <li>Select the patch or patches to copy (see "Selecting patches" in section 2).</li>
+      <li>Right-click the selection and choose <strong>COPY</strong>. The menu's top lines now show what's on
+        the clipboard, for example "clip: 12A–12D · 4 patches".</li>
+      <li>Right-click the slot where the first patch should go and choose <strong>PASTE ▸</strong>. The panel
+        says exactly what will be replaced. <strong>OVERWRITE</strong> is selected; press <strong>OK</strong>,
+        or double-click the option.</li>
+    </ol>
+    <p>Several patches land in order in the slots that follow; scattered patches land side by side, in slot
+      order. Before each copy, the editor checks that the patch hasn't changed since you copied it; if it has,
+      it asks you to copy again.</p>
+    <p class="note">PASTE is greyed out if the paste would land on top of the patches you copied, or run past
+      the last slot (64D, or 63D when bank 64 is protected).</p>
+
+    <h3>3.2 Cut and paste (moving a patch)</h3>
+    <ol>
+      <li>Right-click a patch and choose <strong>CUT</strong>. Nothing changes on the pedal yet.</li>
+      <li>Right-click where it should go and choose <strong>PASTE ▸</strong>:
+        <ul>
+          <li><strong>OVERWRITE</strong> moves the patch there, and resets the slot it came from to your default
+            patch, named "Itza GP-200";</li>
+          <li><strong>SWAP</strong> exchanges the two patches instead.</li>
+        </ul>
+      </li>
+    </ol>
+    <p class="note">CUT works on one patch at a time and needs a default patch (section 3.5).</p>
+
+    <h3>3.3 Swap patches</h3>
+    <p>The pedal can only copy one slot onto another, so a swap parks one patch in a <strong>swap slot</strong>
+      while the other moves. Set one first: right-click a spare slot and choose <strong>USE FOR SWAP SLOT</strong>
+      (or use PROTECT 64, which makes 64D the swap slot). Whatever is in the swap slot is overwritten by every
+      swap.</p>
+    <table>
+      <tbody>
+        <tr><td><strong>PASTE ▸ SWAP</strong></td><td>Copy one patch, right-click another, choose SWAP</td></tr>
+        <tr><td><strong>Right-click → SWAP</strong></td><td>Select exactly two patches, right-click either one and choose
+          SWAP (it appears just above COPY)</td></tr>
+        <tr><td><strong>SWAP</strong> button</td><td>Select exactly two patches, then click SWAP</td></tr>
+        <tr><td><strong>▲UP / ▼DOWN</strong></td><td>Move the selected patch one slot, swapping it with its
+          neighbour</td></tr>
+      </tbody>
+    </table>
+
+    <h3>3.4 Rename</h3>
+    <p>Select a patch, click <strong>RENAME</strong> (or right-click → RENAME), type the new name (up to 16
+      characters) and press <strong>Enter</strong>.</p>
+
+    <h3>3.5 Reset a slot to the default patch</h3>
+    <p>First choose a default: right-click a patch and choose <strong>SET AS DEFAULT PATCH</strong> (with bank
+      64 protected, the default is always 64C; see section 4). Then right-click any slot and choose
+      <strong>RESET</strong>. After you confirm, the slot holds a copy of the default, named "Itza GP-200".</p>
+
+    <h3>3.6 Undo and redo</h3>
+    <p>Right-click any patch and choose <strong>UNDO</strong> or <strong>REDO</strong>, or press
+      <strong>Ctrl+Z</strong> / <strong>Ctrl+Y</strong> (⌘ on a Mac) while the PATCHES slide-out is open. Hover over
+      either menu item to see what it will reverse, for example "Undo: Paste into 61A–61D".</p>
+    <ul>
+      <li>Each click is one step, however many patches the action touched.</li>
+      <li>The last <strong>20 actions</strong> are kept, until the page reloads or the pedal disconnects.</li>
+      <li>COPY and CUT on their own change nothing, so there's nothing to undo.</li>
+      <li>Swaps and renames undo in seconds. Undoing a paste, reset or save writes the old patches back, which
+        takes about 10–20 seconds per patch.</li>
+      <li>If a slot was changed since (on the pedal, for instance), UNDO refuses rather than wipe that change,
+        and says which slot.</li>
+    </ul>
+
+    <h3>3.7 Saving, importing and refreshing</h3>
+    <table>
+      <tbody>
+        <tr><td><strong>SAVE PATCH</strong></td><td>Save the patch you're playing into the NOW slot, like SAVE on
+          the pedal. Quick. (Same as the SAVE TO button at the editor's bottom right.)</td></tr>
+        <tr><td><strong>SAVE ALL</strong></td><td>Write every setting of the editor's patch into the NOW slot,
+          and check it. Use it when you're not sure the pedal matches the editor. About 10–20 seconds.</td></tr>
+        <tr><td><strong>FILE → IMPORT .PRST</strong></td><td>Loads a patch file into the editor and plays it on
+          the pedal, then asks: <strong>Save to [slot]</strong>, or <strong>Editor only</strong>.</td></tr>
+        <tr><td><strong>IMPORT→[slot]</strong></td><td>Puts a patch file straight into the selected slot, after
+          asking.</td></tr>
+        <tr><td><strong>REFRESH</strong></td><td>Re-read every patch name from the pedal. Use it after changing
+          patches on the pedal itself.</td></tr>
+      </tbody>
+    </table>
+    <p class="note">Playing a patch isn't the same as saving it: the pedal forgets unsaved changes when you
+      switch patches. A patch's new name also reaches the pedal only when it's saved.</p>
+  </section>
+
+  <section class="drafted">
+    <h2><span class="num">4</span> Protected bank 64</h2>
+
+    <h3>4.1 What it's for</h3>
+    <p>Protecting bank 64 turns its four slots into the editor's own workspace, with two jobs:</p>
+    <ul>
+      <li><strong>Nothing runs into it.</strong> Actions that fill slots one after another, such as pasting
+        several patches, stop at 63D.</li>
+      <li><strong>Fixed places for the essentials.</strong> 64C always holds the default patch and 64D is always
+        the swap slot, clearly labelled.</li>
+    </ul>
+
+    <h3>4.2 PROTECT 64 and RELEASE 64</h3>
+    <p>Click <strong>PROTECT 64</strong> and confirm ("This will overwrite and protect patch bank 64"). The
+      editor writes its built-in default patch (every block off except VOLUME) into bank 64, names the four
+      slots, makes 64C the default patch and 64D the swap slot, and shows the bank in red. It takes under a
+      minute and needs nothing set up first.</p>
+    <p class="note">Anything already in bank 64 is replaced. Export the bank first if you want to keep it.</p>
+    <p><strong>RELEASE 64</strong> lifts the protection only. The four patches stay as they are, and 64C and 64D
+      keep their roles until you change them.</p>
+
+    <h3>4.3 The four slots</h3>
+    <table>
+      <tbody>
+        <tr><td><strong>64A UTILITY-1</strong><br><strong>64B UTILITY-2</strong></td>
+          <td>Spare slots for trying out settings, for example a candidate for a new default</td></tr>
+        <tr><td><strong>64C ITZA GP-200</strong> (DEFAULT PATCH)</td>
+          <td>The default patch: what RESET copies, and what CUT leaves behind</td></tr>
+        <tr><td><strong>64D SWAP SLOT</strong></td>
+          <td>Where swaps park a patch; reset to its name after every swap</td></tr>
+      </tbody>
+    </table>
+    <p>While the bank is protected:</p>
+    <ul>
+      <li>Its names are fixed: RENAME is greyed out, and anything pasted or reset into 64A–64C keeps the slot's
+        name.</li>
+      <li>Nothing is pasted or reset into 64D, and swaps can't move patches in or out of the bank.</li>
+      <li>SET AS DEFAULT PATCH becomes <strong>USE FOR DEFAULT PATCH (64C)</strong>: after you confirm, it copies
+        the chosen patch's settings into 64C, and RESET uses them from then on.</li>
+    </ul>
+    <p class="note">A handy workflow: paste a candidate into UTILITY-1, try it, and when you're happy, right-click
+      it and choose USE FOR DEFAULT PATCH (64C).</p>
+
+    <h3>4.4 SAVE 64, RESTORE 64 and the change warning</h3>
+    <ul>
+      <li><strong>SAVE 64</strong> reads 64A–64C, keeps a copy in your browser, and downloads a backup file,
+        "GP200 bank 64 backup <em>date</em>.json".</li>
+      <li><strong>RESTORE 64</strong> asks where from: <strong>LAST SAVE</strong> (the browser copy, with its
+        date) or <strong>FROM FILE…</strong>. It writes 64C, 64A and 64B back, rebuilds 64D and protects the bank
+        again. Allow up to a minute.</li>
+      <li>If bank 64's names change on the pedal itself, a <strong>blue warning</strong> says which slot changed,
+        with a RESTORE 64 button right there.</li>
+    </ul>
+    <p class="note">The browser copy disappears if you clear your browser's data; the downloaded file doesn't.</p>
+  </section>
+
+  <section class="drafted">
+    <h2><span class="num">5</span> Safety checks and messages</h2>
+    <ul>
+      <li><strong>Every change is read back</strong> from the pedal to confirm it landed.</li>
+      <li><strong>Before a copy,</strong> the source is read again to make sure it's still the patch you
+        copied.</li>
+      <li><strong>If something goes wrong partway,</strong> the message says what was done and where each patch
+        is, for example "…1C's patch is safe in the swap slot 64D".</li>
+    </ul>
+
+    <h3>Messages you may see</h3>
+    <table>
+      <tbody>
+        <tr><td>"…has changed since it was read"</td>
+          <td>The patch changed after you copied it. Copy it again, then paste.</td></tr>
+        <tr><td>"…would run into protected bank 64"</td>
+          <td>The paste would reach bank 64. Start it higher up, or paste fewer patches.</td></tr>
+        <tr><td>"…changed since, so it wasn't undone"</td>
+          <td>UNDO found the slot changed after the action, and left it alone.</td></tr>
+        <tr><td>"The pedal kept N value(s) its own way: …"</td>
+          <td>The patch was saved, but the pedal kept the listed settings at its own values (see section 6).</td></tr>
+      </tbody>
+    </table>
+    <p class="note">A greyed-out menu item or button always says why when you hover over it.</p>
+  </section>
+
+  <section class="drafted">
+    <h2><span class="num">6</span> Known limits</h2>
+    <ul>
+      <li><strong>Written from the editor's copy</strong> (SAVE ALL, IMPORT, PROTECT 64, RESTORE 64, and undoing
+        a paste or reset): expression-pedal assignments and a footswitch's saved on/off position can't be set
+        this way, so the slot keeps what it had. Copies made on the pedal (paste, swap, cut, reset) carry
+        them.</li>
+      <li><strong>COMP's Clipping</strong> setting stays at its default when written from the editor's copy.</li>
+      <li><strong>Copies store the patch as the pedal plays it:</strong> if an expression pedal is controlling a
+        volume or wah, its current position is what's saved.</li>
+      <li><strong>Undo history</strong> clears when the page reloads or the pedal disconnects.</li>
+      <li><strong>There's no INSERT</strong> (pushing every later patch down a slot): with one checked step per
+        patch it would take minutes. <strong>CUT</strong> works on one patch at a time.</li>
+    </ul>
+  </section>
+
+  <section class="drafted">
+    <h2><span class="num">7</span> Quick reference card</h2>
+    <table class="ref">
+      <thead>
+        <tr><th>Action</th><th>Where</th><th>Time</th><th>Undo</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Copy</td><td>Right-click → COPY, or COPY</td><td>~1 s per patch</td><td>n/a</td></tr>
+        <tr><td>Paste</td><td>Right-click → PASTE ▸ OVERWRITE, or PASTE</td><td>Seconds per patch</td><td>Yes</td></tr>
+        <tr><td>Cut and paste</td><td>Right-click → CUT, then PASTE ▸</td><td>Seconds</td><td>Yes</td></tr>
+        <tr><td>Swap</td><td>Right-click → SWAP (two selected), PASTE ▸ SWAP, SWAP, ▲UP / ▼DOWN</td><td>~10 s</td><td>Yes</td></tr>
+        <tr><td>Undo / redo</td><td>Right-click → UNDO / REDO, or Ctrl+Z / Ctrl+Y</td><td>Seconds to 20 s per patch</td><td>n/a</td></tr>
+        <tr><td>Rename</td><td>RENAME</td><td>~2 s</td><td>Yes</td></tr>
+        <tr><td>Reset</td><td>Right-click → RESET</td><td>Seconds</td><td>Yes</td></tr>
+        <tr><td>Set default patch</td><td>Right-click → SET AS DEFAULT PATCH</td><td>Instant</td><td>n/a</td></tr>
+        <tr><td>Use for default (64C)</td><td>Right-click, bank 64 protected</td><td>Seconds</td><td>Yes</td></tr>
+        <tr><td>Use for swap slot</td><td>Right-click → USE FOR SWAP SLOT</td><td>Instant</td><td>n/a</td></tr>
+        <tr><td>Save patch</td><td>SAVE PATCH, or SAVE TO (bottom right)</td><td>~2 s</td><td>Yes</td></tr>
+        <tr><td>Save all</td><td>SAVE ALL</td><td>10–20 s</td><td>Yes</td></tr>
+        <tr><td>Import a file</td><td>IMPORT→[slot], or FILE → IMPORT .PRST</td><td>10–20 s</td><td>Yes</td></tr>
+        <tr><td>Export</td><td>EXPORT, EXPORT SELECTED / BANK / ALL</td><td>~1 s per patch</td><td>n/a</td></tr>
+        <tr><td>Refresh names</td><td>REFRESH</td><td>~10 s</td><td>n/a</td></tr>
+        <tr><td>Protect / release bank 64</td><td>PROTECT 64 / RELEASE 64</td><td>&lt; 1 min / instant</td><td>No</td></tr>
+        <tr><td>Back up / restore bank 64</td><td>SAVE 64 / RESTORE 64</td><td>Seconds / &lt; 1 min</td><td>No</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="drafted">
+    <h2><span class="num">8</span> Support</h2>
+    <p>I'm not able to actively support this fork, but I'll address anything I can replicate on my end as
+      quickly as possible.</p>
+    <p>This web app was built locally on a basic Win11 box running the latest version of Chrome, so the best
+      results will be with that kind of setup. I'm sure other browsers and operating systems will work to some
+      degree, and feel free to let me know what doesn't work for yours, but I can only fix what I can
+      replicate. I'm not a multi-platform programmer by night, just a dude.</p>
+    <p>Feature requests and bug reports are welcome through the contact form: click the green
+      <strong>✉</strong> in the editor's top row. For a problem, please include the message text, the slots
+      involved, and what you did just before it happened.</p>
+  </section>
+
+<section class="drafted">
+    <h2><span class="num">9</span> Thanks, and open source</h2>
+    <p>This editor is a fork of <strong>GP200 Studio</strong> (<a href="https://gp200studio.com/">gp200studio.com</a>),
+      created by <strong>kabir0st</strong>. Everything here builds on his work: the pedalboard editor, the pedal
+      connection, and years of careful groundwork on how the GP-200 talks. Sincere thanks to him for his generosity in
+      making it free and open source. If it's useful to you, consider
+      <a href="https://buymeacoffee.com/kabir0st">buying him a coffee</a>.</p>
+    <p>Like the original, this fork is free and open source (GPL-3.0), and its code is available on
+      <a href="https://github.com/klynam/gp200-studio-PM">GitHub</a>. Use the contact form for more information.</p>
+  </section>
+
+  <footer class="note">Version 1.0. Times are typical, measured on a GP-200 with firmware 1.8.0.</footer>
+</main>
+</body>
+</html>
