@@ -22,7 +22,6 @@ import {
 } from '@/core/midiPortDiagnostics';
 import { useMidiSend } from './useMidiSend';
 import { pushPresetToDevice } from '@/core/devicePush';
-import { getEffectParams } from '@/core/effectParams';
 
 const READ_TIMEOUT_MS = 3000;
 
@@ -1041,27 +1040,8 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     });
     await new Promise(r => setTimeout(r, 300));
 
-    // Finishing pass over each block's REAL knobs (the effect's defined
-    // params), with its first one sent first and again last. devicePush only
-    // re-sends slot 0, but a block's first real knob can sit elsewhere: a
-    // cab's is slot 1 (Volume), and WRITE TEST on hardware lost exactly that
-    // one (75 -> 0) once every slot-0 knob was landing.
-    //
-    // Switches and selectors go before the knobs: on hardware, M-Vibe Rate and
-    // Vintage Rack Feedback were lost (kept the target's old value) while the
-    // same values saved fine from the editor. Both effects have a Sync switch,
-    // which the slot-order send delivered after those knobs.
-    for (const eff of preset.effects) {
-      const params = getEffectParams(eff.effectId).filter(param => eff.params[param.idx] !== undefined);
-      if (params.length === 0) continue;
-      const modes = params.filter(param => param.type !== 'knob').map(param => param.idx);
-      const knobs = params.filter(param => param.type === 'knob').map(param => param.idx);
-      const first = params[0].idx;
-      for (const idx of [first, ...modes, ...knobs, first]) {
-        send.sendParamChange(eff.slotIndex, idx, eff.effectId, eff.params[idx]);
-        await new Promise(r => setTimeout(r, 40));
-      }
-    }
+    // (The finishing pass over each block's real controls now lives at the end
+    // of pushPresetToDevice, so live previews get it too.)
 
     // Not sent again here: re-sending CTRL masks and EXP targets at the end
     // (each twice) corrupted two knobs on hardware (MOD Rate 8.9 -> 4, DLY

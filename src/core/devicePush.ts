@@ -1,3 +1,4 @@
+import { getEffectParams } from './effectParams';
 import type { GP200Preset } from './types';
 
 /**
@@ -177,5 +178,26 @@ export async function pushPresetToDevice(
     }
   }
   if (decoded.author) sender.sendAuthor(decoded.author);
+
+  // Finishing pass over each block's REAL controls (the effect's defined
+  // params), switches and selectors first, then knobs, with the first control
+  // sent first and again last. Found on hardware (fw 1.8.0) writing patches
+  // from app data: the pass above only re-sends slot 0, but a block's first
+  // real knob can sit elsewhere (a cab's Volume is slot 1, and it was lost);
+  // and a Sync switch sent after Rate / Feedback reset those knobs. With this
+  // pass the pedal's edit buffer holds the whole patch, so a plain save-commit
+  // of a preview stores it faithfully.
+  for (const eff of decoded.effects) {
+    const params = getEffectParams(eff.effectId).filter((param) => eff.params[param.idx] !== undefined);
+    if (params.length === 0) continue;
+    if (signal?.aborted) return;
+    const modes = params.filter((param) => param.type !== 'knob').map((param) => param.idx);
+    const knobs = params.filter((param) => param.type === 'knob').map((param) => param.idx);
+    const first = params[0].idx;
+    for (const idx of [first, ...modes, ...knobs, first]) {
+      sender.sendParamChange(eff.slotIndex, idx, eff.effectId, eff.params[idx]);
+      await sleep(paramGap);
+    }
+  }
   onProgress?.({ completed: total, total, phase: 'done' });
 }

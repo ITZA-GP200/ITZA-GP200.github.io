@@ -367,6 +367,7 @@ function App() {
 
   // Send the whole preset to the device for live preview (no flash write).
   // Aborts any push still in flight so two loads never interleave on the wire.
+  // livePushRef holds the push in progress, so SAVE PATCH can wait for it.
   const sendPresetToDevice = useCallback(async (decoded: GP200Preset) => {
     if (midiDevice.status !== 'connected') return;
     pushAbortRef.current?.abort();
@@ -1070,6 +1071,38 @@ function App() {
       () => handleSetDefaultPatch(slot));
   }
 
+  // SAVE PATCH: commit the pedal's edit buffer (everything the editor has
+  // sent live) to the NOW slot under the editor's name, like SAVE > SAVE on
+  // the pedal. Quick: nothing is re-sent. Waits for a live preview still
+  // being sent (an import), so the whole patch is in the buffer first.
+  async function handleSavePatch(slot: number) {
+    if (!preset) return;
+    const label = SysExCodec.slotToLabel(slot);
+    if (bank64Protected && slot === PROTECTED_SWAP_SLOT) {
+      setLoadError('Bank 64 is protected: 64D is the swap slot');
+      return;
+    }
+    try {
+      await waitForLivePreview();
+      const name = (bank64Protected ? protectedNameFor(slot) : undefined) ?? preset.patchName;
+      await midiDevice.saveToSlot(name, slot);
+      await midiDevice.refreshSlotName(slot);
+      await refreshDefaultIfTouched([slot]);
+      setLoadError(null);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      setLoadError(`SAVE PATCH to ${label} failed: ${detail}`);
+    }
+  }
+
+  // Let a live preview finish (it can take several seconds) before saving.
+  async function waitForLivePreview() {
+    const started = Date.now();
+    while (pushAbortRef.current && Date.now() - started < 60000) {
+      await new Promise((settle) => setTimeout(settle, 200));
+    }
+  }
+
   // Stop a live preview still being sent (an imported file), so it can't
   // interleave with a write. It checks for the stop only between effect
   // blocks, so give its last block time to finish (up to ~15 knobs x 40 ms).
@@ -1094,6 +1127,10 @@ function App() {
 
   function recordedImport(slot: number, bytes: Uint8Array) {
     return withOverwriteHistory(`Import into ${slotLabel(slot)}`, [slot], () => handleImportToSlot(slot, bytes));
+  }
+
+  function recordedSavePatch(slot: number) {
+    return withOverwriteHistory(`Save patch to ${slotLabel(slot)}`, [slot], () => handleSavePatch(slot));
   }
 
   function recordedSaveToPedal(slot: number) {
@@ -1564,6 +1601,7 @@ function App() {
         onProtectBank64={handleProtectBank64}
         onReleaseBank64={handleReleaseBank64}
         onSaveEditorToPedal={recordedSaveToPedal}
+        onSavePatch={recordedSavePatch}
         onSaveBank64={handleSaveBank64}
         onRestoreBank64={handleRestoreBank64}
         bank64SavedAt={bank64SavedAt}

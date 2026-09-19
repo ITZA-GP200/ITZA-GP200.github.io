@@ -786,14 +786,14 @@ describe('PatchManagerSheet: paste options on double-click', () => {
 });
 
 describe('PatchManagerSheet: SAVE and REFRESH buttons', () => {
-  it('SAVE asks first, then writes the editor’s patch into the pedal’s current slot', () => {
+  it('SAVE ALL asks first, then writes every setting into the pedal’s current slot', () => {
     const onSaveEditorToPedal = vi.fn().mockResolvedValue(undefined);
     renderSheet({ onSaveEditorToPedal, editorPatchName: 'MAMA 1A', currentSlot: 1 });
-    fireEvent.click(screen.getByRole('button', { name: 'SAVE' }));
+    fireEvent.click(screen.getByRole('button', { name: 'SAVE ALL' }));
     const confirm = screen.getByRole('alertdialog', { name: 'Confirm save to pedal' });
-    expect(confirm).toHaveTextContent('Save the editor’s patch “MAMA 1A” into 1B on the pedal?');
+    expect(confirm).toHaveTextContent('Write every setting of the editor’s patch “MAMA 1A” into 1B and check it?');
     expect(onSaveEditorToPedal).not.toHaveBeenCalled();
-    fireEvent.click(within(confirm).getByRole('button', { name: 'Save' }));
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Save all' }));
     expect(onSaveEditorToPedal).toHaveBeenCalledWith(1);
   });
 
@@ -896,5 +896,17 @@ describe('PatchManagerSheet: importing files', () => {
       .getByRole('button', { name: 'Editor only' }));
     expect(onImportToSlot).not.toHaveBeenCalled();
     expect(screen.queryByRole('alertdialog', { name: 'Save import to pedal' })).toBeNull();
+  });
+});
+
+describe('PatchManagerSheet: SAVE PATCH', () => {
+  it('commits straight away to the NOW slot, no confirm', () => {
+    const onSavePatch = vi.fn().mockResolvedValue(undefined);
+    renderSheet({ onSavePatch, editorPatchName: 'MAMA 1A', currentSlot: 1 });
+    const button = screen.getByRole('button', { name: 'SAVE PATCH' });
+    expect(button.getAttribute('title')).toContain('into 1B');
+    fireEvent.click(button);
+    expect(onSavePatch).toHaveBeenCalledWith(1);
+    expect(screen.queryByRole('alertdialog')).toBeNull();
   });
 });
