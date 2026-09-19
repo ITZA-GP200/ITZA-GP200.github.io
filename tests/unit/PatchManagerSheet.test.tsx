@@ -810,3 +810,62 @@ describe('PatchManagerSheet: SAVE and REFRESH buttons', () => {
     expect(screen.queryByRole('button', { name: 'WRITE TEST' })).toBeNull();
   });
 });
+
+describe('PatchManagerSheet: CUT', () => {
+  const menuOn = (text: string) => {
+    fireEvent.contextMenu(screen.getByText(text), { clientX: 120, clientY: 140 });
+    return screen.getByRole('menu', { name: 'Patch actions' });
+  };
+
+  it('cuts one patch, and says "cut" on the clip line', () => {
+    const onCutSlot = vi.fn().mockResolvedValue(undefined);
+    renderSheet({ onCutSlot, defaultPatchLabel: '63A' });
+    fireEvent.click(within(menuOn('Crunch')).getByRole('menuitem', { name: 'CUT' }));
+    expect(onCutSlot).toHaveBeenCalledWith(1);
+    cleanup();
+    renderSheet({ onCutSlot, defaultPatchLabel: '63A', clipboardLabel: '1B', clipboardSlots: [1], clipboardIsCut: true });
+    expect(menuOn('Clean')).toHaveTextContent('cut: 1B · 1 patch');
+  });
+
+  it('needs a default patch, one slot, and not the default itself', () => {
+    const onCutSlot = vi.fn().mockResolvedValue(undefined);
+    renderSheet({ onCutSlot });
+    expect(within(menuOn('Crunch')).getByRole('menuitem', { name: 'CUT' }).getAttribute('title'))
+      .toContain('Set a default patch first');
+    cleanup();
+    renderSheet({ onCutSlot, defaultPatchLabel: '1B' });
+    expect(within(menuOn('Crunch')).getByRole('menuitem', { name: 'CUT' }))
+      .toHaveAttribute('title', 'We can’t cut the default patch');
+  });
+
+  it('won’t paste a cut patch back onto itself', () => {
+    renderSheet({ onCutSlot: vi.fn(), defaultPatchLabel: '63A', clipboardLabel: '1B', clipboardSlots: [1], clipboardIsCut: true });
+    expect(within(menuOn('Crunch')).getByRole('menuitem', { name: /^PASTE/ }))
+      .toHaveAttribute('title', 'The cut patch is already here');
+  });
+});
+
+describe('PatchManagerSheet: UNDO / REDO', () => {
+  const menuOn = (text: string) => {
+    fireEvent.contextMenu(screen.getByText(text), { clientX: 120, clientY: 140 });
+    return screen.getByRole('menu', { name: 'Patch actions' });
+  };
+
+  it('greys them when there is nothing to undo or redo', () => {
+    renderSheet({ onUndo: vi.fn(), onRedo: vi.fn() });
+    const menu = menuOn('Crunch');
+    expect(within(menu).getByRole('menuitem', { name: 'UNDO' })).toHaveAttribute('title', 'Nothing to undo');
+    expect(within(menu).getByRole('menuitem', { name: 'REDO' })).toHaveAttribute('title', 'Nothing to redo');
+  });
+
+  it('names what they would reverse, and runs them', () => {
+    const onUndo = vi.fn().mockResolvedValue(undefined);
+    const onRedo = vi.fn().mockResolvedValue(undefined);
+    renderSheet({ onUndo, onRedo, undoLabel: 'Paste into 61A–61D', redoLabel: 'Swap 1A and 1B' });
+    const menu = menuOn('Crunch');
+    expect(within(menu).getByRole('menuitem', { name: 'UNDO' })).toHaveAttribute('title', 'Undo: Paste into 61A–61D');
+    expect(within(menu).getByRole('menuitem', { name: 'REDO' })).toHaveAttribute('title', 'Redo: Swap 1A and 1B');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'UNDO' }));
+    expect(onUndo).toHaveBeenCalledTimes(1);
+  });
+});
