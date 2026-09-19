@@ -304,7 +304,8 @@ export function SwitcherUnit({
             disabled={!canSave}
             onClick={onSaveToActiveSlot}
           >
-            <ActionIcon name="save" />
+            {/* keeps its own brightness (board.css) */}
+            <ActionIcon name="save" className="keep-brightness" />
             <span className="db-label">{saveLabel}</span>
           </button>
         )}

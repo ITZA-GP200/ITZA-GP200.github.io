@@ -2806,3 +2806,14 @@
     display: none;
   }
 }
+
+/* Owner's request: icons in the top row and the bottom deck at double
+   brightness on the dark stage (their hues were picked for light button
+   faces, so they read dim there). SAVE TO keeps its own icon as is. */
+:root:not([data-theme='light']) .board-view .board-topbar svg,
+:root:not([data-theme='light']) .board-view .deck svg {
+  filter: brightness(2);
+}
+:root:not([data-theme='light']) .board-view .deck svg.keep-brightness {
+  filter: none;
+}
