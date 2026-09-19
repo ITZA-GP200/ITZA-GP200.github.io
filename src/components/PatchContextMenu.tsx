@@ -364,6 +364,7 @@ export function PatchContextMenu({
               description={`Replaces ${pasteRange} with ${clipboardLabel}`}
               checked={pasteMethod === 'overwrite'}
               onSelect={() => setPasteMethod('overwrite')}
+              onRun={() => onPaste('overwrite')}
             />
             <PasteOption
               label="SWAP"
@@ -371,6 +372,7 @@ export function PatchContextMenu({
               checked={pasteMethod === 'swap'}
               blocked={swapBlocked ?? undefined}
               onSelect={() => setPasteMethod('swap')}
+              onRun={() => onPaste('swap')}
             />
           </div>
           <div
@@ -494,10 +496,12 @@ interface PasteOptionProps {
   /** Why the option is unavailable; undefined when it can be chosen. */
   blocked?: string;
   onSelect?: () => void;
+  /** Double-click: run this option straight away (same as selecting it, then OK). */
+  onRun?: () => void;
 }
 
 // A button with the radio role, so it is reachable and selectable by keyboard.
-function PasteOption({ label, description, checked = false, blocked, onSelect }: PasteOptionProps) {
+function PasteOption({ label, description, checked = false, blocked, onSelect, onRun }: PasteOptionProps) {
   const available = blocked === undefined;
   return (
     <button
@@ -508,6 +512,10 @@ function PasteOption({ label, description, checked = false, blocked, onSelect }:
       title={blocked}
       onClick={() => {
         if (available) onSelect?.();
+      }}
+      // One click selects; a double-click runs it, like OK.
+      onDoubleClick={() => {
+        if (available) onRun?.();
       }}
       className="w-full flex gap-2.5 items-start px-3 py-2.5 rounded text-left focus:outline-none hover:bg-bg-hover focus:bg-bg-hover"
       style={{
