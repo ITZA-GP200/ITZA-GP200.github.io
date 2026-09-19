@@ -74,6 +74,9 @@ export interface PatchManagerSheetProps {
   /** SAVE: write the editor's patch into this slot on the pedal (the pedal's
    *  current slot), so the pedal matches the editor. */
   onSaveEditorToPedal?: (slot: number) => Promise<void>;
+  /** SAVE PATCH: commit the pedal's edit buffer to this slot (the NOW
+   *  slot) under the editor's name, like SAVE on the pedal. Quick. */
+  onSavePatch?: (slot: number) => Promise<void>;
   /** The patch in the editor, named in SAVE's confirm. */
   editorPatchName?: string | null;
   /** The copied slots, in paste order (empty when nothing is copied). */
@@ -161,6 +164,7 @@ export function PatchManagerSheet({
   onProtectBank64,
   onReleaseBank64,
   onSaveEditorToPedal,
+  onSavePatch,
   editorPatchName = null,
   onSaveBank64,
   onRestoreBank64,
@@ -762,9 +766,22 @@ export function PatchManagerSheet({
               variant="secondary"
               disabled={!connected || currentSlot === null || editorPatchName === null || busy || bulkRunning || confirmingSave}
               onClick={() => setConfirmingSave(true)}
-              title={`Make the pedal match the editor: write the editor's patch into ${currentLabel}`}
+              title={`Write every setting of the editor's patch into ${currentLabel} and check it (10–20 s)`}
             >
-              SAVE
+              SAVE ALL
+            </Button>
+          )}
+          {onSavePatch && (
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={!connected || currentSlot === null || editorPatchName === null || busy || bulkRunning}
+              onClick={() => {
+                if (currentSlot !== null) void runBusy(() => onSavePatch(currentSlot));
+              }}
+              title={`Save the patch you're playing into ${currentLabel}, like SAVE on the pedal (quick)`}
+            >
+              SAVE PATCH
             </Button>
           )}
           <Button
@@ -826,7 +843,7 @@ export function PatchManagerSheet({
             className="flex items-center gap-2 flex-wrap font-mono-display text-caption"
           >
             <span style={{ color: 'var(--text-primary)' }}>
-              Save the editor’s patch “{editorPatchName}” into {currentLabel} on the pedal? It replaces what {currentLabel} holds.
+              Write every setting of the editor’s patch “{editorPatchName}” into {currentLabel} and check it? It replaces what {currentLabel} holds (10–20 s).
             </span>
             <Button size="sm" variant="ghost" onClick={() => setConfirmingSave(false)}>
               Cancel
@@ -839,7 +856,7 @@ export function PatchManagerSheet({
                 void runBusy(() => onSaveEditorToPedal(currentSlot));
               }}
             >
-              Save
+              Save all
             </Button>
           </div>
         )}

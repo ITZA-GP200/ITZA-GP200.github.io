@@ -260,3 +260,25 @@ describe('pushPresetToDevice', () => {
     ]);
   });
 });
+
+describe('pushPresetToDevice: finishing pass', () => {
+  it('ends by re-sending each block’s real controls, switches before knobs, first one first and last', async () => {
+    const { events, sender, sleep } = makeRecorder();
+    // M-Vibe (0x0400001F): Depth (0), Rate (1), Sync switch (2).
+    const preset = {
+      effects: [{ slotIndex: 7, enabled: true, effectId: 0x0400001f, params: [33, 7, 1, 0, 0] }],
+      patchVolume: 50, patchPan: 0, patchTempo: 120,
+    } as unknown as GP200Preset;
+    await pushPresetToDevice(preset, sender, { sleep });
+    const params = events.filter((event) => event.startsWith('param:'));
+    // After the upstream passes: Depth, then the Sync switch, then Depth, Rate, then Depth again.
+    expect(params.slice(-5)).toEqual(['param:7:0:33', 'param:7:2:1', 'param:7:0:33', 'param:7:1:7', 'param:7:0:33']);
+  });
+
+  it('skips effects the map doesn’t know', async () => {
+    const { events, sender, sleep } = makeRecorder();
+    await pushPresetToDevice(twoBlockPreset(), sender, { sleep });
+    const last = events.filter((event) => !event.startsWith('sleep')).at(-1);
+    expect(last).toBe('author:Tester');
+  });
+});
