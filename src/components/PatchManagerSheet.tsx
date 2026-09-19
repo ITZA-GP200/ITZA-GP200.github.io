@@ -263,6 +263,14 @@ export function PatchManagerSheet({
   const BANK64_NO_SWAPS = 'Bank 64 is protected: swaps can’t move patches in or out of it';
   if (!renameBlocked && selected !== null && inBank64(selected)) renameBlocked = BANK64_NAMES_FIXED;
   const toolbarSwapBlocked = selectedSlots.some(inBank64) ? BANK64_NO_SWAPS : null;
+  // Right-click SWAP of the two selected patches (same swap as the button).
+  let swapSelectedBlocked = slotActionBlocked ?? toolbarSwapBlocked;
+  if (!swapSelectedBlocked && swapSlotLabel === null) {
+    swapSelectedBlocked = 'Set a swap slot first: right-click a spare slot, then USE FOR SWAP SLOT';
+  }
+  if (!swapSelectedBlocked && selectedSlots.some((slot) => SysExCodec.slotToLabel(slot) === swapSlotLabel)) {
+    swapSelectedBlocked = 'The swap slot can’t take part in a swap';
+  }
   const upBlocked = selected !== null && (inBank64(selected) || inBank64(selected - 1)) ? BANK64_NO_SWAPS : null;
   const downBlocked = selected !== null && (inBank64(selected) || inBank64(selected + 1)) ? BANK64_NO_SWAPS : null;
   // Hosts that don't pass the handlers keep these greyed out as not built.
@@ -1129,6 +1137,11 @@ export function PatchManagerSheet({
         pasteRangeLabel={selected !== null ? describeRange(selected, clipboardCount) : undefined}
         copyBlocked={copyBlocked}
         cutBlocked={cutBlocked}
+        swapSelectedBlocked={swapSelectedBlocked}
+        onSwapSelected={() => {
+          setMenuAt(null);
+          if (selectedSlots.length === 2) void runBusy(() => onSwapSlots(selectedSlots[0], selectedSlots[1]));
+        }}
         onCut={onCutSlot ? () => {
           setMenuAt(null);
           if (selected !== null) void runBusy(() => onCutSlot(selected));
