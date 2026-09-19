@@ -910,3 +910,29 @@ describe('PatchManagerSheet: SAVE PATCH', () => {
     expect(screen.queryByRole('alertdialog')).toBeNull();
   });
 });
+
+describe('PatchManagerSheet: right-click SWAP of two selected patches', () => {
+  const menu = () => screen.getByRole('menu', { name: 'Patch actions' });
+
+  it('appears above COPY only when exactly two patches are selected, and swaps them', () => {
+    const { props } = renderSheet({ swapSlotLabel: '63A' });
+    fireEvent.click(screen.getByText('Clean'));
+    fireEvent.contextMenu(screen.getByText('Clean'), { clientX: 120, clientY: 140 });
+    expect(within(menu()).queryByRole('menuitem', { name: 'SWAP' })).toBeNull();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.click(screen.getByText('Crunch'), { shiftKey: true });
+    fireEvent.contextMenu(screen.getByText('Crunch'), { clientX: 120, clientY: 140 });
+    const items = within(menu()).getAllByRole('menuitem').map((item) => item.textContent);
+    expect(items.indexOf('SWAP')).toBe(items.indexOf('COPY') - 1);
+    fireEvent.click(within(menu()).getByRole('menuitem', { name: 'SWAP' }));
+    expect(props.onSwapSlots).toHaveBeenCalledWith(0, 1);
+  });
+
+  it('is greyed with the reason when there is no swap slot', () => {
+    renderSheet();
+    fireEvent.click(screen.getByText('Clean'));
+    fireEvent.click(screen.getByText('Crunch'), { shiftKey: true });
+    fireEvent.contextMenu(screen.getByText('Crunch'), { clientX: 120, clientY: 140 });
+    expect(within(menu()).getByRole('menuitem', { name: 'SWAP' }).getAttribute('title')).toContain('Set a swap slot first');
+  });
+});

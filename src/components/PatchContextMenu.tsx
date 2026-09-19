@@ -47,6 +47,10 @@ export interface PatchContextMenuProps {
   clipboardLabel: string | null;
   /** Why COPY can't run right now, or null when it can. */
   copyBlocked: string | null;
+  /** SWAP of the two selected patches: shown only when exactly two are
+   *  selected. Why it can't run right now, or null when it can. */
+  swapSelectedBlocked?: string | null;
+  onSwapSelected?: () => void;
   /** Why CUT can't run right now, or null when it can. */
   cutBlocked?: string | null;
   onCut?: () => void;
@@ -112,6 +116,8 @@ export function PatchContextMenu({
   clipboardLabel,
   copyBlocked,
   cutBlocked = NOT_BUILT,
+  swapSelectedBlocked = null,
+  onSwapSelected,
   onCut,
   clipboardIsCut = false,
   undoLabel = null,
@@ -334,6 +340,14 @@ export function PatchContextMenu({
               onSelect={onRedo}
             />
             <Divider />
+            {selectionCount === 2 && onSwapSelected && (
+              <MenuItem
+                label="SWAP"
+                blocked={swapSelectedBlocked}
+                title={`Exchange ${selectionLabel}`}
+                onSelect={onSwapSelected}
+              />
+            )}
             <MenuItem label="COPY" blocked={copyBlocked} onSelect={onCopy} />
             <MenuItem label="CUT" danger blocked={onCut ? cutBlocked : NOT_BUILT} onSelect={onCut} />
             <Divider />
