@@ -12,6 +12,10 @@ nothing to install and nothing to sign up for.
 
 **[▶ Open the app](https://gp200studio.com/)** · **[☕ Buy me a coffee](https://buymeacoffee.com/kabir0st)**
 
+> **This is a fork** focused on patch management in the PATCHES slide-out (copy, cut, paste, swap, undo,
+> a protected bank 64 and more). See **[docs/fork](docs/fork/README.md)** for what it adds, the user guide,
+> and its support notes. All credit for GP200 Studio itself goes to its author, kabir0st.
+
 [![Chrome or Edge](https://img.shields.io/badge/works%20in-Chrome%20%7C%20Edge-orange?logo=googlechrome&logoColor=white)](#how-to-start)
 [![Windows, macOS, Linux, Android](https://img.shields.io/badge/on-Windows%20·%20macOS%20·%20Linux%20·%20Android-5df08a)](#how-to-start)
 [![Free and open source](https://img.shields.io/badge/free%20%26%20open%20source-GPL--3.0-blue)](LICENSE)
