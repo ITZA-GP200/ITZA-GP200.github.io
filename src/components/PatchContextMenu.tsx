@@ -330,13 +330,13 @@ export function PatchContextMenu({
             <MenuItem
               label="UNDO"
               blocked={onUndo ? (historyBlocked ?? (undoLabel === null ? 'Nothing to undo' : null)) : NOT_BUILT}
-              title={undoLabel ? `Undo: ${undoLabel}` : undefined}
+              title={undoLabel ? `Undo: ${undoLabel} (Ctrl+Z)` : undefined}
               onSelect={onUndo}
             />
             <MenuItem
               label="REDO"
               blocked={onRedo ? (historyBlocked ?? (redoLabel === null ? 'Nothing to redo' : null)) : NOT_BUILT}
-              title={redoLabel ? `Redo: ${redoLabel}` : undefined}
+              title={redoLabel ? `Redo: ${redoLabel} (Ctrl+Y)` : undefined}
               onSelect={onRedo}
             />
             <Divider />

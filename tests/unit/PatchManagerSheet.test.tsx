@@ -863,8 +863,8 @@ describe('PatchManagerSheet: UNDO / REDO', () => {
     const onRedo = vi.fn().mockResolvedValue(undefined);
     renderSheet({ onUndo, onRedo, undoLabel: 'Paste into 61A–61D', redoLabel: 'Swap 1A and 1B' });
     const menu = menuOn('Crunch');
-    expect(within(menu).getByRole('menuitem', { name: 'UNDO' })).toHaveAttribute('title', 'Undo: Paste into 61A–61D');
-    expect(within(menu).getByRole('menuitem', { name: 'REDO' })).toHaveAttribute('title', 'Redo: Swap 1A and 1B');
+    expect(within(menu).getByRole('menuitem', { name: 'UNDO' })).toHaveAttribute('title', 'Undo: Paste into 61A–61D (Ctrl+Z)');
+    expect(within(menu).getByRole('menuitem', { name: 'REDO' })).toHaveAttribute('title', 'Redo: Swap 1A and 1B (Ctrl+Y)');
     fireEvent.click(within(menu).getByRole('menuitem', { name: 'UNDO' }));
     expect(onUndo).toHaveBeenCalledTimes(1);
   });
@@ -934,5 +934,43 @@ describe('PatchManagerSheet: right-click SWAP of two selected patches', () => {
     fireEvent.click(screen.getByText('Crunch'), { shiftKey: true });
     fireEvent.contextMenu(screen.getByText('Crunch'), { clientX: 120, clientY: 140 });
     expect(within(menu()).getByRole('menuitem', { name: 'SWAP' }).getAttribute('title')).toContain('Set a swap slot first');
+  });
+});
+
+describe('PatchManagerSheet: Ctrl+Z / Ctrl+Y', () => {
+  it('Ctrl+Z undoes, Ctrl+Y and Ctrl+Shift+Z redo', async () => {
+    const onUndo = vi.fn().mockResolvedValue(undefined);
+    const onRedo = vi.fn().mockResolvedValue(undefined);
+    renderSheet({ onUndo, onRedo, undoLabel: 'Paste into 2A', redoLabel: 'Swap 1A and 1B' });
+    fireEvent.keyDown(document, { key: 'z', ctrlKey: true });
+    expect(onUndo).toHaveBeenCalledTimes(1);
+    // While that runs the panel is busy, so a key pressed now is ignored.
+    fireEvent.keyDown(document, { key: 'y', ctrlKey: true });
+    expect(onRedo).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(screen.queryByText(/Working with the pedal/)).toBeNull());
+    fireEvent.keyDown(document, { key: 'y', ctrlKey: true });
+    expect(onRedo).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(screen.queryByText(/Working with the pedal/)).toBeNull());
+    fireEvent.keyDown(document, { key: 'Z', ctrlKey: true, shiftKey: true });
+    expect(onRedo).toHaveBeenCalledTimes(2);
+  });
+
+  it('leaves text boxes alone, and does nothing with nothing to undo', () => {
+    const onUndo = vi.fn().mockResolvedValue(undefined);
+    renderSheet({ onUndo, undoLabel: 'Paste into 2A' });
+    fireEvent.keyDown(screen.getByPlaceholderText(/Search patches/), { key: 'z', ctrlKey: true });
+    expect(onUndo).not.toHaveBeenCalled();
+    cleanup();
+    const idle = vi.fn();
+    renderSheet({ onUndo: idle, undoLabel: null });
+    fireEvent.keyDown(document, { key: 'z', ctrlKey: true });
+    expect(idle).not.toHaveBeenCalled();
+  });
+
+  it('only while the slide-out is open', () => {
+    const onUndo = vi.fn().mockResolvedValue(undefined);
+    renderSheet({ open: false, onUndo, undoLabel: 'Paste into 2A' });
+    fireEvent.keyDown(document, { key: 'z', ctrlKey: true });
+    expect(onUndo).not.toHaveBeenCalled();
   });
 });
