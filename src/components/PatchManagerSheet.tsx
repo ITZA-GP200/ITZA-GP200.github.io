@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
 import { PatchPicker } from './PatchPicker';
@@ -312,6 +312,39 @@ export function PatchManagerSheet({
   let historyBlocked: string | null = null;
   if (!connected) historyBlocked = 'Connect the GP-200 first';
   else if (busy || bulkRunning) historyBlocked = 'Wait for the current action to finish';
+
+  // Ctrl+Z / Ctrl+Y (Cmd on a Mac; Ctrl+Shift+Z redoes too) while the slide-out
+  // is open. Not in text boxes, where they keep their text-editing meaning, and
+  // not app-wide: this history is patch actions, not the editor's knob turns.
+  const historyKeyRef = useRef<(direction: 'undo' | 'redo') => void>(() => {});
+  historyKeyRef.current = (direction) => {
+    if (historyBlocked) return;
+    if (direction === 'undo' && onUndo && undoLabel !== null) {
+      setMenuAt(null);
+      void runBusy(onUndo);
+    }
+    if (direction === 'redo' && onRedo && redoLabel !== null) {
+      setMenuAt(null);
+      void runBusy(onRedo);
+    }
+  };
+  useEffect(() => {
+    if (!open) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))) return;
+      const key = event.key.toLowerCase();
+      let direction: 'undo' | 'redo' | null = null;
+      if (key === 'z') direction = event.shiftKey ? 'redo' : 'undo';
+      else if (key === 'y' && !event.shiftKey) direction = 'redo';
+      if (!direction) return;
+      event.preventDefault();
+      historyKeyRef.current(direction);
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [open]);
 
   let resetBlocked = onResetSlot ? slotActionBlocked : 'Not built yet';
   if (!resetBlocked && defaultPatchLabel === null) {
