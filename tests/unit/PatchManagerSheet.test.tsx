@@ -276,7 +276,7 @@ describe('PatchManagerSheet: right-click menu', () => {
   it('shows the actions that are not built yet greyed out, and they do nothing', () => {
     const { props } = renderSheet({ clipboardLabel: '1A' });
     const menu = openMenuOn('Crunch');
-    for (const name of ['UNDO', 'REDO', 'CUT', 'RESET', /^INSERT/]) {
+    for (const name of ['UNDO', 'REDO', 'CUT', 'RESET']) {
       const item = within(menu).getByRole('menuitem', { name });
       expect(item).toHaveAttribute('aria-disabled', 'true');
       fireEvent.click(item);
@@ -284,7 +284,9 @@ describe('PatchManagerSheet: right-click menu', () => {
     expect(props.onPasteToSlot).not.toHaveBeenCalled();
     fireEvent.click(within(menu).getByRole('menuitem', { name: /^PASTE/ }));
     const options = screen.getByRole('dialog', { name: 'Paste options' });
-    expect(within(options).getByRole('radio', { name: /INSERT/ })).toHaveAttribute('aria-disabled', 'true');
+    // INSERT was removed (owner, 2026-09-18): shifting the list is minutes of copies.
+    expect(within(options).queryByRole('radio', { name: /INSERT/ })).toBeNull();
+    expect(within(menu).queryByRole('menuitem', { name: /^INSERT/ })).toBeNull();
     expect(within(options).getByRole('radio', { name: /SWAP/ })).toHaveAttribute('aria-disabled', 'true');
   });
 
