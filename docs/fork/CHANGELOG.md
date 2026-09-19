@@ -1,6 +1,9 @@
 # Changelog: GP200 Studio PM
 
-## 1.1.0: cleanup round (in progress, not yet published)
+Versions are **X.Y.Z**: X = a major feature release, Y = a functional release
+within a version, Z = an iterative release (typos, labels and similar).
+
+## 1.0.1 (in progress, not yet published)
 
 - PATCHES: the patch the pedal is on is labelled **ACTIVE** (was NOW), both its tag in the list
   and the header ("active: 63C", was "now: 63C").

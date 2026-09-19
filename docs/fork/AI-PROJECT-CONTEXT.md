@@ -20,6 +20,10 @@ design depends on. Everything marked *verified* was confirmed on a real GP-200
   owner-verified points (see History).
 - After hook or prop changes, the running page needs a hard reload (⚡ or
   Ctrl+Shift+R).
+- **Versioning is X.Y.Z** (owner's scheme): X = major feature release, Y =
+  functional release within a version, Z = iterative release (typos, labels).
+  Keep `package.json` and `docs/fork/CHANGELOG.md` in step; tag releases `vX.Y.Z`.
+  Work stays local until the owner releases it.
 
 ## Stack
 
