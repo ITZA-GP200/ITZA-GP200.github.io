@@ -36,6 +36,7 @@ Version 1.0: 19 September 2026 (tag `fork2-done-2026-09-19`).
 | [5174-Editor-support.md](5174-Editor-support.md) | Users: upload to ChatGPT or Claude to get a support assistant for this editor |
 | [AI-PROJECT-CONTEXT.md](AI-PROJECT-CONTEXT.md) | Developers and AI coding assistants: how the fork works and why |
 | [lessons-from-fork-1.md](lessons-from-fork-1.md) | Developers: what went wrong in the first attempt |
+| [issue-to-kabir0st-2026-09-19.md](issue-to-kabir0st-2026-09-19.md) | The note posted to the original author, offering the fixes and features upstream |
 | [../../server/contact/README.md](../../server/contact/README.md) | Setting up the contact form on a PHP host |
 
 ## Running it
