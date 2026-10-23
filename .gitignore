@@ -43,5 +43,3 @@ dumps
 
 # Cloudflare Wrangler local state / cache
 .wrangler
-# Contact form server config: holds the private address, server-only.
-server/contact/contact-config.php

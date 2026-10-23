@@ -48,7 +48,6 @@ testing-library, oxlint. Web MIDI (Chrome/Edge). Upstream base: `PRODUCTION`
 | `src/core/shippedPatch.ts` | The built-in default patch (base64 .prst, owner's 48A export) |
 | `src/core/undoHistory.ts` | UNDO / REDO engine |
 | `src/core/defaultPatch.ts`, `swapSlot.ts` | Remembered default patch and swap slot (localStorage) |
-| `src/core/contact.ts`, `src/components/ContactDialog.tsx`, `server/contact/` | Contact form (PHP mail; address only in git-ignored server config) |
 | `src/components/PatchManagerSheet.tsx` | The PATCHES slide-out: rules for what's enabled, buttons, confirms |
 | `src/components/PatchContextMenu.tsx` | Right-click menu |
 | `src/components/PatchPicker.tsx` | The list: tags, protected-bank styling |
@@ -131,4 +130,6 @@ testing-library, oxlint. Web MIDI (Chrome/Edge). Upstream base: `PRODUCTION`
 
 - A USB capture of Valeton's desktop editor assigning EXP / CTRL, and moving a
   patch (a native move message could make INSERT practical).
-- Host the fork (the contact form needs PHP; see `server/contact/README.md`).
+- The contact form (v1.0.0, tag `fork2-done-2026-09-19`) was dropped in 1.1.0:
+  GitHub Pages is static and can't run its PHP. Restore it from that tag if the
+  editor ever moves to a host with PHP.
