@@ -64,13 +64,15 @@ describe('applyHistory: overwrite', () => {
 
   it('refuses, before writing anything, if a slot changed since', async () => {
     const pedal = fakePedal({ 4: patch('New A'), 5: patch('Edited on the pedal') });
-    await expect(applyHistory(pedal.device, entry, 'undo')).rejects.toThrow('2B changed since, so it wasn’t undone');
+    // The refusal names the slot and what differs about it.
+    await expect(applyHistory(pedal.device, entry, 'undo'))
+      .rejects.toThrow('2B (name "Edited on the pedal" vs "New B") changed since, so it wasn’t undone');
     expect(pedal.log).toEqual([]);
   });
 
   it('a knob changed since also counts as a change', async () => {
     const pedal = fakePedal({ 4: patch('New A', 77), 5: patch('New B') });
-    await expect(applyHistory(pedal.device, entry, 'undo')).rejects.toThrow('2A changed since');
+    await expect(applyHistory(pedal.device, entry, 'undo')).rejects.toThrow('2A (DST param 0 77 vs 50) changed since');
   });
 });
 

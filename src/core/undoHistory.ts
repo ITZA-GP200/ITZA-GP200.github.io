@@ -71,7 +71,14 @@ export function samePatchOnPedal(actual: GP200Preset, expected: GP200Preset): bo
 async function checkSlots(device: UndoDevice, expected: { slot: number; patch: GP200Preset }[], verb: string) {
   const changed: string[] = [];
   for (const { slot, patch } of expected) {
-    if (!samePatchOnPedal(await device.pullPreset(slot), patch)) changed.push(label(slot));
+    // Name the difference, not just the slot: "what changed?" is the first
+    // thing anyone asks, and a refusal nobody can explain looks like a bug.
+    const { identity, values } = describeWriteFidelity(await device.pullPreset(slot), patch);
+    const differences = [...identity, ...values];
+    if (differences.length > 0) {
+      console.warn(`[GP-200] ${label(slot)} changed since the action:`, differences);
+      changed.push(`${label(slot)} (${differences.slice(0, 2).join('; ')}${differences.length > 2 ? '; …' : ''})`);
+    }
   }
   if (changed.length > 0) {
     throw new Error(`${changed.join(', ')} changed since, so it wasn’t ${verb} (that would wipe the change)`);
