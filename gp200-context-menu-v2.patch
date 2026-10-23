@@ -1,0 +1,1356 @@
+diff --git a/src/App.tsx b/src/App.tsx
+index 2ef6b98..650ef04 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -180,7 +180,14 @@ function App() {
+   const [dragIndex, setDragIndex] = useState<number | null>(null);
+   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+   const [slotBrowserMode, setSlotBrowserMode] = useState<'pull' | 'push' | null>(null);
+-  const [clipboard, setClipboard] = useState<{ preset: GP200Preset; label: string } | null>(null);
++  // Multi-patch clipboard: source slot indices + full preset data for each.
++  // Legacy single-slot operations read clipboard.items[0] where needed.
++  const [clipboard, setClipboard] = useState<{
++    source: number[];
++    items: GP200Preset[];
++    label: string;
++    count: number;
++  } | null>(null);
+   const [loadError, setLoadError] = useState<string | null>(null);
+   const [showExportDialog, setShowExportDialog] = useState(false);
+   const [firmwareWarningDismissed, setFirmwareWarningDismissed] = useState(false);
+@@ -598,25 +605,56 @@ function App() {
+     }
+   }
+ 
+-  // In-app patch clipboard, for copy/paste and swap in the patch manager.
++  // ── In-app patch clipboard ────────────────────────────────────────────────
+   // Built on pullPreset/pushPreset — the same proven read and flash-upload
+   // path the per-slot EXPORT and IMPORT buttons already use — rather than the
+   // device's own patch-move message, which is decoded but not hardware-verified
+   // and would reshuffle all 256 slots if it turned out to be wrong.
+-  async function handleCopySlot(slot: number) {
++
++  /** Human-readable range label for a set of slot indices. */
++  function slotsRangeLabel(slots: number[]): string {
++    const sorted = [...slots].sort((a, b) => a - b);
++    if (sorted.length === 0) return '';
++    if (sorted.length === 1) return SysExCodec.slotToLabel(sorted[0]);
++    const span = sorted[sorted.length - 1] - sorted[0];
++    const contiguous = span === sorted.length - 1;
++    if (contiguous) return `${SysExCodec.slotToLabel(sorted[0])}–${SysExCodec.slotToLabel(sorted[sorted.length - 1])}`;
++    if (sorted.length <= 4) return sorted.map(s => SysExCodec.slotToLabel(s)).join(', ');
++    return sorted.slice(0, 3).map(s => SysExCodec.slotToLabel(s)).join(', ') + ` +${sorted.length - 3}`;
++  }
++
++  /**
++   * Copy one or more slots to the clipboard.
++   * Reads each slot sequentially from the device (MIDI-safe).
++   */
++  async function handleCopySlots(slots: number[]) {
++    const sorted = [...slots].sort((a, b) => a - b);
+     try {
+-      const pulled = await midiDevice.pullPreset(slot);
+-      setClipboard({ preset: pulled, label: SysExCodec.slotToLabel(slot) });
++      const items: GP200Preset[] = [];
++      for (const s of sorted) items.push(await midiDevice.pullPreset(s));
++      setClipboard({ source: sorted, items, label: slotsRangeLabel(sorted), count: items.length });
+       setLoadError(null);
+     } catch {
+-      setLoadError(`Failed to copy ${SysExCodec.slotToLabel(slot)} from device`);
++      setLoadError(`Failed to copy ${slotsRangeLabel(sorted)} from device`);
+     }
+   }
+ 
++  /** Legacy single-slot copy (used by existing buttons). */
++  async function handleCopySlot(slot: number) {
++    return handleCopySlots([slot]);
++  }
++
++  /**
++   * Paste clipboard content starting at `slot`, overwriting in place.
++   * Uses only the first item for legacy single-slot callers.
++   */
+   async function handlePasteToSlot(slot: number) {
+     if (!clipboard) return;
++    // Legacy single-slot: use first item in the multi-preset clipboard.
++    const item = clipboard.items[0];
++    if (!item) return;
+     try {
+-      await midiDevice.pushPreset({ ...clipboard.preset, slotIndex: slot }, slot);
++      await midiDevice.pushPreset({ ...item, slotIndex: slot }, slot);
+       setLoadError(null);
+     } catch (err) {
+       const detail = err instanceof Error ? err.message : String(err);
+@@ -624,6 +662,218 @@ function App() {
+     }
+   }
+ 
++  /**
++   * Paste clipboard content starting at `targetSlot`, overwriting in place.
++   * Handles multi-patch clipboard.
++   */
++  async function handlePasteOverwrite(targetSlot: number) {
++    if (!clipboard || bulkProgress) return;
++    const { items } = clipboard;
++    bulkCancelRef.current = false;
++    setBulkProgress({ done: 0, total: items.length, phase: 'Pasting…' });
++    try {
++      for (let i = 0; i < items.length; i++) {
++        if (bulkCancelRef.current) return;
++        const dest = targetSlot + i;
++        if (dest >= 256) break;
++        await midiDevice.pushPreset({ ...items[i], slotIndex: dest }, dest);
++        setBulkProgress({ done: i + 1, total: items.length, phase: 'Pasting…' });
++      }
++      setLoadError(null);
++    } catch (err) {
++      const detail = err instanceof Error ? err.message : String(err);
++      setLoadError(`Failed to paste: ${detail}`);
++    } finally {
++      setBulkProgress(null);
++      if (midiDevice.status === 'connected') void midiDevice.loadPresetNames();
++    }
++  }
++
++  /**
++   * Paste clipboard content by INSERT at `targetSlot`:
++   * shifts slots target..lastOccupied down by N; last N patches are lost.
++   */
++  async function handlePasteInsert(targetSlot: number) {
++    if (!clipboard || bulkProgress) return;
++    const { items } = clipboard;
++    const n = items.length;
++    const last = Math.min(lastOccupiedSlot(255 - n), 255 - n);
++    if (targetSlot > last) { await handlePasteOverwrite(targetSlot); return; }
++    const shiftCount = last - targetSlot + 1;
++    const total = shiftCount * 2 + n;
++    bulkCancelRef.current = false;
++    setBulkProgress({ done: 0, total, phase: 'Reading…' });
++    try {
++      const affected: GP200Preset[] = [];
++      for (let s = targetSlot; s <= last; s++) {
++        if (bulkCancelRef.current) return;
++        affected.push(await midiDevice.pullPreset(s));
++        setBulkProgress({ done: affected.length, total, phase: 'Reading…' });
++      }
++      for (let i = affected.length - 1; i >= 0; i--) {
++        if (bulkCancelRef.current) return;
++        const dest = targetSlot + n + i;
++        if (dest <= 255) await midiDevice.pushPreset({ ...affected[i], slotIndex: dest }, dest);
++        setBulkProgress({ done: shiftCount + (affected.length - i), total, phase: 'Shifting…' });
++      }
++      for (let i = 0; i < n; i++) {
++        if (bulkCancelRef.current) return;
++        const dest = targetSlot + i;
++        await midiDevice.pushPreset({ ...items[i], slotIndex: dest }, dest);
++        setBulkProgress({ done: shiftCount * 2 + i + 1, total, phase: 'Inserting…' });
++      }
++      setLoadError(null);
++    } catch (err) {
++      const detail = err instanceof Error ? err.message : String(err);
++      setLoadError(`Failed to insert-paste: ${detail}`);
++    } finally {
++      setBulkProgress(null);
++      if (midiDevice.status === 'connected') void midiDevice.loadPresetNames();
++    }
++  }
++
++  /**
++   * Paste via SWAP: clipboard goes to target..target+N-1; whatever was there
++   * moves back to the original clipboard source slots.  Nothing lost.
++   */
++  async function handlePasteSwap(targetSlot: number) {
++    if (!clipboard || bulkProgress) return;
++    const { source, items } = clipboard;
++    const n = items.length;
++    const total = n * 4;
++    bulkCancelRef.current = false;
++    setBulkProgress({ done: 0, total, phase: 'Reading…' });
++    try {
++      // Read target slots (what will be displaced)
++      const displaced: GP200Preset[] = [];
++      for (let i = 0; i < n; i++) {
++        if (bulkCancelRef.current) return;
++        displaced.push(await midiDevice.pullPreset(targetSlot + i));
++        setBulkProgress({ done: displaced.length, total, phase: 'Reading…' });
++      }
++      // Write clipboard items to target
++      for (let i = 0; i < n; i++) {
++        if (bulkCancelRef.current) return;
++        const dest = targetSlot + i;
++        await midiDevice.pushPreset({ ...items[i], slotIndex: dest }, dest);
++        setBulkProgress({ done: n + i + 1, total, phase: 'Writing clipboard…' });
++      }
++      // Write displaced items back to original source slots
++      for (let i = 0; i < Math.min(displaced.length, source.length); i++) {
++        if (bulkCancelRef.current) return;
++        const dest = source[i];
++        await midiDevice.pushPreset({ ...displaced[i], slotIndex: dest }, dest);
++        setBulkProgress({ done: n * 2 + n + i + 1, total, phase: 'Writing displaced…' });
++      }
++      // Clipboard becomes what was displaced (standard "swap clears clipboard" behavior)
++      setClipboard(null);
++      setLoadError(null);
++    } catch (err) {
++      const detail = err instanceof Error ? err.message : String(err);
++      setLoadError(`Failed to swap-paste: ${detail}`);
++    } finally {
++      setBulkProgress(null);
++      if (midiDevice.status === 'connected') void midiDevice.loadPresetNames();
++    }
++  }
++
++  /**
++   * Context menu PASTE dispatcher — routes to the correct sub-operation.
++   */
++  async function handleContextPaste(targetSlot: number, method: 'overwrite' | 'insert' | 'swap') {
++    if (method === 'overwrite') await handlePasteOverwrite(targetSlot);
++    else if (method === 'insert') await handlePasteInsert(targetSlot);
++    else await handlePasteSwap(targetSlot);
++  }
++
++  /**
++   * Context menu INSERT dispatcher — inserts N blank or clipboard patches.
++   */
++  async function handleContextInsert(
++    targetSlot: number,
++    mode: 'default' | 'clipboard',
++    count: number,
++  ) {
++    if (bulkProgress) return;
++    const last = Math.min(lastOccupiedSlot(255 - count), 255 - count);
++    const shiftCount = targetSlot <= last ? last - targetSlot + 1 : 0;
++    const total = shiftCount * 2 + count;
++    bulkCancelRef.current = false;
++    setBulkProgress({ done: 0, total, phase: 'Reading…' });
++    try {
++      const affected: GP200Preset[] = [];
++      for (let s = targetSlot; s <= last; s++) {
++        if (bulkCancelRef.current) return;
++        affected.push(await midiDevice.pullPreset(s));
++        setBulkProgress({ done: affected.length, total, phase: 'Reading…' });
++      }
++      for (let i = affected.length - 1; i >= 0; i--) {
++        if (bulkCancelRef.current) return;
++        const dest = targetSlot + count + i;
++        if (dest <= 255) await midiDevice.pushPreset({ ...affected[i], slotIndex: dest }, dest);
++        setBulkProgress({ done: shiftCount + (affected.length - i), total, phase: 'Shifting…' });
++      }
++      // Build the insert items
++      const insertItems: GP200Preset[] = [];
++      if (mode === 'default') {
++        for (let k = 0; k < count; k++) insertItems.push(createDefaultPreset());
++      } else {
++        if (!clipboard) return;
++        for (let k = 0; k < count; k++) insertItems.push(clipboard.items[k % clipboard.items.length]);
++      }
++      for (let i = 0; i < insertItems.length; i++) {
++        if (bulkCancelRef.current) return;
++        const dest = targetSlot + i;
++        await midiDevice.pushPreset({ ...insertItems[i], slotIndex: dest }, dest);
++        setBulkProgress({ done: shiftCount * 2 + i + 1, total, phase: 'Inserting…' });
++      }
++      setLoadError(null);
++    } catch (err) {
++      const detail = err instanceof Error ? err.message : String(err);
++      setLoadError(`Failed to insert: ${detail}`);
++    } finally {
++      setBulkProgress(null);
++      if (midiDevice.status === 'connected') void midiDevice.loadPresetNames();
++    }
++  }
++
++  /**
++   * Context menu RESET — overwrites selected slots with factory-default preset.
++   */
++  async function handleResetSlots(slots: number[]) {
++    if (bulkProgress) return;
++    bulkCancelRef.current = false;
++    setBulkProgress({ done: 0, total: slots.length, phase: 'Resetting…' });
++    try {
++      for (let i = 0; i < slots.length; i++) {
++        if (bulkCancelRef.current) return;
++        const blank = createDefaultPreset();
++        await midiDevice.pushPreset({ ...blank, slotIndex: slots[i], patchName: '' }, slots[i]);
++        setBulkProgress({ done: i + 1, total: slots.length, phase: 'Resetting…' });
++      }
++      setLoadError(null);
++    } catch (err) {
++      const detail = err instanceof Error ? err.message : String(err);
++      setLoadError(`Failed to reset: ${detail}`);
++    } finally {
++      setBulkProgress(null);
++      if (midiDevice.status === 'connected') void midiDevice.loadPresetNames();
++    }
++  }
++
++  /**
++   * Context menu CUT — copy selected slots to clipboard then remove+shift them.
++   */
++  async function handleCutSlots(slots: number[]) {
++    if (bulkProgress) return;
++    await handleCopySlots(slots);
++    // Remove each slot by shift-up, highest first to preserve lower indices
++    const sorted = [...slots].sort((a, b) => b - a);
++    for (const slot of sorted) {
++      await handleRemoveShift(slot);
++    }
++  }
++
+   async function handleSwapSlots(first: number, second: number) {
+     if (first === second) return;
+     try {
+@@ -645,6 +895,135 @@ function App() {
+     }
+   }
+ 
++  /**
++   * Returns the highest slot index that has a non-null name, capped at `cap`.
++   * Used by insert/remove to know where the occupied region ends so we don't
++   * cascade blank reads across the entire 256-slot space.
++   */
++  function lastOccupiedSlot(cap: number): number {
++    const names = midiDevice.presetNames;
++    for (let s = cap; s >= 0; s--) {
++      if (names[s] !== null && names[s] !== undefined && names[s] !== '') return s;
++    }
++    return 0;
++  }
++
++  /**
++   * Insert the clipboard patch BEFORE `slot`, shifting every patch from
++   * slot..lastOccupied down by one position.  Read all affected patches first
++   * so a failed read aborts before any writes touch the device.
++   */
++  async function handleInsertBefore(slot: number) {
++    if (!clipboard || bulkProgress) return;
++    const last = Math.min(lastOccupiedSlot(254), 254); // cap: 255 gets overwritten, not lost
++    if (slot > last) {
++      // Beyond occupied range — just paste directly (no shifting needed).
++      await handlePasteToSlot(slot);
++      return;
++    }
++    const count = last - slot + 1; // patches that need to shift
++    bulkCancelRef.current = false;
++    setBulkProgress({ done: 0, total: count * 2 + 1, phase: 'Inserting…' });
++    try {
++      // Phase 1: read all patches that will shift (fail-safe before any writes).
++      const affected: GP200Preset[] = [];
++      for (let s = slot; s <= last; s++) {
++        if (bulkCancelRef.current) return;
++        affected.push(await midiDevice.pullPreset(s));
++        setBulkProgress({ done: affected.length, total: count * 2 + 1, phase: 'Reading…' });
++      }
++      // Phase 2: write shifted patches from the bottom up (avoids clobbering unread slots).
++      for (let i = affected.length - 1; i >= 0; i--) {
++        if (bulkCancelRef.current) return;
++        const targetSlot = slot + i + 1;
++        if (targetSlot <= 255) {
++          await midiDevice.pushPreset({ ...affected[i], slotIndex: targetSlot }, targetSlot);
++        }
++        setBulkProgress({ done: count + (affected.length - i), total: count * 2 + 1, phase: 'Shifting…' });
++      }
++      // Phase 3: write clipboard to the freed slot.
++      if (!bulkCancelRef.current) {
++        await midiDevice.pushPreset({ ...clipboard.preset, slotIndex: slot }, slot);
++      }
++      setLoadError(null);
++    } catch (err) {
++      const detail = err instanceof Error ? err.message : String(err);
++      setLoadError(`Failed to insert before ${SysExCodec.slotToLabel(slot)}: ${detail}`);
++    } finally {
++      setBulkProgress(null);
++      if (midiDevice.status === 'connected') void midiDevice.loadPresetNames();
++    }
++  }
++
++  /**
++   * Remove the patch at `slot` and shift every patch from slot+1..lastOccupied
++   * up by one.  The final occupied slot is overwritten with an init preset so
++   * it no longer shows as occupied after a name refresh.
++   */
++  async function handleRemoveShift(slot: number) {
++    if (bulkProgress) return;
++    const last = lastOccupiedSlot(255);
++    if (slot >= last) {
++      // Last (or only) occupied slot — just clear it directly.
++      const blank = createDefaultPreset();
++      try {
++        await midiDevice.pushPreset({ ...blank, slotIndex: slot, patchName: '' }, slot);
++        setLoadError(null);
++      } catch (err) {
++        const detail = err instanceof Error ? err.message : String(err);
++        setLoadError(`Failed to clear ${SysExCodec.slotToLabel(slot)}: ${detail}`);
++      } finally {
++        if (midiDevice.status === 'connected') void midiDevice.loadPresetNames();
++      }
++      return;
++    }
++    const count = last - slot; // number of patches shifting up
++    bulkCancelRef.current = false;
++    setBulkProgress({ done: 0, total: count * 2 + 1, phase: 'Removing…' });
++    try {
++      // Phase 1: read patches that will shift up (slot+1..last).
++      const affected: GP200Preset[] = [];
++      for (let s = slot + 1; s <= last; s++) {
++        if (bulkCancelRef.current) return;
++        affected.push(await midiDevice.pullPreset(s));
++        setBulkProgress({ done: affected.length, total: count * 2 + 1, phase: 'Reading…' });
++      }
++      // Phase 2: write each patch one position earlier.
++      for (let i = 0; i < affected.length; i++) {
++        if (bulkCancelRef.current) return;
++        const targetSlot = slot + i;
++        await midiDevice.pushPreset({ ...affected[i], slotIndex: targetSlot }, targetSlot);
++        setBulkProgress({ done: count + i + 1, total: count * 2 + 1, phase: 'Shifting…' });
++      }
++      // Phase 3: clear the (now-duplicate) last slot with an init patch.
++      if (!bulkCancelRef.current) {
++        const blank = createDefaultPreset();
++        await midiDevice.pushPreset({ ...blank, slotIndex: last, patchName: '' }, last);
++      }
++      setLoadError(null);
++    } catch (err) {
++      const detail = err instanceof Error ? err.message : String(err);
++      setLoadError(`Failed to remove ${SysExCodec.slotToLabel(slot)}: ${detail}`);
++    } finally {
++      setBulkProgress(null);
++      if (midiDevice.status === 'connected') void midiDevice.loadPresetNames();
++    }
++  }
++
++  /**
++   * Cut: copy the patch to the clipboard and then remove + shift it.
++   * Equivalent to COPY → REMOVE+SHIFT so the user can then PASTE INSERT elsewhere.
++   */
++  async function handleCutSlot(slot: number) {
++    if (bulkProgress) return;
++    try {
++      await handleCopySlot(slot);
++    } catch {
++      return; // handleCopySlot already sets loadError
++    }
++    await handleRemoveShift(slot);
++  }
++
+   async function handleRenameSlot(slot: number, name: string) {
+     try {
+       await midiDevice.renameSlot(slot, name);
+@@ -1054,11 +1433,20 @@ function App() {
+         onPasteToSlot={handlePasteToSlot}
+         onSwapSlots={handleSwapSlots}
+         clipboardLabel={clipboard?.label ?? null}
++        onInsertBefore={handleInsertBefore}
++        onRemoveShift={handleRemoveShift}
++        onCutSlot={handleCutSlot}
+         onRenameSlot={handleRenameSlot}
+         onRefreshNames={() => void midiDevice.refreshNames()}
+         onImportFile={handleFile}
+         onExportRequest={() => setShowExportDialog(true)}
+         userIrNames={midiDevice.userIrNames}
++        clipboardForMenu={clipboard ? { source: clipboard.source, label: clipboard.label, count: clipboard.count } : null}
++        onCopySlots={handleCopySlots}
++        onCutSlots={handleCutSlots}
++        onContextPaste={handleContextPaste}
++        onContextInsert={handleContextInsert}
++        onResetSlots={handleResetSlots}
+       />
+ 
+       {slotBrowserMode && (
+diff --git a/src/components/PatchContextMenu.tsx b/src/components/PatchContextMenu.tsx
+new file mode 100644
+index 0000000..6f92eee
+--- /dev/null
++++ b/src/components/PatchContextMenu.tsx
+@@ -0,0 +1,633 @@
++/**
++ * PatchContextMenu — right-click context menu for the 256-slot patch list.
++ *
++ * Renders via a React portal so it escapes any overflow:hidden containers.
++ * All destructive actions gate behind an inline confirm step (when
++ * confirmDestructive is true, the default).
++ *
++ * Undo/Redo items are present but always disabled in this release; the
++ * history-stack implementation is planned for a follow-up.
++ */
++import { useEffect, useRef, useState } from 'react';
++import { createPortal } from 'react-dom';
++import { SysExCodec } from '@/core/SysExCodec';
++
++// ── Design constants ──────────────────────────────────────────────────────────
++const MENU_W = 240;   // px — main menu width
++const SUB_W  = 280;   // px — sub-panel width
++const FLIP_X_THRESHOLD = MENU_W + SUB_W + 24; // flip when too close to right edge
++const FLIP_Y_THRESHOLD = 340;                  // flip when too close to bottom
++
++// ── Types ────────────────────────────────────────────────────────────────────
++
++export type PasteMethod  = 'overwrite' | 'insert' | 'swap';
++export type InsertMode   = 'default' | 'clipboard';
++
++export interface ContextMenuClipboard {
++  /** Source slot indices the clipboard was copied from. */
++  source: number[];
++  /** Human-readable range label, e.g. "3A–3C". */
++  label: string;
++  /** Number of patches in the clipboard. */
++  count: number;
++}
++
++export interface PatchContextMenuProps {
++  /** Pixel coordinates where the menu should open.  null = hidden. */
++  position: { x: number; y: number } | null;
++  /** Currently selected slot indices (sorted ascending). */
++  selection: number[];
++  /** Current clipboard contents, or null if empty. */
++  clipboard: ContextMenuClipboard | null;
++  /** Total number of slots in the list (256 for the GP-200). */
++  totalSlots?: number;
++  /** Default paste method when opening the paste sub-panel. */
++  defaultPasteMethod?: PasteMethod;
++  /** When false, CUT and RESET execute immediately without a confirm step. */
++  confirmDestructive?: boolean;
++  /** Undo available (history stack non-empty). */
++  canUndo?: boolean;
++  /** Redo available (future stack non-empty). */
++  canRedo?: boolean;
++  onClose:  () => void;
++  onCopy:   () => void;
++  onCut:    () => void;
++  onPaste:  (method: PasteMethod) => void;
++  onInsert: (mode: InsertMode, count: number) => void;
++  onReset:  () => void;
++  onUndo:   () => void;
++  onRedo:   () => void;
++}
++
++// ── Helper: human-readable range label ───────────────────────────────────────
++
++export function rangeLabel(slots: number[]): string {
++  const sorted = [...slots].sort((a, b) => a - b);
++  if (sorted.length === 0) return '';
++  if (sorted.length === 1) return SysExCodec.slotToLabel(sorted[0]);
++  const span = sorted[sorted.length - 1] - sorted[0];
++  const contiguous = span === sorted.length - 1;
++  if (contiguous) {
++    return `${SysExCodec.slotToLabel(sorted[0])}–${SysExCodec.slotToLabel(sorted[sorted.length - 1])}`;
++  }
++  if (sorted.length <= 4) return sorted.map(s => SysExCodec.slotToLabel(s)).join(', ');
++  return sorted.slice(0, 3).map(s => SysExCodec.slotToLabel(s)).join(', ') + ` +${sorted.length - 3}`;
++}
++
++// ── Inline styles (CSS-variable–based, theme-aware) ──────────────────────────
++
++const S = {
++  menu: (x: number, y: number, flipX: boolean, flipY: boolean): React.CSSProperties => ({
++    position: 'fixed',
++    zIndex: 9000,
++    width: MENU_W,
++    background: 'var(--bg-elevated)',
++    border: '1px solid var(--border-active)',
++    borderRadius: 8,
++    padding: 6,
++    boxShadow: '0 12px 32px rgba(0,0,0,0.22)',
++    fontFamily: 'var(--font-jetbrains-mono), monospace',
++    fontSize: 12.5,
++    color: 'var(--text-primary)',
++    ...(flipX ? { right: window.innerWidth - x } : { left: x }),
++    ...(flipY ? { bottom: window.innerHeight - y } : { top: y }),
++  }),
++
++  submenu: (x: number, y: number, flipX: boolean, flipY: boolean): React.CSSProperties => ({
++    position: 'fixed',
++    zIndex: 9001,
++    width: SUB_W,
++    background: 'var(--bg-elevated)',
++    border: '1px solid var(--border-active)',
++    borderRadius: 8,
++    padding: 10,
++    boxShadow: '0 12px 32px rgba(0,0,0,0.22)',
++    fontFamily: 'var(--font-jetbrains-mono), monospace',
++    fontSize: 12.5,
++    color: 'var(--text-primary)',
++    ...(flipX
++      ? { right: (window.innerWidth - x) + MENU_W + 6 }
++      : { left: x + MENU_W + 6 }),
++    ...(flipY ? { bottom: window.innerHeight - y } : { top: y }),
++  }),
++
++  overlay: (): React.CSSProperties => ({
++    position: 'fixed',
++    inset: 0,
++    zIndex: 8999,
++  }),
++
++  infoLine: (accent?: boolean): React.CSSProperties => ({
++    fontSize: 11,
++    color: accent ? 'var(--accent)' : 'var(--text-muted)',
++    padding: '5px 8px 3px',
++    letterSpacing: 0.3,
++    lineHeight: 1.3,
++  }),
++
++  divider: (): React.CSSProperties => ({
++    height: 1,
++    background: 'var(--border-subtle)',
++    margin: '3px 2px',
++  }),
++
++  item: (opts: { disabled?: boolean; red?: boolean; focused?: boolean }): React.CSSProperties => ({
++    display: 'flex',
++    justifyContent: 'space-between',
++    alignItems: 'center',
++    padding: '7px 10px',
++    borderRadius: 6,
++    cursor: opts.disabled ? 'not-allowed' : 'pointer',
++    fontWeight: 600,
++    letterSpacing: 0.5,
++    color: opts.red ? 'var(--accent-red)' : opts.disabled ? 'var(--text-muted)' : 'var(--text-primary)',
++    opacity: opts.disabled ? 0.45 : 1,
++    background: opts.focused ? 'var(--bg-hover)' : 'transparent',
++    userSelect: 'none',
++  }),
++
++  shortcut: (): React.CSSProperties => ({
++    color: 'var(--text-muted)',
++    fontWeight: 400,
++    fontSize: 11,
++    flexShrink: 0,
++  }),
++
++  subHeader: (): React.CSSProperties => ({
++    fontSize: 11,
++    color: 'var(--text-muted)',
++    padding: '2px 4px 8px',
++    letterSpacing: 0.3,
++    lineHeight: 1.4,
++  }),
++
++  radioRow: (selected: boolean, disabled?: boolean): React.CSSProperties => ({
++    display: 'flex',
++    gap: 10,
++    padding: '9px 10px',
++    borderRadius: 6,
++    alignItems: 'flex-start',
++    cursor: disabled ? 'not-allowed' : 'pointer',
++    background: selected ? 'rgba(var(--accent-rgb, 11,111,130), 0.10)' : 'transparent',
++    opacity: disabled ? 0.4 : 1,
++    userSelect: 'none',
++  }),
++
++  radioDot: (selected: boolean): React.CSSProperties => ({
++    width: 14,
++    height: 14,
++    borderRadius: '50%',
++    border: `2px solid ${selected ? 'var(--accent)' : 'var(--text-muted)'}`,
++    marginTop: 2,
++    flexShrink: 0,
++    background: selected ? 'var(--accent)' : 'transparent',
++    boxShadow: selected ? 'inset 0 0 0 3px var(--bg-elevated)' : 'none',
++  }),
++
++  radioLabel: (): React.CSSProperties => ({
++    color: 'var(--text-primary)',
++    fontSize: 12.5,
++    fontWeight: 600,
++    letterSpacing: 0.4,
++    display: 'block',
++  }),
++
++  radioDesc: (): React.CSSProperties => ({
++    color: 'var(--text-muted)',
++    fontSize: 11,
++    lineHeight: 1.4,
++    display: 'block',
++    marginTop: 2,
++  }),
++
++  buttonRow: (): React.CSSProperties => ({
++    display: 'flex',
++    gap: 8,
++    justifyContent: 'flex-end',
++    marginTop: 10,
++    paddingTop: 10,
++    borderTop: '1px solid var(--border-subtle)',
++  }),
++
++  btnGhost: (): React.CSSProperties => ({
++    background: 'transparent',
++    border: '1px solid var(--border-active)',
++    color: 'var(--text-primary)',
++    borderRadius: 6,
++    padding: '6px 14px',
++    fontSize: 11.5,
++    fontWeight: 600,
++    cursor: 'pointer',
++    fontFamily: 'inherit',
++  }),
++
++  btnAccent: (): React.CSSProperties => ({
++    background: 'var(--accent)',
++    border: 'none',
++    color: 'var(--bg-elevated)',
++    borderRadius: 6,
++    padding: '6px 14px',
++    fontSize: 11.5,
++    fontWeight: 700,
++    cursor: 'pointer',
++    fontFamily: 'inherit',
++  }),
++
++  btnRed: (): React.CSSProperties => ({
++    background: 'var(--accent-red)',
++    border: 'none',
++    color: '#fff',
++    borderRadius: 6,
++    padding: '6px 14px',
++    fontSize: 11.5,
++    fontWeight: 700,
++    cursor: 'pointer',
++    fontFamily: 'inherit',
++  }),
++
++  confirmText: (): React.CSSProperties => ({
++    fontSize: 12,
++    color: 'var(--text-primary)',
++    lineHeight: 1.5,
++    padding: '4px 4px 10px',
++  }),
++
++  insertCountRow: (): React.CSSProperties => ({
++    display: 'flex',
++    alignItems: 'center',
++    justifyContent: 'space-between',
++    padding: '6px 10px',
++    marginTop: 4,
++  }),
++
++  insertCountInput: (): React.CSSProperties => ({
++    width: 60,
++    background: 'var(--bg-input)',
++    border: '1px solid var(--border-active)',
++    borderRadius: 6,
++    color: 'var(--text-primary)',
++    padding: '5px 8px',
++    fontSize: 13,
++    fontFamily: 'inherit',
++    textAlign: 'center',
++  }),
++
++  warning: (): React.CSSProperties => ({
++    fontSize: 11,
++    color: 'var(--accent-red)',
++    padding: '6px 10px 0',
++    lineHeight: 1.4,
++  }),
++};
++
++// ── Key order for keyboard navigation ────────────────────────────────────────
++const ITEM_ORDER = ['undo', 'redo', 'copy', 'cut', 'paste', 'insert', 'reset'] as const;
++type ItemKey = typeof ITEM_ORDER[number];
++
++// ── Component ─────────────────────────────────────────────────────────────────
++
++export function PatchContextMenu({
++  position,
++  selection,
++  clipboard,
++  totalSlots = 256,
++  defaultPasteMethod = 'overwrite',
++  confirmDestructive = true,
++  canUndo = false,
++  canRedo = false,
++  onClose,
++  onCopy,
++  onCut,
++  onPaste,
++  onInsert,
++  onReset,
++  onUndo,
++  onRedo,
++}: PatchContextMenuProps) {
++  // Internal sub-state
++  const [submenu,     setSubmenu]     = useState<'paste' | 'insert' | null>(null);
++  const [confirm,     setConfirm]     = useState<'cut' | 'reset' | null>(null);
++  const [pasteMethod, setPasteMethod] = useState<PasteMethod>(defaultPasteMethod);
++  const [insertMode,  setInsertMode]  = useState<InsertMode>('default');
++  const [insertCount, setInsertCount] = useState(1);
++  const [focusedKey,  setFocusedKey]  = useState<ItemKey>('copy');
++
++  // Reset internal state when menu opens at a new position
++  const prevPos = useRef<typeof position>(null);
++  if (position !== prevPos.current) {
++    prevPos.current = position;
++    if (position) {
++      setSubmenu(null);
++      setConfirm(null);
++      setPasteMethod(defaultPasteMethod);
++      setInsertMode('default');
++      setInsertCount(1);
++      setFocusedKey('copy');
++    }
++  }
++
++  // Keyboard navigation
++  useEffect(() => {
++    if (!position) return;
++    function onKey(e: KeyboardEvent) {
++      if (e.key === 'Escape') {
++        e.preventDefault();
++        if (confirm) setConfirm(null);
++        else if (submenu) setSubmenu(null);
++        else onClose();
++        return;
++      }
++      if (submenu || confirm) return;
++      if (e.key === 'ArrowDown') {
++        e.preventDefault();
++        setFocusedKey(k => ITEM_ORDER[(ITEM_ORDER.indexOf(k) + 1) % ITEM_ORDER.length]);
++      } else if (e.key === 'ArrowUp') {
++        e.preventDefault();
++        setFocusedKey(k => ITEM_ORDER[(ITEM_ORDER.indexOf(k) - 1 + ITEM_ORDER.length) % ITEM_ORDER.length]);
++      } else if (e.key === 'Enter') {
++        e.preventDefault();
++        triggerKey(focusedKey);
++      }
++    }
++    document.addEventListener('keydown', onKey);
++    return () => document.removeEventListener('keydown', onKey);
++  // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [position, submenu, confirm, focusedKey, canUndo, canRedo, clipboard]);
++
++  if (!position) return null;
++
++  // Compute flip
++  const flipX = position.x > window.innerWidth  - FLIP_X_THRESHOLD;
++  const flipY = position.y > window.innerHeight - FLIP_Y_THRESHOLD;
++
++  // Derived display values
++  const selSorted  = [...selection].sort((a, b) => a - b);
++  const selLabel   = rangeLabel(selSorted);
++  const selCount   = selSorted.length;
++  const targetSlot = selSorted[0] ?? 0;
++  const targetLabel = SysExCodec.slotToLabel(targetSlot);
++
++  const selInfoText = selCount === 1
++    ? `1 patch selected (${selLabel})`
++    : `${selCount} patches selected · ${selLabel}`;
++
++  const hasClip      = !!clipboard;
++  const pasteEnabled = hasClip;
++
++  // Bump-off warning for insert
++  const lastRangeStart = totalSlots - insertCount;
++  const bumpSlots = Array.from({ length: Math.min(insertCount, totalSlots) }, (_, k) => lastRangeStart + k);
++  const bumpLabel = rangeLabel(bumpSlots);
++
++  // Paste sub-panel text
++  let pasteEndLabel = targetLabel;
++  if (clipboard && clipboard.count > 1) {
++    pasteEndLabel = `${targetLabel}–${SysExCodec.slotToLabel(Math.min(targetSlot + clipboard.count - 1, totalSlots - 1))}`;
++  }
++  const pasteHeaderText = clipboard
++    ? `Paste ${clipboard.count} patch${clipboard.count > 1 ? 'es' : ''} starting at ${targetLabel}`
++    : '';
++
++  // Confirm messages
++  const confirmMap = {
++    cut: {
++      message: `Cut ${selCount} patch${selCount > 1 ? 'es' : ''} (${selLabel})? Slots below shift up; freed slots at the end are cleared.`,
++      label: 'Cut',
++    },
++    reset: {
++      message: `Reset ${selCount} patch${selCount > 1 ? 'es' : ''} (${selLabel}) to default?`,
++      label: 'Reset',
++    },
++  };
++
++  // Action handlers
++  function triggerKey(key: ItemKey) {
++    if (key === 'undo')   { if (canUndo) { onUndo(); onClose(); } }
++    else if (key === 'redo')   { if (canRedo) { onRedo(); onClose(); } }
++    else if (key === 'copy')   { onCopy(); onClose(); }
++    else if (key === 'cut')    { handleCutClick(); }
++    else if (key === 'paste')  { if (pasteEnabled) handlePasteClick(); }
++    else if (key === 'insert') { handleInsertClick(); }
++    else if (key === 'reset')  { handleResetClick(); }
++  }
++
++  function handleCopyClick()   { onCopy(); onClose(); }
++  function handleCutClick()    { if (confirmDestructive) setConfirm('cut'); else { onCut(); onClose(); } }
++  function handlePasteClick()  { if (!pasteEnabled) return; setSubmenu('paste'); }
++  function handleInsertClick() { setSubmenu('insert'); }
++  function handleResetClick()  { if (confirmDestructive) setConfirm('reset'); else { onReset(); onClose(); } }
++
++  function handlePasteOk()   { onPaste(pasteMethod); onClose(); }
++  function handleInsertOk()  { onInsert(insertMode, insertCount); onClose(); }
++  function handleRunConfirm() {
++    if (confirm === 'cut')   { onCut();   onClose(); }
++    if (confirm === 'reset') { onReset(); onClose(); }
++  }
++
++  // ── Render ──────────────────────────────────────────────────────────────────
++  const stopProp = (e: React.MouseEvent) => e.stopPropagation();
++
++  const menu = (
++    <>
++      {/* Backdrop to close on outside click */}
++      <div style={S.overlay()} onClick={onClose} />
++
++      {/* Main menu */}
++      <div style={S.menu(position.x, position.y, flipX, flipY)} onClick={stopProp}>
++        {confirm ? (
++          // ── Confirm state ──
++          <>
++            <div style={S.confirmText()}>{confirmMap[confirm].message}</div>
++            <div style={S.buttonRow()}>
++              <button style={S.btnGhost()} onClick={() => setConfirm(null)}>Cancel</button>
++              <button style={S.btnRed()}   onClick={handleRunConfirm}>{confirmMap[confirm].label}</button>
++            </div>
++          </>
++        ) : (
++          // ── Normal menu items ──
++          <>
++            <div style={S.infoLine()}>{selInfoText}</div>
++            {hasClip && (
++              <div style={S.infoLine(true)}>
++                clip: {clipboard!.label} · {clipboard!.count} patch{clipboard!.count > 1 ? 'es' : ''}
++              </div>
++            )}
++
++            {/* UNDO / REDO */}
++            <div
++              style={S.item({ disabled: !canUndo, focused: focusedKey === 'undo' })}
++              onClick={() => { if (canUndo) { onUndo(); onClose(); } }}
++              onMouseEnter={() => setFocusedKey('undo')}
++            >
++              <span>UNDO</span>
++              <span style={S.shortcut()}>⌘Z</span>
++            </div>
++            <div
++              style={S.item({ disabled: !canRedo, focused: focusedKey === 'redo' })}
++              onClick={() => { if (canRedo) { onRedo(); onClose(); } }}
++              onMouseEnter={() => setFocusedKey('redo')}
++            >
++              <span>REDO</span>
++              <span style={S.shortcut()}>⌘Y</span>
++            </div>
++
++            <div style={S.divider()} />
++
++            {/* COPY */}
++            <div
++              style={S.item({ focused: focusedKey === 'copy' })}
++              onClick={handleCopyClick}
++              onMouseEnter={() => setFocusedKey('copy')}
++            >
++              <span>COPY</span>
++              <span style={S.shortcut()}>⌘C</span>
++            </div>
++
++            {/* CUT */}
++            <div
++              style={S.item({ red: true, focused: focusedKey === 'cut' })}
++              onClick={handleCutClick}
++              onMouseEnter={() => setFocusedKey('cut')}
++            >
++              <span>CUT</span>
++              <span style={S.shortcut()}>⌘X</span>
++            </div>
++
++            <div style={S.divider()} />
++
++            {/* PASTE */}
++            <div
++              style={S.item({ disabled: !pasteEnabled, focused: focusedKey === 'paste' })}
++              onClick={handlePasteClick}
++              onMouseEnter={() => setFocusedKey('paste')}
++            >
++              <span>PASTE</span>
++              <span style={S.shortcut()}>{pasteEnabled ? '▸' : '⌘V'}</span>
++            </div>
++
++            <div style={S.divider()} />
++
++            {/* INSERT */}
++            <div
++              style={S.item({ focused: focusedKey === 'insert' })}
++              onClick={handleInsertClick}
++              onMouseEnter={() => setFocusedKey('insert')}
++            >
++              <span>INSERT</span>
++              <span style={S.shortcut()}>▸</span>
++            </div>
++
++            <div style={S.divider()} />
++
++            {/* RESET */}
++            <div
++              style={S.item({ red: true, focused: focusedKey === 'reset' })}
++              onClick={handleResetClick}
++              onMouseEnter={() => setFocusedKey('reset')}
++            >
++              <span>RESET</span>
++            </div>
++          </>
++        )}
++      </div>
++
++      {/* ── Paste sub-panel ── */}
++      {submenu === 'paste' && (
++        <div style={S.submenu(position.x, position.y, flipX, flipY)} onClick={stopProp}>
++          <div style={S.subHeader()}>{pasteHeaderText}</div>
++
++          {/* OVERWRITE */}
++          <div style={S.radioRow(pasteMethod === 'overwrite')} onClick={() => setPasteMethod('overwrite')}>
++            <div style={S.radioDot(pasteMethod === 'overwrite')} />
++            <div>
++              <span style={S.radioLabel()}>OVERWRITE</span>
++              <span style={S.radioDesc()}>Replaces {pasteEndLabel} with clipboard content</span>
++            </div>
++          </div>
++
++          {/* INSERT */}
++          <div style={S.radioRow(pasteMethod === 'insert')} onClick={() => setPasteMethod('insert')}>
++            <div style={S.radioDot(pasteMethod === 'insert')} />
++            <div>
++              <span style={S.radioLabel()}>INSERT</span>
++              <span style={S.radioDesc()}>
++                Shifts list down · last {clipboard?.count ?? 1} patch{(clipboard?.count ?? 1) > 1 ? 'es' : ''} lost
++              </span>
++            </div>
++          </div>
++
++          {/* SWAP */}
++          <div style={S.radioRow(pasteMethod === 'swap')} onClick={() => setPasteMethod('swap')}>
++            <div style={S.radioDot(pasteMethod === 'swap')} />
++            <div>
++              <span style={S.radioLabel()}>SWAP</span>
++              <span style={S.radioDesc()}>Exchanges clipboard with {pasteEndLabel} · nothing lost</span>
++            </div>
++          </div>
++
++          <div style={S.buttonRow()}>
++            <button style={S.btnGhost()} onClick={() => setSubmenu(null)}>Cancel</button>
++            <button style={S.btnAccent()} onClick={handlePasteOk}>OK</button>
++          </div>
++        </div>
++      )}
++
++      {/* ── Insert sub-panel ── */}
++      {submenu === 'insert' && (
++        <div style={S.submenu(position.x, position.y, flipX, flipY)} onClick={stopProp}>
++          <div style={S.subHeader()}>Insert at {targetLabel}</div>
++
++          {/* DEFAULT PATCH */}
++          <div style={S.radioRow(insertMode === 'default')} onClick={() => setInsertMode('default')}>
++            <div style={S.radioDot(insertMode === 'default')} />
++            <div>
++              <span style={S.radioLabel()}>DEFAULT PATCH</span>
++              <span style={S.radioDesc()}>Insert blank init patch(es)</span>
++            </div>
++          </div>
++
++          {/* FROM CLIPBOARD */}
++          <div
++            style={S.radioRow(insertMode === 'clipboard', !hasClip)}
++            onClick={() => { if (hasClip) setInsertMode('clipboard'); }}
++          >
++            <div style={S.radioDot(insertMode === 'clipboard')} />
++            <div>
++              <span style={S.radioLabel()}>SELECTED PATCHES</span>
++              <span style={S.radioDesc()}>Copy clipboard content into new slots</span>
++            </div>
++          </div>
++
++          {/* Count stepper */}
++          <div style={S.insertCountRow()}>
++            <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>Count</span>
++            <input
++              type="number"
++              min={1}
++              max={99}
++              value={insertCount}
++              onChange={(e) => {
++                let v = parseInt(e.target.value, 10);
++                if (isNaN(v)) v = 1;
++                setInsertCount(Math.max(1, Math.min(99, v)));
++              }}
++              style={S.insertCountInput()}
++            />
++          </div>
++
++          {/* Bump-off warning */}
++          <div style={S.warning()}>
++            ⚠ {insertCount} patch{insertCount > 1 ? 'es' : ''} at {bumpLabel} will be lost.
++          </div>
++
++          <div style={S.buttonRow()}>
++            <button style={S.btnGhost()} onClick={() => setSubmenu(null)}>Cancel</button>
++            <button style={S.btnAccent()} onClick={handleInsertOk}>Insert</button>
++          </div>
++        </div>
++      )}
++    </>
++  );
++
++  return createPortal(menu, document.body);
++}
+diff --git a/src/components/PatchManagerSheet.tsx b/src/components/PatchManagerSheet.tsx
+index a96335e..93d680a 100644
+--- a/src/components/PatchManagerSheet.tsx
++++ b/src/components/PatchManagerSheet.tsx
+@@ -2,6 +2,12 @@ import { useRef, useState } from 'react';
+ import { Dialog } from '@/components/ui/Dialog';
+ import { Button } from '@/components/ui/Button';
+ import { PatchPicker } from './PatchPicker';
++import {
++  PatchContextMenu,
++  type ContextMenuClipboard,
++  type InsertMode,
++  type PasteMethod,
++} from './PatchContextMenu';
+ import { SysExCodec } from '@/core/SysExCodec';
+ import {
+   EMPTY_SELECTION,
+@@ -15,6 +21,8 @@ import {
+ export interface BulkExportProgress {
+   done: number;
+   total: number;
++  /** Optional label shown before the X/Y counter (e.g. "Inserting…" or "Shifting…"). */
++  phase?: string;
+ }
+ 
+ export interface PatchManagerSheetProps {
+@@ -41,6 +49,20 @@ export interface PatchManagerSheetProps {
+   onSwapSlots: (first: number, second: number) => Promise<void>;
+   /** Label of whatever is on the clipboard, or null when it is empty. */
+   clipboardLabel: string | null;
++  /**
++   * Insert the clipboard patch BEFORE this slot, shifting slots slot..254
++   * down to slot+1..255.  No-op when clipboard is empty.
++   */
++  onInsertBefore: (slot: number) => Promise<void>;
++  /**
++   * Remove the patch at this slot and shift slots slot+1..255 up by one,
++   * leaving the last occupied slot with a blank init patch.
++   */
++  onRemoveShift: (slot: number) => Promise<void>;
++  /**
++   * Copy the patch to the clipboard and then remove+shift it (Cut semantics).
++   */
++  onCutSlot: (slot: number) => Promise<void>;
+   onRenameSlot: (slot: number, name: string) => Promise<void>;
+   onRefreshNames: () => void;
+   /** Load a .prst into the editor buffer (pushes + saves when connected). */
+@@ -49,6 +71,19 @@ export interface PatchManagerSheetProps {
+   onExportRequest: () => void;
+   /** User-IR slot names enumerated at connect (30 entries; empty offline). */
+   userIrNames: string[];
++  // ── Context-menu operations ───────────────────────────────────────────────
++  /** Display-safe clipboard info for the context menu (no preset data). */
++  clipboardForMenu: ContextMenuClipboard | null;
++  /** Copy selected slots to clipboard. */
++  onCopySlots: (slots: number[]) => Promise<void>;
++  /** Cut (copy + remove+shift) selected slots. */
++  onCutSlots: (slots: number[]) => Promise<void>;
++  /** Paste clipboard at target slot using the specified method. */
++  onContextPaste: (targetSlot: number, method: PasteMethod) => Promise<void>;
++  /** Insert blank/clipboard patches at target slot. */
++  onContextInsert: (targetSlot: number, mode: InsertMode, count: number) => Promise<void>;
++  /** Overwrite selected slots with factory init. */
++  onResetSlots: (slots: number[]) => Promise<void>;
+ }
+ 
+ function bankSlotsOf(slot: number): number[] {
+@@ -84,11 +119,20 @@ export function PatchManagerSheet({
+   onPasteToSlot,
+   onSwapSlots,
+   clipboardLabel,
++  onInsertBefore,
++  onRemoveShift,
++  onCutSlot,
+   onRenameSlot,
+   onRefreshNames,
+   onImportFile,
+   onExportRequest,
+   userIrNames,
++  clipboardForMenu,
++  onCopySlots,
++  onCutSlots,
++  onContextPaste,
++  onContextInsert,
++  onResetSlots,
+ }: PatchManagerSheetProps) {
+   // Anchor + extras. The anchor is what every single-slot action acts on, so
+   // multi-select sits on top of those buttons without changing them.
+@@ -102,6 +146,7 @@ export function PatchManagerSheet({
+   const pendingImportRef = useRef<Uint8Array | null>(null);
+   const fileInputRef = useRef<HTMLInputElement>(null);
+   const editorFileInputRef = useRef<HTMLInputElement>(null);
++  const [ctxMenuPos, setCtxMenuPos] = useState<{ x: number; y: number } | null>(null);
+ 
+   const namesLoading = namesLoadProgress < 256;
+   const bulkRunning = bulkProgress !== null;
+@@ -128,6 +173,19 @@ export function PatchManagerSheet({
+     setSelection(collapseToAnchor);
+   }
+ 
++  /**
++   * Called when the user right-clicks a patch row (or clicks its ⋯ button).
++   * If the clicked slot is not in the current selection, collapse to it first
++   * (standard OS context-menu behavior), then open the menu.
++   */
++  function handleRowContextMenu(slot: number, x: number, y: number) {
++    const currentSlots = slotsOf(selection);
++    if (!currentSlots.includes(slot)) {
++      setSelection(selectSlot(EMPTY_SELECTION, slot));
++    }
++    setCtxMenuPos({ x, y });
++  }
++
+   function handleActivateFromPicker(slot: number) {
+     if (connected) void runBusy(() => onActivate(slot));
+   }
+@@ -384,6 +442,7 @@ export function PatchManagerSheet({
+           multiSelected={selection.extra}
+           onSelect={handleSelect}
+           onActivate={handleActivateFromPicker}
++          onContextMenu={handleRowContextMenu}
+         />
+       </div>
+ 
+@@ -508,6 +567,17 @@ export function PatchManagerSheet({
+           >
+             COPY
+           </Button>
++          <Button
++            size="sm"
++            variant="ghost"
++            disabled={actionsDisabled}
++            onClick={() => {
++              if (selected !== null) void runBusy(() => onCutSlot(selected));
++            }}
++            title={`Copy ${selectedLabel} to clipboard then remove it and shift everything above up (Cut)`}
++          >
++            CUT
++          </Button>
+           <Button
+             size="sm"
+             variant="ghost"
+@@ -519,7 +589,31 @@ export function PatchManagerSheet({
+               ? `Overwrite ${selectedLabel} with the copied patch (${clipboardLabel})`
+               : 'Copy a patch first'}
+           >
+-            PASTE{clipboardLabel ? ` (${clipboardLabel})` : ''}
++            PASTE OVER{clipboardLabel ? ` (${clipboardLabel})` : ''}
++          </Button>
++          <Button
++            size="sm"
++            variant="ghost"
++            disabled={actionsDisabled || clipboardLabel === null}
++            onClick={() => {
++              if (selected !== null) void runBusy(() => onInsertBefore(selected));
++            }}
++            title={clipboardLabel
++              ? `Insert ${clipboardLabel} BEFORE ${selectedLabel}, shifting ${selectedLabel} and everything below it down one slot`
++              : 'Copy a patch first, then Insert will place it here and shift the rest down'}
++          >
++            PASTE▸INSERT↑{clipboardLabel ? ` (${clipboardLabel})` : ''}
++          </Button>
++          <Button
++            size="sm"
++            variant="ghost"
++            disabled={actionsDisabled}
++            onClick={() => {
++              if (selected !== null) void runBusy(() => onRemoveShift(selected));
++            }}
++            title={`Remove ${selectedLabel} and shift everything below it up one slot (the last occupied slot is cleared to init)`}
++          >
++            DELETE▸SHIFT↑
+           </Button>
+           <Button
+             size="sm"
+@@ -610,7 +704,7 @@ export function PatchManagerSheet({
+               role="status"
+               aria-live="polite"
+             >
+-              {bulkProgress.done}/{bulkProgress.total}
++              {bulkProgress.phase ? `${bulkProgress.phase} ` : ''}{bulkProgress.done}/{bulkProgress.total}
+               <button
+                 type="button"
+                 onClick={onCancelBulk}
+@@ -665,5 +759,40 @@ export function PatchManagerSheet({
+         </div>
+       )}
+     </Dialog>
++
++    {/* Context menu — rendered as a portal, outside the Dialog, so it
++        escapes the Dialog's overflow and stacking context. */}
++    <PatchContextMenu
++      position={ctxMenuPos}
++      selection={slotsOf(selection)}
++      clipboard={clipboardForMenu}
++      onClose={() => setCtxMenuPos(null)}
++      onCopy={() => {
++        void onCopySlots(slotsOf(selection));
++        setCtxMenuPos(null);
++      }}
++      onCut={() => {
++        void onCutSlots(slotsOf(selection));
++        setCtxMenuPos(null);
++      }}
++      onPaste={(method) => {
++        const slots = slotsOf(selection);
++        if (slots.length === 0) return;
++        void onContextPaste(slots[0], method);
++        setCtxMenuPos(null);
++      }}
++      onInsert={(mode, count) => {
++        const slots = slotsOf(selection);
++        if (slots.length === 0) return;
++        void onContextInsert(slots[0], mode, count);
++        setCtxMenuPos(null);
++      }}
++      onReset={() => {
++        void onResetSlots(slotsOf(selection));
++        setCtxMenuPos(null);
++      }}
++      onUndo={() => { /* phase 2 */ setCtxMenuPos(null); }}
++      onRedo={() => { /* phase 2 */ setCtxMenuPos(null); }}
++    />
+   );
+ }
+diff --git a/src/components/PatchPicker.tsx b/src/components/PatchPicker.tsx
+index 1b873dc..d7c1688 100644
+--- a/src/components/PatchPicker.tsx
++++ b/src/components/PatchPicker.tsx
+@@ -14,6 +14,8 @@ export interface PatchPickerProps {
+   onSelect: (slot: number, modifiers?: { shift: boolean; toggle: boolean }) => void;
+   /** double-click / Enter confirm */
+   onActivate?: (slot: number) => void;
++  /** right-click / ⋯ context menu (pixel coordinates of the trigger point) */
++  onContextMenu?: (slot: number, x: number, y: number) => void;
+ }
+ 
+ interface PatchRow {
+@@ -100,6 +102,7 @@ export function PatchPicker({
+   multiSelected,
+   onSelect,
+   onActivate,
++  onContextMenu,
+ }: PatchPickerProps) {
+   const rows = useMemo(() => buildRows(presetNames), [presetNames]);
+   const categories = useMemo(() => buildBankCategories(rows), [rows]);
+@@ -217,6 +220,11 @@ export function PatchPicker({
+                       toggle: event.ctrlKey || event.metaKey,
+                     })}
+                     onDoubleClick={() => handleActivate(row.slot)}
++                    onContextMenu={(event) => {
++                      if (!onContextMenu) return;
++                      event.preventDefault();
++                      onContextMenu(row.slot, event.clientX, event.clientY);
++                    }}
+                   >
+                     <span className="pp-badge">{row.label}</span>
+                     <span className="pp-name">{slotName(row.name, namesLoadProgress)}</span>
