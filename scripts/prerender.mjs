@@ -45,9 +45,15 @@ const ROOT_DIV = '<div id="root"></div>';
  * — which is not something a build artifact should contain. */
 function buildSsr() {
   console.log('Building SSR bundle…');
+  // Run the installed Vite with this Node, rather than shelling out to `npx`:
+  // on Windows `npx` is a .cmd and execFileSync can't find it (ENOENT), so the
+  // whole prerender — and with it every page but the shell — was skipped on a
+  // Windows build. This also avoids npx resolving a different Vite than the
+  // one in node_modules.
+  const viteCli = join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js');
   execFileSync(
-    'npx',
-    ['vite', 'build', '--ssr', 'src/prerender/entry-server.tsx', '--outDir', 'dist-ssr', '--logLevel', 'warn'],
+    process.execPath,
+    [viteCli, 'build', '--ssr', 'src/prerender/entry-server.tsx', '--outDir', 'dist-ssr', '--logLevel', 'warn'],
     { cwd: ROOT, stdio: 'inherit' },
   );
 }

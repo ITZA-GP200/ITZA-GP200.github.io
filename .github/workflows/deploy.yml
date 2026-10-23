@@ -1,0 +1,60 @@
+# Publishes the editor to GitHub Pages (klynam.github.io/gp200-studio-PM)
+# on every push to PRODUCTION, which is the branch the live site follows.
+#
+# `pnpm build` is the whole build: tsc, the Vite build, then the prerender
+# pass that writes a real HTML file for every route (/editor, /guide/*, a
+# 404). A static host needs those files — without them /editor is a 404 on a
+# reload or a shared link.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [PRODUCTION]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; let a newer push finish rather than cancelling it.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # The pedal can't be tested here, but everything else can: a red build
+      # is cheaper than a broken live site.
+      - name: Lint
+        run: pnpm exec oxlint src tests
+      - name: Tests
+        run: pnpm exec vitest run
+
+      - name: Build
+        run: pnpm build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
