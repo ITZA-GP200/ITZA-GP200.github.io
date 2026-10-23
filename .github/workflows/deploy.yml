@@ -36,7 +36,7 @@ jobs:
         run: pnpm install
 
       - name: Build
-        run: pnpm build
+        run: pnpm exec tsc -b && pnpm exec vite build
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
