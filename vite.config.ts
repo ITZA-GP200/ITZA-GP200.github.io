@@ -58,7 +58,7 @@ export default defineConfig(() => ({
   //
   // Everything that resolves an asset at runtime still goes through
   // import.meta.env.BASE_URL, so the subfolder case remains a one-line change.
-  base: '/',
+  base: '/gp200-studio-PM/',
   plugins: [react(), guideDevServer()],
   resolve: {
     alias: {
