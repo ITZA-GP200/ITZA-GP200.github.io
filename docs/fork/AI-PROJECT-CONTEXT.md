@@ -64,6 +64,12 @@ testing-library, oxlint. Web MIDI (Chrome/Edge). Upstream base: `PRODUCTION`
 - **Preset change** 12/08 (slot as nibbles at bytes 25–26).
 - **Reading names/patches**: full 11/10 reads, wait for the whole 7-chunk reply,
   ~20 ms gap before the next. Never name-only (11/20) requests.
+- **Identify every read reply, never assume it.** A reply starts at chunk
+  offset 0 (wire bytes 11-12) and names its own slot at decoded[6:8]. Both
+  `requestSlotName` and `pullPreset` check this and drop a reply for another
+  slot. Upstream's `pullPreset` took any 7 chunks, so reads close together
+  (a copy's verification, then UNDO's bookkeeping) could be served each
+  other’s replies — the symptom was UNDO refusing to undo its own swap.
 - **The chunked flash upload (12/20) is ignored by the pedal.** Never write
   patches that way.
 - **On-pedal copy** (what the official editor does): select the source
