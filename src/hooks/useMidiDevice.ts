@@ -733,40 +733,62 @@ export function useMidiDevice(): UseMidiDeviceReturn {
         reject(new Error('Not connected'));
         return;
       }
-      const chunks: Uint8Array[] = [];
+      let chunks: Uint8Array[] = [];
       let attempts = 0;
       let timer: ReturnType<typeof setTimeout>;
+      let handler: (event: { data: unknown }) => void;
+
+      // Hand the input back only if it is still ours, so a late timeout can't
+      // hijack a read that has started since.
+      const release = () => {
+        if (inputRef.current && inputRef.current.onmidimessage === handler) {
+          inputRef.current.onmidimessage = onMidiMessage;
+        }
+      };
 
       function tryRequest() {
-        chunks.length = 0;
+        chunks = [];
         timer = setTimeout(() => {
           if (attempts < 1) {
             attempts++;
             tryRequest();
           } else {
-            if (inputRef.current) inputRef.current.onmidimessage = onMidiMessage;
+            release();
             setStatus('error');
             setErrorMessage('Read timeout');
             reject(new Error('Read timeout'));
           }
         }, READ_TIMEOUT_MS);
 
-        if (inputRef.current) {
-          inputRef.current.onmidimessage = (event: { data: unknown }) => {
-            const data = getBytes(event.data);
-            console.log('[GP-200] pull rx:', Array.from(data).map(b => b.toString(16).padStart(2,'0')).join(' '));
-            onMidiMessage(event);
-            if (isSysEx(data, 0x12, 0x18)) {
-              chunks.push(data);
-              if (chunks.length === 7) {
-                clearTimeout(timer);
-                if (inputRef.current) inputRef.current.onmidimessage = onMidiMessage;
-                try { resolve(SysExCodec.parseReadChunks(chunks)); }
-                catch (e) { reject(e); }
-              }
-            }
-          };
-        }
+        handler = (event: { data: unknown }) => {
+          const data = getBytes(event.data);
+          onMidiMessage(event);
+          if (!isSysEx(data, 0x12, 0x18)) return;
+          // Identify the reply, as requestSlotName does: it starts at chunk
+          // offset 0, and the patch names its own slot at decoded[6:8].
+          // Accepting any 7 chunks lets a read be served the tail of an
+          // earlier one: on hardware, the read taken straight after a swap
+          // came back with the OTHER slot's patch, and UNDO then refused to
+          // undo its own swap. A reply for the wrong slot is dropped, and the
+          // timeout above asks again.
+          const offset = data[11] | (data[12] << 8);
+          if (offset === 0) chunks = [];
+          else if (chunks.length === 0) return;
+          chunks.push(new Uint8Array(data));
+          if (chunks.length < 7) return;
+          const decoded = SysExCodec.assembleChunks(chunks);
+          if ((decoded[6] | (decoded[7] << 8)) !== slot) {
+            console.warn(`[GP-200] pull ${SysExCodec.slotToLabel(slot)}: reply was for `
+              + `${SysExCodec.slotToLabel(decoded[6] | (decoded[7] << 8))}; waiting for the right one`);
+            chunks = [];
+            return;
+          }
+          clearTimeout(timer);
+          release();
+          try { resolve(SysExCodec.parseReadChunks(chunks)); }
+          catch (e) { reject(e); }
+        };
+        if (inputRef.current) inputRef.current.onmidimessage = handler;
 
         const req = SysExCodec.buildReadRequest(slot);
         console.log('[GP-200] pull tx:', Array.from(req).map(b => b.toString(16).padStart(2,'0')).join(' '));
