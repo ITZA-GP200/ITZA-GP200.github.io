@@ -127,6 +127,21 @@ function atPath(target: string): boolean {
   return strip(window.location.pathname) === strip(target);
 }
 
+/**
+ * What to tell someone when a job is done. `missed` holds the knobs the pedal
+ * wouldn't accept (see writeFidelity) — real, and worth acting on, but not a
+ * failure and not worth explaining in the pedal's terms. A job that took a
+ * while says so, because the next one won't: the first run is where the
+ * editor learns what this pedal refuses.
+ */
+function finishedMessage(job: string, missed: string[], elapsedMs: number): string {
+  const faster = elapsedMs > 10000 ? ' The next one will be much faster.' : '';
+  if (missed.length === 0) return `${job} done.${faster}`;
+  const knobs = missed.length === 1 ? 'knob' : 'knobs';
+  return `${job} done.${faster} This pedal won't let the app set ${missed.length} ${knobs};`
+    + ` set them by hand if you want them: ${missed.join('; ')}`;
+}
+
 function App() {
   const {
     preset, loadPreset, setPatchName, setAuthor, toggleEffect, changeEffect,
@@ -241,7 +256,18 @@ function App() {
       return null;
     }
   });
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // The banner under the header: a failure, or a job that finished. Both end
+  // up in one place, so they can't stack up or contradict each other.
+  const [notice, setNotice] = useState<{ text: string; tone: 'error' | 'success' } | null>(null);
+  const loadError = notice?.text ?? null;
+  const setLoadError = useCallback(
+    (text: string | null) => setNotice(text === null ? null : { text, tone: 'error' }),
+    [],
+  );
+  const setLoadNote = useCallback(
+    (text: string | null) => setNotice(text === null ? null : { text, tone: 'success' }),
+    [],
+  );
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [firmwareWarningDismissed, setFirmwareWarningDismissed] = useState(false);
 
@@ -558,7 +584,7 @@ function App() {
       setLoadError(`Error loading file: ${message}`);
       track('preset_import', { target: 'editor', ok: false });
     }
-  }, [loadPreset, sendPresetToDevice, markEditorEntry]);
+  }, [loadPreset, sendPresetToDevice, markEditorEntry, setLoadError]);
 
   function handleExportConfirm(name: string, author: string | undefined, slot: number) {
     if (!preset) return;
@@ -669,8 +695,8 @@ function App() {
         (differences) => `${label} didn’t take the file (${differences})`, missed);
       loadPreset(written);
       await refreshDefaultIfTouched([slot]);
-      setLoadError(missed.length === 0 ? null
-        : `Imported into ${label}. The pedal kept ${missed.length} value(s) its own way: ${missed.join('; ')}`);
+      setLoadNote(missed.length === 0 ? null
+        : finishedMessage(`Import into ${label}`, missed, 0));
       track('preset_import', { target: 'slot', ok: true });
     } catch (err) {
       let detail = String(err);
@@ -880,6 +906,7 @@ function App() {
     if (bulkProgress) return;
     // Stopping halfway would leave bank 64 half-written, so no cancel link.
     setBulkProgress({ done: 0, total: 4, cancellable: false, label: 'PROTECT 64' });
+    const startedAt = Date.now();
     try {
       const missed: string[] = [];
       const preset = await protectBank64(
@@ -896,8 +923,7 @@ function App() {
       // Leave the pedal on the new default, and show it.
       midiDevice.sendSlotChange(PROTECTED_DEFAULT_SLOT);
       loadPreset(preset);
-      setLoadError(missed.length === 0 ? null
-        : `PROTECT 64 done. The pedal kept ${missed.length} value(s) its own way: ${missed.join('; ')}`);
+      setLoadNote(finishedMessage('PROTECT 64', missed, Date.now() - startedAt));
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       setLoadError(`PROTECT 64 failed: ${detail}`);
@@ -941,8 +967,8 @@ function App() {
         (differences) => `${label} didn’t take the editor’s patch (${differences})`, missed);
       loadPreset(saved);
       await refreshDefaultIfTouched([slot]);
-      setLoadError(missed.length === 0 ? null
-        : `Saved to ${label}. The pedal kept ${missed.length} value(s) its own way: ${missed.join('; ')}`);
+      setLoadNote(missed.length === 0 ? null
+        : finishedMessage(`Save to ${label}`, missed, 0));
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       setLoadError(`SAVE to ${label} failed: ${detail}`);
@@ -977,6 +1003,7 @@ function App() {
       return;
     }
     setBulkProgress({ done: 0, total: 4, cancellable: false, label: 'RESTORE 64' });
+    const startedAt = Date.now();
     try {
       const { patches } = readBank64Backup(text);
       const missed: string[] = [];
@@ -993,8 +1020,7 @@ function App() {
       setBank64Protected(true);
       midiDevice.sendSlotChange(PROTECTED_DEFAULT_SLOT);
       loadPreset(preset);
-      setLoadError(missed.length === 0 ? null
-        : `RESTORE 64 done. The pedal kept ${missed.length} value(s) its own way: ${missed.join('; ')}`);
+      setLoadNote(finishedMessage('RESTORE 64', missed, Date.now() - startedAt));
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       setLoadError(`RESTORE 64 failed: ${detail}`);
@@ -1203,8 +1229,8 @@ function App() {
         setDefaultPatch(next);
       }
       const done = direction === 'undo' ? 'Undone' : 'Redone';
-      setLoadError(missed.length === 0 ? null
-        : `${done}: ${entry.label}. The pedal kept ${missed.length} value(s) its own way: ${missed.join('; ')}`);
+      setLoadNote(missed.length === 0 ? null
+        : finishedMessage(`${done}: ${entry.label}`, missed, 0));
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       setLoadError(`Couldn’t ${direction} “${entry.label}”: ${detail}`);
@@ -1565,10 +1591,16 @@ function App() {
 
   return (
     <div className="app-shell w-full flex flex-col overflow-hidden">
-      {loadError && (
-        <div className="mx-4 mt-3 mb-2 px-4 py-3 rounded-lg font-mono-display text-sm flex items-center justify-between bg-accent-red/10 border border-accent-red/30 text-accent-red">
-          <span>{loadError}</span>
-          <button onClick={() => setLoadError(null)} className="ml-3 font-bold">✕</button>
+      {notice && (
+        <div
+          className={`mx-4 mt-3 mb-2 px-4 py-3 rounded-lg font-mono-display text-sm flex items-center justify-between ${
+            notice.tone === 'success'
+              ? 'bg-accent-green/10 border border-accent-green/30 text-accent-green'
+              : 'bg-accent-red/10 border border-accent-red/30 text-accent-red'
+          }`}
+        >
+          <span>{notice.text}</span>
+          <button onClick={() => setNotice(null)} className="ml-3 font-bold">✕</button>
         </div>
       )}
 
@@ -1632,6 +1664,7 @@ function App() {
         onExportRequest={() => setShowExportDialog(true)}
         userIrNames={midiDevice.userIrNames}
         errorMessage={loadError}
+        messageTone={notice?.tone ?? 'error'}
         onDismissError={() => setLoadError(null)}
         onSetDefaultPatch={recordedSetDefault}
         onResetSlot={recordedReset}

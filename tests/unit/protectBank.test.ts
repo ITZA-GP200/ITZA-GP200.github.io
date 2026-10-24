@@ -63,7 +63,7 @@ describe('protectBank64', () => {
     await protectBank64(pedal.device, patch("It's GP-200"), undefined, missed);
     expect(pedal.log.slice(0, 2)).toEqual(['write 254 as ITZA GP-200', 'write 254 as ITZA GP-200']);
     expect(pedal.log).toHaveLength(5);
-    expect(missed[0]).toMatch(/^64C PRE Sustain 99 vs /);
+    expect(missed[0]).toMatch(/^64C PRE Sustain 99 \(should be /);
   });
 
   it('stops when the write lands with the wrong name or effects', async () => {

@@ -990,7 +990,7 @@ describe('PatchManagerSheet: showing that the pedal is busy', () => {
     const { container } = renderSheet({ bulkProgress: { done: 2, total: 4, label: 'PROTECT 64' } });
     const banner = container.querySelector('.pm-busy')!;
     expect(banner).toHaveTextContent('PROTECT 64 · 2 of 4');
-    expect(banner).toHaveTextContent('leave the pedal alone');
+    expect(banner).toHaveTextContent('don’t touch your pedal');
     expect(container.querySelector('.pm-dim')).not.toBeNull();
   });
 

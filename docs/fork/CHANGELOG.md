@@ -9,6 +9,15 @@ Rebased onto kabir0st's latest stable (his `PRODUCTION` of 25 September 2026),
 which brings his value entry on knobs, tempo sync, the new start screen and his
 landing-page change, with his tests. Our features and fixes are unchanged.
 
+- A finished job says so in green, in plain words, and a slow one promises the
+  next will be quicker: "RESTORE 64 done. The next one will be much faster.
+  This pedal won't let the app set 3 knobs; set them by hand if you want them:
+  64A PITCH Hi Pitch 0 (should be 12); …". It used to arrive in the red of a
+  failure, counting "value(s) the pedal kept its own way", which is the
+  pedal's problem described in the pedal's terms. The speed line only appears
+  when the run actually took a while, so it never promises what it can't keep.
+- The busy band's progress bar is shorter, and beside it reads "be patient and
+  don't touch your pedal" — the part that matters while you wait.
 - **RETEST KNOBS** in the Patch Manager, next to RELOAD ALL. It appears only
   once this pedal has refused something, and clears what the editor has
   learned so those knobs are tested from scratch — for a different pedal, or

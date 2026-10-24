@@ -61,7 +61,7 @@ export function knobDifferenceList(actual: GP200Preset, sent: GP200Preset): Knob
         const knob = params.find((param) => param.idx === index)?.name ?? `param ${index}`;
         out.push({
           key: `${want.effectId.toString(16)}:${index}`,
-          line: `${getSlotModule(want.slotIndex)} ${knob} ${readable(got.params[index])} vs ${readable(want.params[index])}`,
+          line: `${getSlotModule(want.slotIndex)} ${knob} ${readable(got.params[index])} (should be ${readable(want.params[index])})`,
           slotIndex: want.slotIndex,
           effectId: want.effectId,
           param: index,

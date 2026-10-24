@@ -97,6 +97,8 @@ export interface PatchManagerSheetProps {
   /** Last slot action failure (copy, paste, …). Shown inside the sheet,
    *  because the app-level error banner sits under this dialog's overlay. */
   errorMessage?: string | null;
+  /** How to show it: a failure, or a job that finished. */
+  messageTone?: 'error' | 'success';
   onDismissError?: () => void;
   /** Make a slot the template RESET copies (reads and remembers it). */
   onSetDefaultPatch?: (slot: number) => Promise<void>;
@@ -181,6 +183,7 @@ export function PatchManagerSheet({
   onExportRequest,
   userIrNames,
   errorMessage = null,
+  messageTone = 'error',
   onDismissError,
   onSetDefaultPatch,
   onResetSlot,
@@ -616,7 +619,7 @@ export function PatchManagerSheet({
               style={bulkProgress ? { width: `${(bulkProgress.done / bulkProgress.total) * 100}%` } : undefined}
             />
           </span>
-          <span className="pm-busy-hint">leave the pedal alone</span>
+          <span className="pm-busy-hint">be patient and don’t touch your pedal</span>
           {bulkProgress && bulkProgress.cancellable !== false && (
             <button type="button" className="pm-busy-cancel" onClick={onCancelBulk}>
               cancel
@@ -699,9 +702,13 @@ export function PatchManagerSheet({
             panel (.pm-busy): one live region, and far harder to miss. */}
         {errorMessage && (
           <div
-            role="alert"
+            role={messageTone === 'success' ? 'status' : 'alert'}
             className="flex items-start justify-between gap-3 px-3 py-2 rounded font-mono-display text-caption"
-            style={{
+            style={messageTone === 'success' ? {
+              color: 'var(--accent-green, #4a9a6a)',
+              border: '1px solid var(--accent-green, #4a9a6a)',
+              background: 'rgba(74,154,106,0.08)',
+            } : {
               color: 'var(--accent-red, #c05050)',
               border: '1px solid var(--accent-red, #c05050)',
               background: 'rgba(192,80,80,0.06)',
