@@ -27,7 +27,7 @@ versions are X.Y.Z (major feature / functional / iterative).
   RESTORE 64 (browser copy + JSON file) and a warning if bank 64 changes on the
   pedal.
 - **SAVE PATCH** (quick commit, like SAVE on the pedal), **SAVE ALL** (writes
-  every setting from the editor's copy, checked), **REFRESH**, imports that ask
+  every setting from the editor's copy, checked), **RELOAD ALL**, imports that ask
   before saving, a working spinner and a reload (⚡) button.
 - Every change is read back from the pedal to confirm it landed.
 
