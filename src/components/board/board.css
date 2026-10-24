@@ -1641,6 +1641,17 @@
   align-items: center;
   margin-left: auto;
 }
+/* The fork's version, left of FX LOOP: present but quiet, and it must never
+   compete with the buttons beside it. */
+.board-view .deck-version {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  white-space: nowrap;
+  padding-right: 2px;
+  user-select: text;
+}
 .board-view .deck-btn {
   display: inline-flex;
   align-items: center;
@@ -2498,6 +2509,11 @@
   }
   .board-view .deck-actions .deck-btn {
     flex: 1 0 auto;
+  }
+  .board-view .deck-actions .deck-version {
+    order: 99;
+    flex: 1 0 100%;
+    text-align: right;
   }
 
   /* deck popovers: fixed bottom sheets clamped to the viewport */

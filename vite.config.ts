@@ -9,16 +9,18 @@ import { parseGitDescribe, type AppVersion } from './src/core/appVersion.ts'
  * The version printed under the credits, as `__APP_VERSION__`: the latest
  * release tag and the commits since it (src/core/appVersion.ts).
  *
- * `--match 'v[0-9]*'` counts from release tags only, so a stray tag of any
- * other shape can't reset the number. With no git, or no tag reachable — a
- * shallow CI clone fetched without tags is the likely one — this is null and
- * the page shows no version at all, which beats a confidently wrong one.
+ * `--match 'pm.[0-9]*'` counts from THIS FORK's release tags: upstream's own
+ * `v*` tags sit on a lineage we left behind, so describing from them would
+ * either fail or count someone else's commits. With no git, or no `pm.*` tag
+ * reachable, this is null and the page shows no version at all, which beats a
+ * confidently wrong one. A tag must be pushed for CI to see it (24 Oct: the
+ * live site showed nothing because every pm/v tag was local-only).
  */
 function appVersion(): AppVersion | null {
   try {
     const described = execFileSync(
       'git',
-      ['describe', '--tags', '--long', '--match', 'v[0-9]*'],
+      ['describe', '--tags', '--long', '--match', 'pm.[0-9]*'],
       { cwd: __dirname, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
     )
     return parseGitDescribe(described)
