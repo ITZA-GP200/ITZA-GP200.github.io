@@ -7,6 +7,7 @@ import { DEFAULT_PATCH_NAME } from '@/core/defaultPatch';
 import { describeRange, pasteProblem } from '@/core/multiPaste';
 import { bank64NameChanges } from '@/core/bank64Backup';
 import { SysExCodec } from '@/core/SysExCodec';
+import { forgetStubbornValues, loadStubbornValues } from '@/core/stubbornValues';
 import {
   EMPTY_SELECTION,
   collapseToAnchor,
@@ -206,10 +207,18 @@ export function PatchManagerSheet({
   const editorFileInputRef = useRef<HTMLInputElement>(null);
   // Where the right-click menu is open, or null.
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
+  // Controls this pedal has refused (see stubbornValues). Counted again
+  // whenever a run finishes, because a run is what teaches them.
+  const [refusedCount, setRefusedCount] = useState(() => loadStubbornValues().size);
 
   const namesLoading = namesLoadProgress < 256;
   const bulkRunning = bulkProgress !== null;
   const working = busy || bulkRunning;
+
+  // A run is what teaches a refusal, so count them again when one ends.
+  useEffect(() => {
+    if (!working) setRefusedCount(loadStubbornValues().size);
+  }, [working]);
   const actionsDisabled = !connected || selected === null || working || namesScanning;
 
   let selectedLabel = '';
@@ -861,6 +870,17 @@ export function PatchManagerSheet({
           >
             RELOAD ALL
           </Button>
+          {refusedCount > 0 && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => { forgetStubbornValues(); setRefusedCount(0); }}
+              disabled={working || namesScanning}
+              title={`Try the ${refusedCount} knob(s) this pedal wouldn’t accept again, from scratch. The next write is slower while they are tested. Nothing on the pedal changes.`}
+            >
+              RETEST KNOBS
+            </Button>
+          )}
         </div>
         {onRestoreBank64 && choosingRestore && (
           <div

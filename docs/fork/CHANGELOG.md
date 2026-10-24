@@ -9,6 +9,10 @@ Rebased onto kabir0st's latest stable (his `PRODUCTION` of 25 September 2026),
 which brings his value entry on knobs, tempo sync, the new start screen and his
 landing-page change, with his tests. Our features and fixes are unchanged.
 
+- **RETEST KNOBS** in the Patch Manager, next to RELOAD ALL. It appears only
+  once this pedal has refused something, and clears what the editor has
+  learned so those knobs are tested from scratch — for a different pedal, or
+  to check a refusal still stands. Nothing on the pedal changes.
 - The report of what the pedal kept its own way now names the knob and rounds
   the value: "64A PITCH HI PITCH 0 vs 12", not "64A PRE param 0 0 vs
   84.19125366210938". It is the list of what to set by hand, so it should read
