@@ -9,6 +9,19 @@ Rebased onto kabir0st's latest stable (his `PRODUCTION` of 25 September 2026),
 which brings his value entry on knobs, tempo sync, the new start screen and his
 landing-page change, with his tests. Our features and fixes are unchanged.
 
+- PROTECT 64 and RESTORE 64 now read each slot first: a slot that already
+  holds the right patch is left alone, and a slot whose settings match one
+  already in place is filled by an on-pedal copy (about two seconds) rather
+  than written setting by setting (10-20 s). A typical restore drops from
+  about a minute to under twenty seconds; putting back a drifted swap slot
+  takes a couple of seconds.
+- The Patch Manager shows a band across the top while the pedal is busy: what
+  is running, how far through, a progress bar and cancel. The patch list dims
+  and ignores clicks until it finishes.
+- Slot actions wait for a name scan to finish. A scan owns the pedal's MIDI
+  connection, and starting a write during one could save the wrong patch.
+- REFRESH is now RELOAD ALL, and re-opens the patch the pedal is on as well as
+  re-reading every name.
 - Fixed: a patch read now has to be the slot that was asked for. The reader
   accepted any reply, so a read fired straight after another could be served
   the previous one's tail — on hardware, UNDO refused to undo its own swap
