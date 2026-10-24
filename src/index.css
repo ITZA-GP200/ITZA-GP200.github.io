@@ -559,8 +559,8 @@ select option {
 }
 .pm-busy-text { white-space: nowrap; }
 .pm-busy-track {
-  flex: 1;
-  min-width: 40px;
+  flex: 0 0 110px;
+  width: 110px;
   height: 4px;
   border-radius: 999px;
   overflow: hidden;
@@ -578,6 +578,7 @@ select option {
   animation: pm-slide 1.1s ease-in-out infinite;
 }
 .pm-busy-hint {
+  flex: 1;
   white-space: nowrap;
   font-weight: 400;
   color: var(--text-muted);
