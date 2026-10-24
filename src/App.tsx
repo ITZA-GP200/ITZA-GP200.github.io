@@ -1177,6 +1177,7 @@ function App() {
   const undoDevice: UndoDevice = {
     pullPreset: midiDevice.pullPreset,
     writePresetToSlot: midiDevice.writePresetToSlot,
+    retouchParams: midiDevice.retouchParams,
     renameSlot: midiDevice.renameSlot,
     swap: async (first, second) => { await swapOnPedal(first, second); },
   };

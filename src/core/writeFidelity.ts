@@ -30,6 +30,13 @@ export interface KnobDifference {
   key: string;
   /** "AMP param 3 50 vs 0", for people. */
   line: string;
+  /** Which block it lives in (0 = PRE … 10 = VOL), and which effect. */
+  slotIndex: number;
+  effectId: number;
+  /** The parameter's own index, and the value that was asked for — enough to
+   *  send it again on its own, without rewriting the whole patch. */
+  param: number;
+  want: number;
 }
 
 export function knobDifferenceList(actual: GP200Preset, sent: GP200Preset): KnobDifference[] {
@@ -44,6 +51,10 @@ export function knobDifferenceList(actual: GP200Preset, sent: GP200Preset): Knob
         out.push({
           key: `${want.effectId.toString(16)}:${index}`,
           line: `${getSlotModule(want.slotIndex)} param ${index} ${got.params[index]} vs ${want.params[index]}`,
+          slotIndex: want.slotIndex,
+          effectId: want.effectId,
+          param: index,
+          want: want.params[index],
         });
       }
     }
