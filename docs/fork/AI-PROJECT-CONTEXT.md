@@ -145,8 +145,17 @@ Owner's list, 24 Oct 2026, for the next build (in his words, then what it means)
   the Patch Manager uses (`--accent`). The favicon is currently upstream's.
 - **"pm.x.y.z" version in the bottom row, just left of the FX LOOP button.**
   The fork's own version, visibly a PM build. `__APP_VERSION__` already holds
-  the label and commit (appVersion.ts); note it reads `v1.0.0+29` today,
-  counting from upstream's tag, so a `pm.` scheme needs a tag of our own.
+  the label and commit (appVersion.ts).
+  **The deployed site has no version at all, and a tag is why** (proven 24 Oct,
+  not a guess): `git describe` needs a tag *reachable from what is deployed*,
+  and the only tag on origin is `v1.0-PM`, which sits on the abandoned
+  pre-rebase lineage. `v1.0.0` and `v1.1.0` exist on the owner's machine only,
+  which is why a local build shows a version and the live one does not — the
+  CI bundle is byte-identical to the previous deploy, hash and all.
+  `fetch-depth: 0` in deploy.yml (commit `3c22fa4`) was necessary but not
+  sufficient. **Push a reachable release tag and the version appears**; what
+  that tag should be called is the same decision as the `pm.` scheme, so take
+  both together.
 - **Right-click menus on the pedalboard's FX pedals** — the Patch Manager has
   them, the board does not. Called "the next major build" on 24 Sept.
 - **A note to kabir0st** carrying three fixes he'd want: the `0x5a` save field,
