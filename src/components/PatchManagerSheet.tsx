@@ -19,6 +19,8 @@ import {
 export interface BulkExportProgress {
   done: number;
   total: number;
+  /** What is running, for the banner: "PROTECT 64", "PASTING 4 PATCHES". */
+  label?: string;
   /** False for jobs that can't stop halfway safely (PROTECT 64): no cancel link. */
   cancellable?: boolean;
 }
@@ -31,6 +33,8 @@ export interface PatchManagerSheetProps {
   namesLoadProgress: number;
   /** True while the background pass is re-verifying cache-seeded names. */
   namesSyncing?: boolean;
+  /** True while either name loop is reading the pedal (see useMidiDevice). */
+  namesScanning?: boolean;
   currentSlot: number | null;
   onActivate: (slot: number) => Promise<void>;
   onOpenInEditor: (slot: number) => Promise<void>;
@@ -140,6 +144,7 @@ export function PatchManagerSheet({
   presetNames,
   namesLoadProgress,
   namesSyncing = false,
+  namesScanning = false,
   currentSlot,
   onActivate,
   onOpenInEditor,
@@ -204,7 +209,8 @@ export function PatchManagerSheet({
 
   const namesLoading = namesLoadProgress < 256;
   const bulkRunning = bulkProgress !== null;
-  const actionsDisabled = !connected || selected === null || busy || bulkRunning;
+  const working = busy || bulkRunning;
+  const actionsDisabled = !connected || selected === null || working || namesScanning;
 
   let selectedLabel = '';
   if (selected !== null) selectedLabel = SysExCodec.slotToLabel(selected);
@@ -242,7 +248,11 @@ export function PatchManagerSheet({
   // PASTE act on one slot, like the toolbar buttons they share handlers with.
   let slotActionBlocked: string | null = null;
   if (!connected) slotActionBlocked = 'Connect the GP-200 first';
-  else if (busy || bulkRunning) slotActionBlocked = 'Wait for the current action to finish';
+  else if (working) slotActionBlocked = 'Wait for the current action to finish';
+  // A name scan owns the MIDI input while it runs; sharing it mixes up the
+  // replies. On hardware, PROTECT 64 started during the first scan wrote the
+  // wrong patch into 64C.
+  else if (namesScanning) slotActionBlocked = 'Wait for the patch names to finish loading';
   let copyBlocked = slotActionBlocked;
   if (!copyBlocked && selectedSlots.length !== 1 && !onCopySlots) copyBlocked = 'Copy works on one patch at a time for now';
   let pasteBlocked = slotActionBlocked;
@@ -311,7 +321,8 @@ export function PatchManagerSheet({
   }
   let historyBlocked: string | null = null;
   if (!connected) historyBlocked = 'Connect the GP-200 first';
-  else if (busy || bulkRunning) historyBlocked = 'Wait for the current action to finish';
+  else if (working) historyBlocked = 'Wait for the current action to finish';
+  else if (namesScanning) historyBlocked = 'Wait for the patch names to finish loading';
 
   // Ctrl+Z / Ctrl+Y (Cmd on a Mac; Ctrl+Shift+Z redoes too) while the slide-out
   // is open. Not in text boxes, where they keep their text-editing meaning, and
@@ -583,6 +594,28 @@ export function PatchManagerSheet({
         </div>
       )}
 
+      {working && (
+        <div className="pm-busy" role="status" aria-live="polite">
+          <span className="pm-spinner" aria-hidden="true" />
+          <span className="pm-busy-text">
+            {bulkProgress?.label ?? 'WORKING WITH THE PEDAL'}
+            {bulkProgress ? ` · ${bulkProgress.done} of ${bulkProgress.total}` : '…'}
+          </span>
+          <span className="pm-busy-track" aria-hidden="true">
+            <span
+              className={bulkProgress ? 'pm-busy-fill' : 'pm-busy-fill indeterminate'}
+              style={bulkProgress ? { width: `${(bulkProgress.done / bulkProgress.total) * 100}%` } : undefined}
+            />
+          </span>
+          <span className="pm-busy-hint">leave the pedal alone</span>
+          {bulkProgress && bulkProgress.cancellable !== false && (
+            <button type="button" className="pm-busy-cancel" onClick={onCancelBulk}>
+              cancel
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Name-loading progress */}
       {connected && namesLoading && (
         <div className="flex items-center gap-2 px-4 py-1.5 flex-shrink-0">
@@ -618,7 +651,7 @@ export function PatchManagerSheet({
       )}
 
       {/* Patch browser */}
-      <div className="flex-1 min-h-0 flex flex-col px-2 pb-2">
+      <div className={`flex-1 min-h-0 flex flex-col px-2 pb-2${working ? ' pm-dim' : ''}`}>
         <PatchPicker
           presetNames={presetNames}
           namesLoadProgress={namesLoadProgress}
@@ -653,14 +686,8 @@ export function PatchManagerSheet({
             )}
           </div>
         )}
-        {(busy || bulkRunning) && (
-          // Fades in after a moment (CSS), so quick actions don't flicker it.
-          <div role="status" className="pm-working font-mono-display text-caption">
-            <span className="pm-spinner" aria-hidden="true" />
-            Working with the pedal…
-            {bulkProgress && ` ${bulkProgress.done}/${bulkProgress.total}`}
-          </div>
-        )}
+        {/* "Working with the pedal" now lives in the band at the top of the
+            panel (.pm-busy): one live region, and far harder to miss. */}
         {errorMessage && (
           <div
             role="alert"
@@ -762,7 +789,7 @@ export function PatchManagerSheet({
             <Button
               size="sm"
               variant="danger"
-              disabled={busy || bulkRunning}
+              disabled={working}
               onClick={() => void runBusy(onReleaseBank64)}
               title="Stop protecting bank 64; its patches stay as they are"
             >
@@ -783,7 +810,7 @@ export function PatchManagerSheet({
             <Button
               size="sm"
               variant="secondary"
-              disabled={!connected || busy || bulkRunning}
+              disabled={!connected || working || namesScanning}
               onClick={() => void runBusy(onSaveBank64)}
               title="Back up 64A–64C: kept in this browser and downloaded as a file"
             >
@@ -794,7 +821,7 @@ export function PatchManagerSheet({
             <Button
               size="sm"
               variant="secondary"
-              disabled={!connected || busy || bulkRunning || choosingRestore}
+              disabled={!connected || working || namesScanning || choosingRestore}
               onClick={() => setChoosingRestore(true)}
               title="Put a SAVE 64 backup back into bank 64, and protect it"
             >
@@ -805,7 +832,7 @@ export function PatchManagerSheet({
             <Button
               size="sm"
               variant="secondary"
-              disabled={!connected || currentSlot === null || editorPatchName === null || busy || bulkRunning || confirmingSave}
+              disabled={!connected || currentSlot === null || editorPatchName === null || working || namesScanning || confirmingSave}
               onClick={() => setConfirmingSave(true)}
               title={`Write every setting of the editor's patch into ${currentLabel} and check it (10–20 s)`}
             >
@@ -816,7 +843,7 @@ export function PatchManagerSheet({
             <Button
               size="sm"
               variant="secondary"
-              disabled={!connected || currentSlot === null || editorPatchName === null || busy || bulkRunning}
+              disabled={!connected || currentSlot === null || editorPatchName === null || working || namesScanning}
               onClick={() => {
                 if (currentSlot !== null) void runBusy(() => onSavePatch(currentSlot));
               }}
@@ -941,7 +968,7 @@ export function PatchManagerSheet({
           <Button
             size="sm"
             variant="ghost"
-            disabled={selected === null || busy || bulkRunning}
+            disabled={selected === null || working}
             onClick={selectBank}
             title="Select all four slots in this bank"
           >
@@ -950,7 +977,7 @@ export function PatchManagerSheet({
           <Button
             size="sm"
             variant="ghost"
-            disabled={selectedSlots.length < 2 || busy || bulkRunning}
+            disabled={selectedSlots.length < 2 || working}
             onClick={clearSelection}
             title="Reduce the selection back to one slot"
           >
@@ -981,7 +1008,7 @@ export function PatchManagerSheet({
           <Button
             size="sm"
             variant="ghost"
-            disabled={selectedSlots.length !== 2 || !connected || busy || bulkRunning || toolbarSwapBlocked !== null}
+            disabled={selectedSlots.length !== 2 || !connected || working || namesScanning || toolbarSwapBlocked !== null}
             onClick={() => {
               if (selectedSlots.length === 2) {
                 void runBusy(() => onSwapSlots(selectedSlots[0], selectedSlots[1]));
@@ -1034,7 +1061,7 @@ export function PatchManagerSheet({
           <Button
             size="sm"
             variant="ghost"
-            disabled={selectedSlots.length < 2 || !connected || busy || bulkRunning}
+            disabled={selectedSlots.length < 2 || !connected || working}
             onClick={() => void onExportSlots(selectedSlots)}
             title="Download every selected slot as .prst files in a ZIP"
           >
@@ -1054,7 +1081,7 @@ export function PatchManagerSheet({
           <Button
             size="sm"
             variant="ghost"
-            disabled={!connected || busy || bulkRunning}
+            disabled={!connected || working}
             onClick={() => {
               void onExportSlots(Array.from({ length: 256 }, (_, slot) => slot));
             }}
@@ -1062,24 +1089,8 @@ export function PatchManagerSheet({
           >
             EXPORT ALL
           </Button>
-          {bulkRunning && (
-            <span
-              className="font-mono-display text-caption flex items-center gap-2"
-              style={{ color: 'var(--text-muted)' }}
-              role="status"
-              aria-live="polite"
-            >
-              {bulkProgress.done}/{bulkProgress.total}
-              {bulkProgress.cancellable !== false && <button
-                type="button"
-                onClick={onCancelBulk}
-                className="underline"
-                style={{ color: 'var(--accent-red, #c05050)' }}
-              >
-                cancel
-              </button>}
-            </span>
-          )}
+          {/* The count and its cancel moved into the .pm-busy band at the top
+              of the panel, where the work is already being announced. */}
         </div>
         <input
           ref={fileInputRef}

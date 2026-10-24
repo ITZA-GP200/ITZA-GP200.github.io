@@ -104,7 +104,7 @@ describe('PatchManagerSheet', () => {
 
   it('shows bulk progress with a cancel control', () => {
     const { props } = renderSheet({ bulkProgress: { done: 12, total: 256 } });
-    expect(screen.getByText('12/256')).toBeTruthy();
+    expect(screen.getByText(/WORKING WITH THE PEDAL · 12 of 256/)).toBeTruthy();
     fireEvent.click(screen.getByText('cancel'));
     expect(props.onCancelBulk).toHaveBeenCalled();
   });
@@ -665,9 +665,9 @@ describe('PatchManagerSheet: protected bank 64 rules', () => {
     renderSheet({ onCopySlot });
     fireEvent.click(screen.getByText('Clean'));
     fireEvent.click(screen.getByRole('button', { name: 'COPY' }));
-    expect(screen.getByText(/Working with the pedal/)).toHaveClass('pm-working');
+    expect(screen.getByText(/WORKING WITH THE PEDAL/)).toHaveClass('pm-busy-text');
     finish();
-    await vi.waitFor(() => expect(screen.queryByText(/Working with the pedal/)).toBeNull());
+    await vi.waitFor(() => expect(screen.queryByText(/WORKING WITH THE PEDAL/)).toBeNull());
   });
 });
 
@@ -947,10 +947,10 @@ describe('PatchManagerSheet: Ctrl+Z / Ctrl+Y', () => {
     // While that runs the panel is busy, so a key pressed now is ignored.
     fireEvent.keyDown(document, { key: 'y', ctrlKey: true });
     expect(onRedo).not.toHaveBeenCalled();
-    await vi.waitFor(() => expect(screen.queryByText(/Working with the pedal/)).toBeNull());
+    await vi.waitFor(() => expect(screen.queryByText(/WORKING WITH THE PEDAL/)).toBeNull());
     fireEvent.keyDown(document, { key: 'y', ctrlKey: true });
     expect(onRedo).toHaveBeenCalledTimes(1);
-    await vi.waitFor(() => expect(screen.queryByText(/Working with the pedal/)).toBeNull());
+    await vi.waitFor(() => expect(screen.queryByText(/WORKING WITH THE PEDAL/)).toBeNull());
     fireEvent.keyDown(document, { key: 'Z', ctrlKey: true, shiftKey: true });
     expect(onRedo).toHaveBeenCalledTimes(2);
   });
@@ -982,5 +982,36 @@ describe('PatchPicker: the pedal’s current patch', () => {
     const row = screen.getByText('Crunch').closest('button')!;
     expect(within(row).getByText('ACTIVE')).toBeTruthy();
     expect(screen.queryByText('NOW')).toBeNull();
+  });
+});
+
+describe('PatchManagerSheet: showing that the pedal is busy', () => {
+  it('names the job and its progress in a banner, and freezes the list', () => {
+    const { container } = renderSheet({ bulkProgress: { done: 2, total: 4, label: 'PROTECT 64' } });
+    const banner = container.querySelector('.pm-busy')!;
+    expect(banner).toHaveTextContent('PROTECT 64 · 2 of 4');
+    expect(banner).toHaveTextContent('leave the pedal alone');
+    expect(container.querySelector('.pm-dim')).not.toBeNull();
+  });
+
+  it('falls back to a general message when the job has no name', () => {
+    const { container } = renderSheet({ bulkProgress: { done: 1, total: 3 } });
+    expect(container.querySelector('.pm-busy')).toHaveTextContent('WORKING WITH THE PEDAL · 1 of 3');
+  });
+
+  it('no banner, and the list is live, when nothing is running', () => {
+    const { container } = renderSheet();
+    expect(screen.queryByText(/WORKING WITH THE PEDAL/)).toBeNull();
+    expect(container.querySelector('.pm-dim')).toBeNull();
+  });
+
+  it('refuses slot actions while the names are being read', () => {
+    renderSheet({ namesScanning: true, onResetSlot: vi.fn(), defaultPatchLabel: '63A' });
+    fireEvent.contextMenu(screen.getByText('Crunch'), { clientX: 120, clientY: 140 });
+    const menu = screen.getByRole('menu', { name: 'Patch actions' });
+    for (const name of ['COPY', 'RESET']) {
+      expect(within(menu).getByRole('menuitem', { name }))
+        .toHaveAttribute('title', 'Wait for the patch names to finish loading');
+    }
   });
 });
