@@ -176,3 +176,66 @@ describe('restoreBank64', () => {
     expect(missed[0]).toMatch(/^64A PRE param 0 99 vs /);
   });
 });
+
+describe('restoreBank64: a backup the pedal will not take literally', () => {
+  // The real case: the backup holds a PRE value the pedal will not take, and
+  // the pedal always stores its own, so no slot ever looked "already right"
+  // and every restore rewrote all three the slow way (~49 s on hardware).
+  function stubbornPedal(start: Record<number, GP200Preset> = {}) {
+    const log: string[] = [];
+    const slots = new Map<number, GP200Preset>(
+      Object.entries(start).map(([slot, preset]) => [Number(slot), structuredClone(preset)]),
+    );
+    const pedalsOwn = (preset: GP200Preset) => {
+      const stored = structuredClone(preset);
+      stored.effects[0].params[1] = 50; // the pedal's own value, whatever was sent
+      return stored;
+    };
+    const device: RestoreDevice = {
+      async pullPreset(slot) {
+        const held = slots.get(slot);
+        if (!held) throw new Error('unreadable');
+        return structuredClone(held);
+      },
+      async writePresetToSlot(preset, slot) {
+        log.push(`write ${slot}`);
+        const stored = pedalsOwn(preset);
+        slots.set(slot, stored);
+        return structuredClone(stored);
+      },
+      async copySlotOnDevice(from, to, _copied, saveAs) {
+        log.push(`${from}->${to}`);
+        const copy = { ...structuredClone(slots.get(from)!), patchName: saveAs! };
+        slots.set(to, copy);
+        return structuredClone(copy);
+      },
+    };
+    return { device, log, slots };
+  }
+
+  const wantsClipping0 = () => {
+    const patches = [named('x'), named('y'), named('z')];
+    for (const p of patches) p.effects[0].params[1] = 0;
+    return patches;
+  };
+
+  it('writes one slot, then copies the rest, and says what the pedal kept', async () => {
+    const pedal = stubbornPedal();
+    const missed: string[] = [];
+    await restoreBank64(pedal.device, wantsClipping0(), undefined, missed);
+    expect(pedal.log).toEqual(['write 254', 'write 254', '254->252', '254->253', '254->255']);
+    expect(missed).toHaveLength(1);
+    expect(missed[0]).toMatch(/64C PRE param 1 50 vs 0/);
+  });
+
+  it('leaves the bank alone next time, even though the backup still disagrees', async () => {
+    const first = stubbornPedal();
+    await restoreBank64(first.device, wantsClipping0());
+    // Restore again onto the bank the first pass produced.
+    const again = stubbornPedal(Object.fromEntries(first.slots));
+    await restoreBank64(again.device, wantsClipping0(), undefined, []);
+    // One write to learn the pedal's own value again, then nothing to do.
+    expect(again.log.filter((entry) => entry.startsWith('write'))).toHaveLength(2);
+    expect(again.log.filter((entry) => entry.includes('->'))).toEqual([]);
+  });
+});
