@@ -178,6 +178,9 @@ describe('restoreBank64', () => {
 });
 
 describe('restoreBank64: a backup the pedal will not take literally', () => {
+  // What the pedal refuses is remembered between runs, so each test starts fresh.
+  beforeEach(() => localStorage.clear());
+
   // The real case: the backup holds a PRE value the pedal will not take, and
   // the pedal always stores its own, so no slot ever looked "already right"
   // and every restore rewrote all three the slow way (~49 s on hardware).
@@ -234,8 +237,7 @@ describe('restoreBank64: a backup the pedal will not take literally', () => {
     // Restore again onto the bank the first pass produced.
     const again = stubbornPedal(Object.fromEntries(first.slots));
     await restoreBank64(again.device, wantsClipping0(), undefined, []);
-    // One write to learn the pedal's own value again, then nothing to do.
-    expect(again.log.filter((entry) => entry.startsWith('write'))).toHaveLength(2);
-    expect(again.log.filter((entry) => entry.includes('->'))).toEqual([]);
+    // Nothing at all: the refusal is remembered, so every slot counts as right.
+    expect(again.log).toEqual([]);
   });
 });
