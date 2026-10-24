@@ -1036,3 +1036,17 @@ describe('PatchManagerSheet: forgetting what the pedal refused', () => {
     expect(screen.queryByRole('button', { name: /RETEST KNOBS/ })).toBeNull();
   });
 });
+
+describe('PatchManagerSheet: saving a log', () => {
+  it('offers SAVE LOG and calls back when pressed', () => {
+    const onSaveLog = vi.fn();
+    renderSheet({ onSaveLog });
+    fireEvent.click(screen.getByRole('button', { name: /SAVE LOG/ }));
+    expect(onSaveLog).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides SAVE LOG where nothing can save one', () => {
+    renderSheet();
+    expect(screen.queryByRole('button', { name: /SAVE LOG/ })).toBeNull();
+  });
+});

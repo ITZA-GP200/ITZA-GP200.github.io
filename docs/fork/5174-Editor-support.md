@@ -128,6 +128,17 @@ looks wrong.
 | Buttons do nothing / odd behaviour | Only one editor connected; reload with ⚡; reconnect the pedal |
 | Imported patch vanished on switching | It wasn't saved: SAVE PATCH, or choose "Save to [slot]" |
 
+## Something went wrong
+
+**SAVE LOG** (Patch Manager, beside RELOAD ALL) writes a text file of what the
+editor has been doing — slots, timings, patch names, and every warning and
+error — with the app version, your pedal's firmware and browser at the top.
+Send it on with a description of what you were doing. Nothing leaves your
+computer unless you send it.
+
+The log holds the last 600 lines since the page was opened, so for a problem
+you can reproduce, reload first, then do the thing, then save the log.
+
 ## Known limits
 
 - Writes from the editor's copy (SAVE ALL, IMPORT, PROTECT 64, RESTORE 64,

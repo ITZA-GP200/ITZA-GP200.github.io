@@ -9,6 +9,14 @@ Rebased onto kabir0st's latest stable (his `PRODUCTION` of 25 September 2026),
 which brings his value entry on knobs, tempo sync, the new start screen and his
 landing-page change, with his tests. Our features and fixes are unchanged.
 
+- **SAVE LOG** in the Patch Manager writes what the editor has been doing to a
+  text file: the last 600 of its own lines, plus every warning and error,
+  timed from when the page was opened, under a header naming the app version,
+  the pedal's firmware, the browser and the knobs this pedal refuses. It is
+  written only when the button is pressed and sent nowhere by itself. Support
+  used to mean talking someone through opening DevTools.
+- The "shift/ctrl-click to select more" line sits above the row of actions
+  rather than inside it, so the actions stay together on one row.
 - A finished job says so in green, in plain words, and a slow one promises the
   next will be quicker: "RESTORE 64 done. The next one will be much faster.
   This pedal won't let the app set 3 knobs; set them by hand if you want them:

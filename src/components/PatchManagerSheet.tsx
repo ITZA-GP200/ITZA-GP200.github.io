@@ -88,6 +88,8 @@ export interface PatchManagerSheetProps {
   clipboardSlots?: number[];
   onRenameSlot: (slot: number, name: string) => Promise<void>;
   onRefreshNames: () => void;
+  /** SAVE LOG: write what the editor has been doing to a file. */
+  onSaveLog?: () => void;
   /** Load a .prst into the editor buffer (pushes + saves when connected). */
   onImportFile: (bytes: Uint8Array) => void;
   /** Open the editor's export-preset dialog for the current patch. */
@@ -179,6 +181,7 @@ export function PatchManagerSheet({
   bank64SavedAt = null,
   onRenameSlot,
   onRefreshNames,
+  onSaveLog,
   onImportFile,
   onExportRequest,
   userIrNames,
@@ -877,6 +880,16 @@ export function PatchManagerSheet({
           >
             RELOAD ALL
           </Button>
+          {onSaveLog && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={onSaveLog}
+              title="Save what the editor has been doing to a text file, to send on if something went wrong. It holds slots, timings and patch names, and is not sent anywhere by itself."
+            >
+              SAVE LOG
+            </Button>
+          )}
           {refusedCount > 0 && (
             <Button
               size="sm"
@@ -983,15 +996,17 @@ export function PatchManagerSheet({
 
         {/* Selection + arrange. Shift-click a second row for a range,
             ctrl/cmd-click to pick slots one at a time. */}
+        {/* On its own line: in the row it pushed the links along and forced
+            one of them onto a line by itself. */}
+        <span
+          className="font-mono-display text-caption"
+          style={{ color: 'var(--text-muted)' }}
+          role="status"
+          aria-live="polite"
+        >
+          {selectedSlots.length > 1 ? `${selectedSlots.length} selected` : 'shift/ctrl-click to select more'}
+        </span>
         <div className="flex flex-wrap items-center gap-1.5">
-          <span
-            className="font-mono-display text-caption"
-            style={{ color: 'var(--text-muted)' }}
-            role="status"
-            aria-live="polite"
-          >
-            {selectedSlots.length > 1 ? `${selectedSlots.length} selected` : 'shift/ctrl-click to select more'}
-          </span>
           <Button
             size="sm"
             variant="ghost"
