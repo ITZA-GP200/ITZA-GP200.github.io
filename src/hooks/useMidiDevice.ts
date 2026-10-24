@@ -1162,29 +1162,34 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     const READ_GAP_MS = 20;
     const BATCH_SIZE = 8;     // Update UI every 8 slots instead of every slot
 
-    for (let s = 0; s < 256; s++) {
-      if (namesLoadAbortRef.current) break;
-      if (presetNamesRef.current[s] !== null) {
+    // finally: a scan left "running" would block every pedal action in the
+    // Patch Manager for the rest of the session, so it always ends.
+    try {
+      for (let s = 0; s < 256; s++) {
+        if (namesLoadAbortRef.current) break;
+        if (presetNamesRef.current[s] !== null) {
+          setNamesLoadProgress(s + 1);
+          continue;
+        }
+        const name = await requestSlotName(s, READ_TIMEOUT);
+        if (namesLoadAbortRef.current) break;
+        presetNamesRef.current[s] = name;
+        // Batch UI updates: only re-render every BATCH_SIZE slots or on the last slot
+        if ((s + 1) % BATCH_SIZE === 0 || s === 255) {
+          setPresetNames([...presetNamesRef.current]);
+        }
         setNamesLoadProgress(s + 1);
-        continue;
+        await new Promise(r => setTimeout(r, READ_GAP_MS));
       }
-      const name = await requestSlotName(s, READ_TIMEOUT);
-      if (namesLoadAbortRef.current) break;
-      presetNamesRef.current[s] = name;
-      // Batch UI updates: only re-render every BATCH_SIZE slots or on the last slot
-      if ((s + 1) % BATCH_SIZE === 0 || s === 255) {
-        setPresetNames([...presetNamesRef.current]);
-      }
-      setNamesLoadProgress(s + 1);
-      await new Promise(r => setTimeout(r, READ_GAP_MS));
+    } finally {
+      // Final flush in case we stopped mid-batch
+      setPresetNames([...presetNamesRef.current]);
+      if (inputRef.current) inputRef.current.onmidimessage = onMidiMessage;
+      namesLoadRunningRef.current = false;
+      setNamesScanning(false);
+      // Warm the cache with whatever this pass filled in.
+      persistNames();
     }
-    // Final flush in case we stopped mid-batch
-    setPresetNames([...presetNamesRef.current]);
-    if (inputRef.current) inputRef.current.onmidimessage = onMidiMessage;
-    namesLoadRunningRef.current = false;
-    setNamesScanning(false);
-    // Warm the cache with whatever this pass filled in.
-    persistNames();
   }, [onMidiMessage, requestSlotName, persistNames]);
 
   // Force-read every slot and correct any that drifted from the cache-seeded
@@ -1205,23 +1210,28 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     const READ_GAP_MS = 20;
     let changed = false;
 
-    for (let s = 0; s < 256; s++) {
-      if (namesLoadAbortRef.current) break;
-      const name = await requestSlotName(s, READ_TIMEOUT);
-      await new Promise(r => setTimeout(r, READ_GAP_MS));
-      if (namesLoadAbortRef.current) break;
-      // A null read is a transient miss (timeout), so keep the cached value rather
-      // than blanking a slot we already have a good name for.
-      if (name !== null && name !== presetNamesRef.current[s]) {
-        presetNamesRef.current[s] = name;
-        changed = true;
-        setPresetNames([...presetNamesRef.current]);
+    // finally: see loadPresetNames — a scan that never ends blocks everything.
+    try {
+      for (let s = 0; s < 256; s++) {
+        if (namesLoadAbortRef.current) break;
+        const name = await requestSlotName(s, READ_TIMEOUT);
+        await new Promise(r => setTimeout(r, READ_GAP_MS));
+        if (namesLoadAbortRef.current) break;
+        // A null read is a transient miss (timeout), so keep the cached value rather
+        // than blanking a slot we already have a good name for.
+        if (name !== null && name !== presetNamesRef.current[s]) {
+          presetNamesRef.current[s] = name;
+          changed = true;
+          setPresetNames([...presetNamesRef.current]);
+        }
       }
+    } finally {
+      if (inputRef.current) inputRef.current.onmidimessage = onMidiMessage;
+      namesLoadRunningRef.current = false;
+      setNamesScanning(false);
+      setNamesSyncing(false);
+      if (changed) persistNames();
     }
-    if (inputRef.current) inputRef.current.onmidimessage = onMidiMessage;
-    namesLoadRunningRef.current = false;
-    setNamesSyncing(false);
-    if (changed) persistNames();
   }, [onMidiMessage, requestSlotName, persistNames]);
 
   /** Re-read one slot's name from the pedal and record it in the list.
