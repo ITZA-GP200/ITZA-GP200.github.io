@@ -11,8 +11,12 @@
        what keeps the generated PNG icons free of white notches. Do not add a
        background rect here (see scripts/generate-og-image.mjs). -->
   <rect width="32" height="32" rx="7" fill="#232220"/>
-  <!-- the 16×16 ActionIcon path, centred and scaled 1.7× -->
-  <g transform="translate(2.4,2.4) scale(1.7)">
+  <!-- The 16×16 ActionIcon path, scaled to fill the tile. The bolt's own
+       bounding box is 8.4 × 12.4 inside that box, so height is the limiting
+       dimension: 29/12.4 = 2.339 leaves a 1.5 margin top and bottom, and the
+       translate centres the 19.6-wide result. Recompute all three together if
+       the path ever changes. -->
+  <g transform="translate(-2.71,-2.71) scale(2.339)">
     <path d="M9.2 1.8 3.8 9h4.1l-1.1 5.2L12.2 7H8.1z" fill="#4ac6ff"/>
   </g>
 </svg>

@@ -1066,3 +1066,48 @@ describe('PatchManagerSheet: the fork version', () => {
     expect(shown!.className).toContain('ml-auto'); // flush right on the row
   });
 });
+
+describe('PatchManagerSheet: PM HELP', () => {
+  it('swaps the patch list for help, and back again', () => {
+    renderSheet();
+    // The list is there to begin with.
+    expect(screen.getByText('Clean')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: /Patch Manager help/ })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /^PM HELP$/ }));
+    expect(screen.getByRole('region', { name: /Patch Manager help/ })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /CLOSE HELP/ }));
+    expect(screen.queryByRole('region', { name: /Patch Manager help/ })).toBeNull();
+    expect(screen.getByText('Clean')).toBeInTheDocument();
+  });
+
+  it('keeps the list mounted, so the scroll position and selection survive', () => {
+    renderSheet();
+    fireEvent.click(screen.getByRole('button', { name: /^PM HELP$/ }));
+    // Hidden, not unmounted: the row is still in the DOM behind the help.
+    expect(screen.getByText('Clean')).toBeInTheDocument();
+  });
+
+  it('marks itself pressed, for anyone not seeing the colour', () => {
+    renderSheet();
+    const button = screen.getByRole('button', { name: /^PM HELP$/ });
+    expect(button).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(button);
+    expect(screen.getByRole('button', { name: /CLOSE HELP/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('will not act on a slot you cannot see', () => {
+    renderSheet({ currentSlot: 0 });
+    fireEvent.click(screen.getByText('Clean'));
+    expect(screen.getByRole('button', { name: /^PASTE/ })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: /^PM HELP$/ }));
+    for (const name of [/^ACTIVATE$/, /^OPEN$/, /^RENAME$/, /^SELECT BANK$/, /^COPY$/]) {
+      expect(screen.getByRole('button', { name })).toBeDisabled();
+    }
+    // The FILE row stays live, or you could not get back.
+    expect(screen.getByRole('button', { name: /CLOSE HELP/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /IMPORT \.PRST/ })).toBeEnabled();
+  });
+});

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
 import { PatchPicker } from './PatchPicker';
+import { PatchManagerHelp } from './PatchManagerHelp';
 import { PatchContextMenu } from './PatchContextMenu';
 import { DEFAULT_PATCH_NAME } from '@/core/defaultPatch';
 import { describeRange, pasteProblem } from '@/core/multiPaste';
@@ -216,16 +217,26 @@ export function PatchManagerSheet({
   // Controls this pedal has refused (see stubbornValues). Counted again
   // whenever a run finishes, because a run is what teaches them.
   const [refusedCount, setRefusedCount] = useState(() => loadStubbornValues().size);
+  // PM HELP: the help text stands in for the patch list. The list stays
+  // mounted underneath so closing help lands on the same scroll position and
+  // the same selection.
+  const [showHelp, setShowHelp] = useState(false);
 
   const namesLoading = namesLoadProgress < 256;
   const bulkRunning = bulkProgress !== null;
   const working = busy || bulkRunning;
 
+  // The panel always opens on the patch list, never on help left over from
+  // the last time it was open.
+  useEffect(() => {
+    if (!open) setShowHelp(false);
+  }, [open]);
+
   // A run is what teaches a refusal, so count them again when one ends.
   useEffect(() => {
     if (!working) setRefusedCount(loadStubbornValues().size);
   }, [working]);
-  const actionsDisabled = !connected || selected === null || working || namesScanning;
+  const actionsDisabled = !connected || selected === null || working || namesScanning || showHelp;
 
   let selectedLabel = '';
   if (selected !== null) selectedLabel = SysExCodec.slotToLabel(selected);
@@ -557,6 +568,17 @@ export function PatchManagerSheet({
         >
           PRINT
         </Button>
+        <Button
+          size="sm"
+          variant={showHelp ? 'primary' : 'secondary'}
+          aria-pressed={showHelp}
+          onClick={() => setShowHelp((on) => !on)}
+          title={showHelp
+            ? 'Go back to the patch list'
+            : 'What the Patch Manager’s buttons do, in place of the list'}
+        >
+          {showHelp ? 'CLOSE HELP' : 'PM HELP'}
+        </Button>
         {/* The fork's version, flush right on this row. It belongs with the
             Patch Manager rather than the deck: this panel is the fork's own
             work, and the version is what a support log leads with. */}
@@ -678,7 +700,15 @@ export function PatchManagerSheet({
       )}
 
       {/* Patch browser */}
-      <div className={`flex-1 min-h-0 flex flex-col px-2 pb-2${working ? ' pm-dim' : ''}`}>
+      {showHelp && (
+        <div className="flex-1 min-h-0 flex flex-col">
+          <PatchManagerHelp />
+        </div>
+      )}
+      <div
+        className={`flex-1 min-h-0 flex flex-col px-2 pb-2${working ? ' pm-dim' : ''}`}
+        style={showHelp ? { display: 'none' } : undefined}
+      >
         <PatchPicker
           presetNames={presetNames}
           namesLoadProgress={namesLoadProgress}
@@ -1022,7 +1052,7 @@ export function PatchManagerSheet({
           <Button
             size="sm"
             variant="ghost"
-            disabled={selected === null || working}
+            disabled={selected === null || working || showHelp}
             onClick={selectBank}
             title="Select all four slots in this bank"
           >
@@ -1031,7 +1061,7 @@ export function PatchManagerSheet({
           <Button
             size="sm"
             variant="ghost"
-            disabled={selectedSlots.length < 2 || working}
+            disabled={selectedSlots.length < 2 || working || showHelp}
             onClick={clearSelection}
             title="Reduce the selection back to one slot"
           >
@@ -1062,7 +1092,7 @@ export function PatchManagerSheet({
           <Button
             size="sm"
             variant="ghost"
-            disabled={selectedSlots.length !== 2 || !connected || working || namesScanning || toolbarSwapBlocked !== null}
+            disabled={selectedSlots.length !== 2 || !connected || working || namesScanning || showHelp || toolbarSwapBlocked !== null}
             onClick={() => {
               if (selectedSlots.length === 2) {
                 void runBusy(() => onSwapSlots(selectedSlots[0], selectedSlots[1]));
@@ -1115,7 +1145,7 @@ export function PatchManagerSheet({
           <Button
             size="sm"
             variant="ghost"
-            disabled={selectedSlots.length < 2 || !connected || working}
+            disabled={selectedSlots.length < 2 || !connected || working || showHelp}
             onClick={() => void onExportSlots(selectedSlots)}
             title="Download every selected slot as .prst files in a ZIP"
           >

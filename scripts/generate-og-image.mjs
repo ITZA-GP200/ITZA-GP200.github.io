@@ -79,7 +79,7 @@ const MARK = `
 <svg width="60" height="60" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
   <rect width="32" height="32" rx="7" fill="#2b2926"/>
   <rect width="32" height="32" rx="7" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="1"/>
-  <g transform="translate(2.4,2.4) scale(1.7)">
+  <g transform="translate(-2.71,-2.71) scale(2.339)">
     <path d="M9.2 1.8 3.8 9h4.1l-1.1 5.2L12.2 7H8.1z" fill="${BOLT}"/>
   </g>
 </svg>`;
