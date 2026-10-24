@@ -14,7 +14,7 @@
   <circle cx="24.5" cy="10.5" r="3.2" fill="#8a857c"/>
   <rect x="24" y="7.6" width="1" height="3" rx="0.5" fill="#232220"/>
   <!-- LED -->
-  <circle cx="24.5" cy="18.5" r="1.4" fill="#d9a13c"/>
+  <circle cx="24.5" cy="18.5" r="1.4" fill="#4fd6ee"/>
   <!-- footswitches -->
   <circle cx="9" cy="24" r="3" fill="none" stroke="#4fd6ee" stroke-width="1.6"/>
   <circle cx="19" cy="24" r="3" fill="none" stroke="#4fd6ee" stroke-width="1.6"/>

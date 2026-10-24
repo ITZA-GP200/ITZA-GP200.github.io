@@ -51,7 +51,7 @@ const OUT = join(ROOT, 'public');
 const INK = '#232220'; // enclosure body / theme-color
 const DEEP = '#14110d'; // deep background
 const LCD = '#4fd6ee'; // LCD accent: the app's --accent teal (the PM fork's mark)
-const LED = '#d9a13c'; // amber LED accent
+const LED = '#4fd6ee'; // LED: the accent teal too, so the mark carries one colour
 const MONO = 'JetBrains Mono';
 const SANS = 'DM Sans';
 

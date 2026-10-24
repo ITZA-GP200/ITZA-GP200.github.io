@@ -1645,11 +1645,14 @@
    compete with the buttons beside it. */
 .board-view .deck-version {
   font-family: var(--font-jetbrains-mono), monospace;
+  /* The same type as the buttons beside it (.deck-btn), muted rather than
+     smaller, so it sits in the row without competing with it. */
   font-size: 10px;
-  letter-spacing: 0.06em;
+  font-weight: 800;
+  letter-spacing: 0.1em;
   color: var(--text-muted);
   white-space: nowrap;
-  padding-right: 2px;
+  margin-right: 20px;
   user-select: text;
 }
 .board-view .deck-btn {
@@ -2514,6 +2517,7 @@
     order: 99;
     flex: 1 0 100%;
     text-align: right;
+    margin-right: 0;
   }
 
   /* deck popovers: fixed bottom sheets clamped to the viewport */
@@ -2674,6 +2678,11 @@
   .board-view .board-topbar .deck-btn .db-label,
   .board-view .deck .deck-btn .db-label {
     white-space: nowrap;
+  }
+  /* Follows the labels down, so the two stay the same size at every width. */
+  .board-view .deck-version {
+    font-size: 8px;
+    letter-spacing: 0.06em;
   }
   .board-view .board-topbar .deck-btn.quiet,
   .board-view .deck .deck-btn.quiet {
