@@ -1,7 +1,7 @@
 import { writeChecked } from './protectBank';
 import { SysExCodec } from './SysExCodec';
 import type { GP200Preset } from './types';
-import { describeWriteFidelity } from './writeFidelity';
+import { describeWriteFidelity, type KnobDifference } from './writeFidelity';
 
 /**
  * UNDO / REDO for the Patch Manager's slot actions.
@@ -54,6 +54,13 @@ export function recordAction(history: History, entry: HistoryEntry): History {
 export interface UndoDevice {
   pullPreset(slot: number): Promise<GP200Preset>;
   writePresetToSlot(preset: GP200Preset, slot: number): Promise<GP200Preset>;
+  /** Re-send just these controls and save again, for writeChecked’s cheap
+   *  second attempt (see protectBank.CheckedWriteDevice). */
+  retouchParams?(
+    slot: number,
+    presetName: string,
+    controls: readonly KnobDifference[],
+  ): Promise<GP200Preset>;
   renameSlot(slot: number, name: string): Promise<void>;
   /** Exchange two slots (the app's swap through the swap slot). */
   swap(first: number, second: number): Promise<void>;

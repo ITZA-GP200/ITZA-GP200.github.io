@@ -10,7 +10,7 @@ import {
   writeChecked,
 } from './protectBank';
 import { SysExCodec } from './SysExCodec';
-import { sameSettings } from './writeFidelity';
+import { sameSettings, type KnobDifference } from './writeFidelity';
 import { loadStubbornValues } from './stubbornValues';
 import type { GP200Preset } from './types';
 
@@ -125,6 +125,13 @@ export function bank64NameChanges(presetNames: (string | null)[]): string[] {
 export interface RestoreDevice {
   pullPreset(slot: number): Promise<GP200Preset>;
   writePresetToSlot(preset: GP200Preset, slot: number): Promise<GP200Preset>;
+  /** Re-send just these controls and save again, for writeChecked’s cheap
+   *  second attempt (see protectBank.CheckedWriteDevice). */
+  retouchParams?(
+    slot: number,
+    presetName: string,
+    controls: readonly KnobDifference[],
+  ): Promise<GP200Preset>;
   copySlotOnDevice(fromSlot: number, toSlot: number, copied: GP200Preset, saveAs?: string): Promise<GP200Preset>;
 }
 

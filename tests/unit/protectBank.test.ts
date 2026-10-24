@@ -252,3 +252,69 @@ describe('writeChecked: not arguing with the pedal twice', () => {
     expect(result.patchName).toBe('X');
   });
 });
+
+describe('writeChecked: the cheap second attempt', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('sends only the missed controls again, instead of the whole patch', async () => {
+    const { writeChecked } = await import('@/core/protectBank');
+    let writes = 0;
+    const touched: { slotIndex: number; param: number; want: number }[] = [];
+    const pedal = {
+      async writePresetToSlot(preset: GP200Preset) {
+        writes += 1;
+        const stored = structuredClone(preset);
+        stored.effects[0].params[1] = 99; // one knob swallowed on the way in
+        return stored;
+      },
+      async retouchParams(_slot: number, name: string, controls: readonly { slotIndex: number; effectId: number; param: number; want: number }[]) {
+        touched.push(...controls.map(({ slotIndex, param, want }) => ({ slotIndex, param, want })));
+        // Sent on its own, it lands.
+        const stored = patch(name);
+        for (const control of controls) {
+          stored.effects.find((effect) => effect.slotIndex === control.slotIndex)!.params[control.param] = control.want;
+        }
+        return stored;
+      },
+    };
+    const sent = patch('X');
+    const missed: string[] = [];
+    const result = await writeChecked(pedal, sent, 252, (d) => `bad: ${d}`, missed);
+
+    expect(writes).toBe(1); // the 10-20 s write happened once
+    expect(touched).toEqual([{ slotIndex: sent.effects[0].slotIndex, param: 1, want: sent.effects[0].params[1] }]);
+    expect(missed).toEqual([]);
+    expect(result.effects[0].params[1]).toBe(sent.effects[0].params[1]);
+  });
+
+  it('reports and remembers a control that survives being sent on its own', async () => {
+    const { writeChecked } = await import('@/core/protectBank');
+    const { loadStubbornValues } = await import('@/core/stubbornValues');
+    let writes = 0;
+    let retouches = 0;
+    const refuse = (preset: GP200Preset) => {
+      const stored = structuredClone(preset);
+      stored.effects[0].params[1] = 50; // the pedal's own value, whatever is sent
+      return stored;
+    };
+    const pedal = {
+      async writePresetToSlot(preset: GP200Preset) { writes += 1; return refuse(preset); },
+      async retouchParams(_slot: number, name: string) { retouches += 1; return refuse(patch(name)); },
+    };
+    const sent = patch('X');
+    sent.effects[0].params[1] = 0;
+
+    const missed: string[] = [];
+    await writeChecked(pedal, sent, 252, (d) => `bad: ${d}`, missed, loadStubbornValues());
+    expect(writes).toBe(1);
+    expect(retouches).toBe(1);
+    expect(missed).toHaveLength(1);
+    expect(loadStubbornValues().size).toBe(1);
+
+    // Known from now on: nothing is sent twice for it again.
+    writes = 0; retouches = 0;
+    await writeChecked(pedal, sent, 252, (d) => `bad: ${d}`, [], loadStubbornValues());
+    expect(writes).toBe(1);
+    expect(retouches).toBe(0);
+  });
+});

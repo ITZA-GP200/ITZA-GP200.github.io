@@ -180,6 +180,12 @@ export interface UseMidiDeviceReturn {
     saveAs?: string,
   ) => Promise<GP200Preset>;
   writePresetToSlot: (preset: GP200Preset, slot: number) => Promise<GP200Preset>;
+  /** Re-send just these controls into a slot and save again (about a second). */
+  retouchParams: (
+    slot: number,
+    presetName: string,
+    controls: readonly { slotIndex: number; effectId: number; param: number; want: number }[],
+  ) => Promise<GP200Preset>;
   saveToSlot: (presetName: string, slot?: number) => Promise<void>;
   /** Rename a slot without touching its effect data. Briefly switches the
    *  device to the target slot (required to load the editing buffer), then
@@ -1102,6 +1108,53 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [pauseNameLoading, persistNames, saveToSlot, pullPreset, send]);
 
+  /**
+   * Re-send a handful of controls into the slot the pedal is already on, then
+   * save and read back: the cheap second attempt. A full write from app data
+   * costs 10-20 s, and when only two or three knobs were missed almost all of
+   * that is spent re-sending what already landed. Each control is sent twice,
+   * because the first message to a block only opens it (see devicePush).
+   *
+   * Used to tell a swallowed message from a value the pedal refuses outright:
+   * if a control is still wrong after this, it is the pedal’s own.
+   */
+  const retouchParams = useCallback(async (
+    slot: number,
+    presetName: string,
+    controls: readonly { slotIndex: number; effectId: number; param: number; want: number }[],
+  ): Promise<GP200Preset> => {
+    await pauseNameLoading();
+    if (!outputRef.current) throw new Error('Not connected');
+    const output = outputRef.current;
+    const label = SysExCodec.slotToLabel(slot);
+    console.log(`[GP-200] retouch ${label}: ${controls.length} control(s)`, controls.map((c) => `${c.slotIndex}/${c.param}=${c.want}`));
+    suppressFxFor(8000);
+    suppressSlotEchoUntilRef.current = Date.now() + 8000;
+
+    // Select the slot, so the edit buffer holds what the slot stores and only
+    // these controls differ from it.
+    output.send(SysExCodec.buildPresetChange(slot));
+    setCurrentSlot(slot); currentSlotRef.current = slot;
+    await new Promise(r => setTimeout(r, 300));
+
+    // Two passes: the first opens each block, the second is the one that lands.
+    for (let pass = 0; pass < 2; pass++) {
+      for (const control of controls) {
+        send.sendParamChange(control.slotIndex, control.param, control.effectId, control.want);
+        await new Promise(r => setTimeout(r, 40));
+      }
+    }
+    await new Promise(r => setTimeout(r, 200));
+
+    await saveToSlot(presetName, slot);
+    const readback = await pullPreset(slot);
+    presetNamesRef.current[slot] = readback.patchName;
+    setPresetNames([...presetNamesRef.current]);
+    persistNames();
+    return readback;
+    // suppressFxFor: see saveToSlot.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [pauseNameLoading, persistNames, saveToSlot, pullPreset, send]);
   /** Read one slot's name the way the official Valeton editor does
    *  (USB capture of it connecting, fw 1.8.0): a full read request, then the
    *  WHOLE 7-chunk reply before anything else is sent. The official editor
@@ -1392,7 +1445,7 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     namesScanning,
     deviceInfo, currentPreset, userIrNames, deviceState,
     connect, disconnect, loadPresetNames, syncPresetNames, refreshNames, refreshSlotName,
-    pullPreset, pushPreset, copySlotOnDevice, writePresetToSlot, saveToSlot, renameSlot,
+    pullPreset, pushPreset, copySlotOnDevice, writePresetToSlot, retouchParams, saveToSlot, renameSlot,
     bulkApply, bulkApplyProgress, cancelBulkApply,
     // Send operations + device-callback registration are owned by useMidiSend.
     sendEffectChange: send.sendEffectChange,

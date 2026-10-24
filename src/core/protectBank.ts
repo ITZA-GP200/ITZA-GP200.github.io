@@ -1,5 +1,5 @@
 import { SysExCodec } from './SysExCodec';
-import { describeWriteFidelity, knobDifferenceList } from './writeFidelity';
+import { describeWriteFidelity, knobDifferenceList, type KnobDifference } from './writeFidelity';
 import { loadStubbornValues, rememberStubbornValues } from './stubbornValues';
 import type { GP200Preset } from './types';
 
@@ -64,47 +64,70 @@ export function saveBankProtected(on: boolean): void {
 /**
  * Write a patch from app data into a slot and check it against what was
  * sent. A wrong name or effect type fails at once (`problem` builds that
- * message). If only knob values are off, the slot is written once more; any
- * still off after that are added to `missed` ("64A PRE param 3 10 vs 0")
+ * message). If only knob values are off, just those controls are sent again
+ * (a second or two, see retouchParams) rather than the whole patch (10-20 s);
+ * any still off after that are added to `missed` ("64A PRE param 3 10 vs 0")
  * rather than failing: on hardware COMP's Clipping stays at its default 10
  * whatever is sent once COMP is freshly loaded, so a value the pedal won't
  * accept must not stop a whole restore. Returns the read-back.
  */
 export async function writeChecked(
-  device: Pick<ProtectDevice, 'writePresetToSlot'>,
+  device: CheckedWriteDevice,
   sent: GP200Preset,
   slot: number,
   problem: (differences: string) => string,
   missed: string[] = [],
-  /** Controls this pedal has already refused (see stubbornValues). A write
-   *  isn't repeated for those: the second attempt only ever confirmed what
-   *  was already known, at 10-20 s a time. */
+  /** Controls this pedal has already refused (see stubbornValues). Nothing is
+   *  re-sent for those: the second attempt only ever confirmed what was
+   *  already known. */
   stubborn: Set<string> = new Set(),
 ): Promise<GP200Preset> {
-  for (let attempt = 1; ; attempt++) {
-    const written = await device.writePresetToSlot(sent, slot);
+  const label = SysExCodec.slotToLabel(slot);
+  const check = (written: GP200Preset): KnobDifference[] => {
     const { identity } = describeWriteFidelity(written, sent);
     const differences = knobDifferenceList(written, sent);
     if (identity.length > 0) {
       const wrong = [...identity, ...differences.map((difference) => difference.line)];
       throw new Error(problem(`${wrong.slice(0, 3).join('; ')}${wrong.length > 3 ? '; …' : ''}`));
     }
-    if (differences.length === 0) return written;
+    return differences;
+  };
 
-    const label = SysExCodec.slotToLabel(slot);
+  let written = await device.writePresetToSlot(sent, slot);
+  let differences = check(written);
+  if (differences.length === 0) return written;
+
+  // Anything not already known to be the pedal's own choice gets one more
+  // chance, because a single message to a block can simply be swallowed.
+  if (differences.some((difference) => !stubborn.has(difference.key))) {
     const lines = differences.map((difference) => difference.line);
-    // Every difference already known to be the pedal's own choice, or a
-    // second attempt that changed nothing: stop and report it.
-    const allKnown = differences.every((difference) => stubborn.has(difference.key));
-    if (allKnown || attempt >= 2) {
-      console.warn(`[GP-200] ${label} kept ${lines.length} value(s) its own way:`, lines);
-      missed.push(...lines.map((line) => `${label} ${line}`));
-      rememberStubbornValues(differences.map((difference) => difference.key));
-      for (const difference of differences) stubborn.add(difference.key);
-      return written;
-    }
-    console.warn(`[GP-200] ${label} write missed ${lines.length} value(s), writing again:`, lines);
+    console.warn(`[GP-200] ${label} missed ${lines.length} value(s), sending those again:`, lines);
+    written = device.retouchParams
+      ? await device.retouchParams(slot, sent.patchName, differences)
+      // No targeted path (an older device object): write the patch again.
+      : await device.writePresetToSlot(sent, slot);
+    differences = check(written);
+    if (differences.length === 0) return written;
   }
+
+  // Still wrong after being sent on its own: the pedal keeps its own value.
+  const lines = differences.map((difference) => difference.line);
+  console.warn(`[GP-200] ${label} kept ${lines.length} value(s) its own way:`, lines);
+  missed.push(...lines.map((line) => `${label} ${line}`));
+  rememberStubbornValues(differences.map((difference) => difference.key));
+  for (const difference of differences) stubborn.add(difference.key);
+  return written;
+}
+
+/** What writeChecked needs of the pedal: the full write, and ideally the
+ *  targeted re-send that makes its second attempt cheap. */
+export interface CheckedWriteDevice {
+  writePresetToSlot(preset: GP200Preset, slot: number): Promise<GP200Preset>;
+  retouchParams?(
+    slot: number,
+    presetName: string,
+    controls: readonly KnobDifference[],
+  ): Promise<GP200Preset>;
 }
 
 /**
@@ -123,6 +146,12 @@ export interface ProtectDevice {
   pullPreset(slot: number): Promise<GP200Preset>;
   /** Write a patch from app data into a slot; resolves with the read-back. */
   writePresetToSlot(preset: GP200Preset, slot: number): Promise<GP200Preset>;
+  /** Re-send just these controls and save again (see CheckedWriteDevice). */
+  retouchParams?(
+    slot: number,
+    presetName: string,
+    controls: readonly KnobDifference[],
+  ): Promise<GP200Preset>;
   copySlotOnDevice(fromSlot: number, toSlot: number, copied: GP200Preset, saveAs?: string): Promise<GP200Preset>;
 }
 
