@@ -581,7 +581,8 @@ select option {
   flex: 1;
   white-space: nowrap;
   font-weight: 400;
-  color: var(--text-muted);
+  /* The same accent as the bar beside it: it is an instruction, not a footnote. */
+  color: var(--accent);
 }
 @keyframes pm-slide {
   0% { transform: translateX(-110%); }
