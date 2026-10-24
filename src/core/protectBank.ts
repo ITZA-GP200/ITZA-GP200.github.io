@@ -1,5 +1,6 @@
 import { SysExCodec } from './SysExCodec';
-import { describeWriteFidelity, sameAsWritten } from './writeFidelity';
+import { describeWriteFidelity, knobDifferenceList } from './writeFidelity';
+import { loadStubbornValues, rememberStubbornValues } from './stubbornValues';
 import type { GP200Preset } from './types';
 
 /**
@@ -75,22 +76,46 @@ export async function writeChecked(
   slot: number,
   problem: (differences: string) => string,
   missed: string[] = [],
+  /** Controls this pedal has already refused (see stubbornValues). A write
+   *  isn't repeated for those: the second attempt only ever confirmed what
+   *  was already known, at 10-20 s a time. */
+  stubborn: Set<string> = new Set(),
 ): Promise<GP200Preset> {
   for (let attempt = 1; ; attempt++) {
     const written = await device.writePresetToSlot(sent, slot);
-    const { identity, values } = describeWriteFidelity(written, sent);
+    const { identity } = describeWriteFidelity(written, sent);
+    const differences = knobDifferenceList(written, sent);
     if (identity.length > 0) {
-      const wrong = [...identity, ...values];
+      const wrong = [...identity, ...differences.map((difference) => difference.line)];
       throw new Error(problem(`${wrong.slice(0, 3).join('; ')}${wrong.length > 3 ? '; …' : ''}`));
     }
-    if (values.length === 0) return written;
-    if (attempt >= 2) {
-      console.warn(`[GP-200] ${SysExCodec.slotToLabel(slot)} kept ${values.length} value(s) its own way:`, values);
-      missed.push(...values.map((line) => `${SysExCodec.slotToLabel(slot)} ${line}`));
+    if (differences.length === 0) return written;
+
+    const label = SysExCodec.slotToLabel(slot);
+    const lines = differences.map((difference) => difference.line);
+    // Every difference already known to be the pedal's own choice, or a
+    // second attempt that changed nothing: stop and report it.
+    const allKnown = differences.every((difference) => stubborn.has(difference.key));
+    if (allKnown || attempt >= 2) {
+      console.warn(`[GP-200] ${label} kept ${lines.length} value(s) its own way:`, lines);
+      missed.push(...lines.map((line) => `${label} ${line}`));
+      rememberStubbornValues(differences.map((difference) => difference.key));
+      for (const difference of differences) stubborn.add(difference.key);
       return written;
     }
-    console.warn(`[GP-200] ${SysExCodec.slotToLabel(slot)} write missed ${values.length} value(s), writing again:`, values);
+    console.warn(`[GP-200] ${label} write missed ${lines.length} value(s), writing again:`, lines);
   }
+}
+
+/**
+ * Does the slot already hold this patch, allowing for controls the pedal is
+ * known to keep its own way? A wrong name, effect or on/off state never
+ * counts as close enough.
+ */
+export function closeEnough(current: GP200Preset, wanted: GP200Preset, stubborn: Set<string>): boolean {
+  const { identity } = describeWriteFidelity(current, wanted);
+  if (identity.length > 0) return false;
+  return knobDifferenceList(current, wanted).every((difference) => stubborn.has(difference.key));
 }
 
 /** The pedal operations PROTECT 64 needs (useMidiDevice provides them). */
@@ -120,13 +145,14 @@ export async function protectBank64(
 ): Promise<GP200Preset> {
   const total = PROTECTED_LAYOUT.length;
   const sent = { ...structuredClone(shipped), patchName: DEFAULT_SLOT_NAME };
+  const stubborn = loadStubbornValues();
   let written: GP200Preset;
   // Already the shipped patch? Then skip the write: it costs 10-20 s, and a
   // second PROTECT 64 (after a failure, or on another browser) usually finds
   // 64C exactly as it left it.
   try {
     const current = await device.pullPreset(PROTECTED_DEFAULT_SLOT);
-    if (sameAsWritten(current, sent)) {
+    if (closeEnough(current, sent, stubborn)) {
       onProgress?.(1, total);
       return await copyAcrossBank(device, current, missed, onProgress, total);
     }
@@ -136,7 +162,7 @@ export async function protectBank64(
   try {
     written = await writeChecked(device, sent, PROTECTED_DEFAULT_SLOT, (differences) =>
       `${label(PROTECTED_DEFAULT_SLOT)} didn’t take the shipped patch (${differences}); `
-      + 'bank 64 is not protected, run PROTECT 64 again', missed);
+      + 'bank 64 is not protected, run PROTECT 64 again', missed, stubborn);
   } catch (err) {
     if (err instanceof Error && err.message.includes('didn’t take the shipped patch')) throw err;
     const detail = err instanceof Error ? err.message : String(err);
@@ -167,7 +193,7 @@ async function copyAcrossBank(
     } catch {
       current = null;
     }
-    if (!current || !sameAsWritten(current, { ...written, patchName: name })) {
+    if (!current || !closeEnough(current, { ...written, patchName: name }, new Set())) {
       try {
         await device.copySlotOnDevice(PROTECTED_DEFAULT_SLOT, slot, written, name);
       } catch (err) {

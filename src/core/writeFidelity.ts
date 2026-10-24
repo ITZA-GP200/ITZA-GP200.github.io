@@ -23,8 +23,17 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
  * leftovers from earlier effects and mean nothing (M-Vibe has 3 knobs, yet
  * slot 4 differed on hardware). Unknown effects compare every slot.
  */
-function knobDifferences(actual: GP200Preset, sent: GP200Preset): string[] {
-  const out: string[] = [];
+/** One knob the pedal stored differently, with a key naming the control
+ *  itself (effect and parameter) so a refusal can be remembered. */
+export interface KnobDifference {
+  /** "7000023:3" — the effect, then the parameter inside it. */
+  key: string;
+  /** "AMP param 3 50 vs 0", for people. */
+  line: string;
+}
+
+export function knobDifferenceList(actual: GP200Preset, sent: GP200Preset): KnobDifference[] {
+  const out: KnobDifference[] = [];
   for (const want of sent.effects) {
     const got = actual.effects.find((effect) => effect.slotIndex === want.slotIndex);
     if (!got) continue;
@@ -32,11 +41,18 @@ function knobDifferences(actual: GP200Preset, sent: GP200Preset): string[] {
     const slots = defined.length > 0 ? defined : want.params.map((_, index) => index);
     for (const index of slots) {
       if (!Object.is(got.params[index], want.params[index])) {
-        out.push(`${getSlotModule(want.slotIndex)} param ${index} ${got.params[index]} vs ${want.params[index]}`);
+        out.push({
+          key: `${want.effectId.toString(16)}:${index}`,
+          line: `${getSlotModule(want.slotIndex)} param ${index} ${got.params[index]} vs ${want.params[index]}`,
+        });
       }
     }
   }
   return out;
+}
+
+function knobDifferences(actual: GP200Preset, sent: GP200Preset): string[] {
+  return knobDifferenceList(actual, sent).map((difference) => difference.line);
 }
 
 export function describeWriteFidelity(actual: GP200Preset, sent: GP200Preset): WriteFidelity {

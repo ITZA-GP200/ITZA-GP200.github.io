@@ -201,3 +201,54 @@ describe('protectBank64: not doing work that is already done', () => {
     expect(result.patchName).toBe('ITZA GP-200');
   });
 });
+
+describe('writeChecked: not arguing with the pedal twice', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('writes once more the first time a value is refused, then remembers it', async () => {
+    const { writeChecked } = await import('@/core/protectBank');
+    const { loadStubbornValues } = await import('@/core/stubbornValues');
+    const refusing = {
+      calls: 0,
+      async writePresetToSlot(preset: GP200Preset) {
+        refusing.calls += 1;
+        const stored = structuredClone(preset);
+        stored.effects[0].params[1] = 50; // the pedal's own value, always
+        return stored;
+      },
+    };
+    const sent = patch('X');
+    sent.effects[0].params[1] = 0;
+
+    const missed: string[] = [];
+    await writeChecked(refusing, sent, 252, (d) => `bad: ${d}`, missed, loadStubbornValues());
+    expect(refusing.calls).toBe(2); // tried again, to be sure
+    expect(missed).toHaveLength(1);
+
+    // Next time the same control is refused, one write is enough.
+    refusing.calls = 0;
+    const missedAgain: string[] = [];
+    await writeChecked(refusing, sent, 252, (d) => `bad: ${d}`, missedAgain, loadStubbornValues());
+    expect(refusing.calls).toBe(1);
+    expect(missedAgain).toHaveLength(1);
+  });
+
+  it('still retries a value it has no reason to doubt', async () => {
+    const { writeChecked } = await import('@/core/protectBank');
+    let calls = 0;
+    const flaky = {
+      async writePresetToSlot(preset: GP200Preset) {
+        calls += 1;
+        const stored = structuredClone(preset);
+        if (calls === 1) stored.effects[0].params[1] = 99; // a one-off miss
+        return stored;
+      },
+    };
+    const sent = patch('X');
+    const missed: string[] = [];
+    const result = await writeChecked(flaky, sent, 252, (d) => `bad: ${d}`, missed);
+    expect(calls).toBe(2);
+    expect(missed).toEqual([]); // the second write landed
+    expect(result.patchName).toBe('X');
+  });
+});
