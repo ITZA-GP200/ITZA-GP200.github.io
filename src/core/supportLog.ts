@@ -118,6 +118,16 @@ export function buildSupportLog(context: SupportLogContext = {}): string {
   return [...head, ...body, ''].join('\n');
 }
 
+/**
+ * A name no two saves can share: the date and the time to the second, in UTC
+ * to match the header. Windows won't take a colon in a filename, so the ISO
+ * separators go; saving twice in a minute used to produce "… (1).txt".
+ */
+export function supportLogFilename(now: Date = new Date()): string {
+  const stamp = now.toISOString().replace(/[T:]/g, '-').replace(/\.\d+Z$/, 'Z');
+  return `gp200-studio-log-${stamp}.txt`;
+}
+
 /** How many lines are held, for the button's label and its tests. */
 export function supportLogSize(): number {
   return lines.length;

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildSupportLog,
+  supportLogFilename,
   clearSupportLog,
   recordLogLine,
   startSupportLog,
@@ -85,5 +86,23 @@ describe('supportLog: the file', () => {
     const text = buildSupportLog();
     expect(text).toContain('none learned yet');
     expect(text).toContain('not connected');
+  });
+});
+
+describe('supportLog: the filename', () => {
+  it('carries the time to the second, so two saves never collide', () => {
+    const name = supportLogFilename(new Date('2026-10-24T07:37:43.031Z'));
+    expect(name).toBe('gp200-studio-log-2026-10-24-07-37-43Z.txt');
+  });
+
+  it('gives a different name a second later', () => {
+    const a = supportLogFilename(new Date('2026-10-24T07:37:43.031Z'));
+    const b = supportLogFilename(new Date('2026-10-24T07:37:44.000Z'));
+    expect(a).not.toBe(b);
+  });
+
+  it('is only digits, dashes and the extension, which every filesystem takes', () => {
+    const name = supportLogFilename(new Date('2026-10-24T07:37:43.031Z'));
+    expect(name).toMatch(/^gp200-studio-log-[0-9-]+Z\.txt$/);
   });
 });
