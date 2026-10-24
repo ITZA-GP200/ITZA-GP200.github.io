@@ -856,10 +856,10 @@ export function PatchManagerSheet({
             size="sm"
             variant="secondary"
             onClick={onRefreshNames}
-            disabled={!connected || namesLoading || namesSyncing || bulkRunning}
-            title="Make the list match the pedal: re-read every slot name"
+            disabled={!connected || working || namesScanning}
+            title="Start over from the pedal: forget the cached names, read all 256 again, and re-open the patch the pedal is on. Nothing is written."
           >
-            REFRESH
+            RELOAD ALL
           </Button>
         </div>
         {onRestoreBank64 && choosingRestore && (
