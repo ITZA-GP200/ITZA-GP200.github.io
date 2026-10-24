@@ -1050,3 +1050,19 @@ describe('PatchManagerSheet: saving a log', () => {
     expect(screen.queryByRole('button', { name: /SAVE LOG/ })).toBeNull();
   });
 });
+
+describe('PatchManagerSheet: the fork version', () => {
+  it('shows the version where there is one, and nothing where there is not', () => {
+    renderSheet();
+    const shown = screen.queryByTitle(/GP200 Studio PM — commit/);
+    // A clone with no pm.* tag reachable (a shallow CI checkout) has no
+    // version, and the row must simply omit it rather than render "null".
+    if (__APP_VERSION__ === null) {
+      expect(shown).toBeNull();
+      return;
+    }
+    expect(shown).not.toBeNull();
+    expect(shown!.textContent).toMatch(/^pm\.\d+\.\d+\.\d+/);
+    expect(shown!.className).toContain('ml-auto'); // flush right on the row
+  });
+});

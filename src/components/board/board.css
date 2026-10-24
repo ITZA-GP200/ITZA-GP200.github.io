@@ -1641,20 +1641,6 @@
   align-items: center;
   margin-left: auto;
 }
-/* The fork's version, left of FX LOOP: present but quiet, and it must never
-   compete with the buttons beside it. */
-.board-view .deck-version {
-  font-family: var(--font-jetbrains-mono), monospace;
-  /* The same type as the buttons beside it (.deck-btn), muted rather than
-     smaller, so it sits in the row without competing with it. */
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  color: var(--text-muted);
-  white-space: nowrap;
-  margin-right: 20px;
-  user-select: text;
-}
 .board-view .deck-btn {
   display: inline-flex;
   align-items: center;
@@ -2513,12 +2499,7 @@
   .board-view .deck-actions .deck-btn {
     flex: 1 0 auto;
   }
-  .board-view .deck-actions .deck-version {
-    order: 99;
-    flex: 1 0 100%;
-    text-align: right;
-    margin-right: 0;
-  }
+
 
   /* deck popovers: fixed bottom sheets clamped to the viewport */
   .board-view .deck-pop,
@@ -2679,11 +2660,7 @@
   .board-view .deck .deck-btn .db-label {
     white-space: nowrap;
   }
-  /* Follows the labels down, so the two stay the same size at every width. */
-  .board-view .deck-version {
-    font-size: 8px;
-    letter-spacing: 0.06em;
-  }
+
   .board-view .board-topbar .deck-btn.quiet,
   .board-view .deck .deck-btn.quiet {
     padding: 5px;

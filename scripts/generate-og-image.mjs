@@ -50,8 +50,10 @@ const OUT = join(ROOT, 'public');
 /* ── brand tokens (mirrors public/favicon.svg) ───────────────────────────── */
 const INK = '#232220'; // enclosure body / theme-color
 const DEEP = '#14110d'; // deep background
-const LCD = '#4fd6ee'; // LCD accent: the app's --accent teal (the PM fork's mark)
-const LED = '#4fd6ee'; // LED: the accent teal too, so the mark carries one colour
+const BOLT = '#4ac6ff'; // the reload bolt's blue as it shows on screen (#2563b0 brightened)
+const LCD = BOLT; // the card's accent text, matched to the mark
+const LED = '#d9a13c'; // amber, for the small "free & open source" line
+
 const MONO = 'JetBrains Mono';
 const SANS = 'DM Sans';
 
@@ -77,13 +79,9 @@ const MARK = `
 <svg width="60" height="60" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
   <rect width="32" height="32" rx="7" fill="#2b2926"/>
   <rect width="32" height="32" rx="7" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="1"/>
-  <rect x="6" y="7" width="13" height="7" rx="1.5" fill="#0a1a1e"/>
-  <rect x="8" y="9.5" width="9" height="2" rx="1" fill="${LCD}"/>
-  <circle cx="24.5" cy="10.5" r="3.2" fill="#8a857c"/>
-  <rect x="24" y="7.6" width="1" height="3" rx="0.5" fill="#232220"/>
-  <circle cx="24.5" cy="18.5" r="1.4" fill="${LED}"/>
-  <circle cx="9" cy="24" r="3" fill="none" stroke="#4fd6ee" stroke-width="1.6"/>
-  <circle cx="19" cy="24" r="3" fill="none" stroke="#4fd6ee" stroke-width="1.6"/>
+  <g transform="translate(2.4,2.4) scale(1.7)">
+    <path d="M9.2 1.8 3.8 9h4.1l-1.1 5.2L12.2 7H8.1z" fill="${BOLT}"/>
+  </g>
 </svg>`;
 
 /* ── card imagery, embedded as a data URI ──────────────────────────────────

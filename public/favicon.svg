@@ -1,21 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-  <title>GP200 Studio</title>
-  <!-- GP200 Studio PM mark: the GP-200 floor unit, simplified.
-       The LCD and footswitch rings carry the app's accent teal (--accent,
-       #4fd6ee), which is what tells this fork apart from upstream at 16px.
+  <title>GP200 Studio PM</title>
+  <!-- GP200 Studio PM mark: the lightning bolt the app uses to reload itself
+       (ActionIcon "reload"), which is the fork's own icon rather than
+       upstream's GP-200 unit.
+       The bolt is FILLED here, not stroked as in the app: at 16px an outline
+       closes up into a blob.
+       #4ac6ff is the blue the bolt actually shows on screen — the icon's
+       #2563b0 after the dark theme's brightness(2) (board.css).
        The canvas outside the rx=7 corners is deliberately transparent: it is
        what keeps the generated PNG icons free of white notches. Do not add a
        background rect here (see scripts/generate-og-image.mjs). -->
   <rect width="32" height="32" rx="7" fill="#232220"/>
-  <!-- LCD -->
-  <rect x="6" y="7" width="13" height="7" rx="1.5" fill="#0a1a1e"/>
-  <rect x="8" y="9.5" width="9" height="2" rx="1" fill="#4fd6ee"/>
-  <!-- knob -->
-  <circle cx="24.5" cy="10.5" r="3.2" fill="#8a857c"/>
-  <rect x="24" y="7.6" width="1" height="3" rx="0.5" fill="#232220"/>
-  <!-- LED -->
-  <circle cx="24.5" cy="18.5" r="1.4" fill="#4fd6ee"/>
-  <!-- footswitches -->
-  <circle cx="9" cy="24" r="3" fill="none" stroke="#4fd6ee" stroke-width="1.6"/>
-  <circle cx="19" cy="24" r="3" fill="none" stroke="#4fd6ee" stroke-width="1.6"/>
+  <!-- the 16×16 ActionIcon path, centred and scaled 1.7× -->
+  <g transform="translate(2.4,2.4) scale(1.7)">
+    <path d="M9.2 1.8 3.8 9h4.1l-1.1 5.2L12.2 7H8.1z" fill="#4ac6ff"/>
+  </g>
 </svg>

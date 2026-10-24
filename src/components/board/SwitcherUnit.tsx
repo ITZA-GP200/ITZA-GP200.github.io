@@ -284,11 +284,6 @@ export function SwitcherUnit({
       <AudioMeters />
 
       <div className="deck-actions">
-        {__APP_VERSION__ && (
-          <span className="deck-version" title={`GP200 Studio PM — commit ${__APP_VERSION__.commit}`}>
-            {__APP_VERSION__.label}
-          </span>
-        )}
         <button type="button" className="deck-btn" onClick={onOpenFxLoop}>
           <ActionIcon name="fxloop" />
           <span className="db-label">FX LOOP</span>

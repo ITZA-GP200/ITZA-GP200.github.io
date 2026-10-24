@@ -557,6 +557,18 @@ export function PatchManagerSheet({
         >
           PRINT
         </Button>
+        {/* The fork's version, flush right on this row. It belongs with the
+            Patch Manager rather than the deck: this panel is the fork's own
+            work, and the version is what a support log leads with. */}
+        {__APP_VERSION__ && (
+          <span
+            className="font-mono-display text-caption ml-auto"
+            style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}
+            title={`GP200 Studio PM — commit ${__APP_VERSION__.commit}`}
+          >
+            {__APP_VERSION__.label}
+          </span>
+        )}
         <input
           ref={editorFileInputRef}
           type="file"
