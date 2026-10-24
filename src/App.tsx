@@ -1225,7 +1225,8 @@ function App() {
       refusedKnobs: [...loadStubbornValues()],
       browser: typeof navigator === 'undefined' ? null : navigator.userAgent,
     }), supportLogFilename());
-    track('support_log_saved', {});
+    // No analytics event: the taxonomy is upstream's, and it only sends from
+    // their own domain anyway.
   }
 
   const undoDevice: UndoDevice = {
