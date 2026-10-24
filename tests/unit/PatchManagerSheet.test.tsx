@@ -1015,3 +1015,24 @@ describe('PatchManagerSheet: showing that the pedal is busy', () => {
     }
   });
 });
+
+describe('PatchManagerSheet: forgetting what the pedal refused', () => {
+  it('offers nothing to forget when the pedal has refused nothing', () => {
+    localStorage.clear();
+    renderSheet();
+    expect(screen.queryByRole('button', { name: /RETEST KNOBS/ })).toBeNull();
+  });
+
+  it('counts what was learned, and clears it when asked', async () => {
+    localStorage.clear();
+    const { rememberStubbornValues, loadStubbornValues } = await import('@/core/stubbornValues');
+    rememberStubbornValues(['1:3', '2b:0']);
+
+    renderSheet();
+    const button = screen.getByRole('button', { name: /RETEST KNOBS/ });
+    fireEvent.click(button);
+
+    expect(loadStubbornValues().size).toBe(0);
+    expect(screen.queryByRole('button', { name: /RETEST KNOBS/ })).toBeNull();
+  });
+});
