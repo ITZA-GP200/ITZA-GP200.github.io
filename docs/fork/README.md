@@ -54,7 +54,9 @@ time.
 
 Writes from the editor's own copy of a patch (SAVE ALL, IMPORT, PROTECT 64,
 RESTORE 64, undoing an overwrite) can't set expression-pedal assignments or a
-footswitch's saved on/off position, and COMP's Clipping stays at its default.
+footswitch's saved on/off position, and a few knobs stay at their default
+whatever is sent (COMP's Clipping, PITCH's HI PITCH and HI VOL). The editor
+reports those and remembers them, so it stops rewriting a slot over them.
 On-pedal copies (paste, swap, cut, reset) carry everything. See the guide,
 section 6.
 

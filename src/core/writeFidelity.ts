@@ -39,18 +39,29 @@ export interface KnobDifference {
   want: number;
 }
 
+/** A knob's value for people: the pedal stores some as fractions of 16384,
+ *  which print as 84.19125366210938 and tell nobody anything. */
+const readable = (value: number | undefined): string => {
+  if (value === undefined) return '—';
+  return Number.isInteger(value) ? String(value) : String(Math.round(value * 100) / 100);
+};
+
 export function knobDifferenceList(actual: GP200Preset, sent: GP200Preset): KnobDifference[] {
   const out: KnobDifference[] = [];
   for (const want of sent.effects) {
     const got = actual.effects.find((effect) => effect.slotIndex === want.slotIndex);
     if (!got) continue;
-    const defined = getEffectParams(want.effectId).map((param) => param.idx);
+    const params = getEffectParams(want.effectId);
+    const defined = params.map((param) => param.idx);
     const slots = defined.length > 0 ? defined : want.params.map((_, index) => index);
     for (const index of slots) {
       if (!Object.is(got.params[index], want.params[index])) {
+        // The knob's own name where the effect gives one ("HI PITCH"), so the
+        // banner says what to reach for; otherwise its number.
+        const knob = params.find((param) => param.idx === index)?.name ?? `param ${index}`;
         out.push({
           key: `${want.effectId.toString(16)}:${index}`,
-          line: `${getSlotModule(want.slotIndex)} param ${index} ${got.params[index]} vs ${want.params[index]}`,
+          line: `${getSlotModule(want.slotIndex)} ${knob} ${readable(got.params[index])} vs ${readable(want.params[index])}`,
           slotIndex: want.slotIndex,
           effectId: want.effectId,
           param: index,

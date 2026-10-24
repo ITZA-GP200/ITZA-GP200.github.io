@@ -89,7 +89,12 @@ testing-library, oxlint. Web MIDI (Chrome/Edge). Upstream base: `PRODUCTION`
 - **Can't be written live**: EXP assignments (no live unassign either) and a
   CTRL footswitch's saved on/off position. Re-sending CTRL/EXP at the end of a
   push corrupted unrelated knobs; don't. COMP's Clipping stays at its default
-  10 once COMP is freshly loaded.
+  10 once COMP is freshly loaded, and so do PITCH's HI PITCH (0) and HI VOL
+  (50) — verified 24 Oct 2026 by setting both by hand, saving and re-reading:
+  a hand edit sticks, a patch load doesn't, and the block saves fine (DRY in
+  the same save kept its new value). Expect more of this family; see
+  `stubbornValues.ts`, which learns them per browser rather than listing them.
+  A VOL block's VOLUME is the treadle's physical position, never settable.
 - Only params the effect defines (`effectParams.ts`, generated from Valeton's
   algorithm.xml) matter; other slots of the 15 hold leftovers.
 - Windows' MIDI service lets several programs open the pedal: run one editor.

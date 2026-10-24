@@ -134,7 +134,14 @@ looks wrong.
   undoing an overwrite) can't set **expression-pedal assignments** or a
   **footswitch's saved on/off position**; the slot keeps what it had. On-pedal
   copies (paste, swap, cut, reset) carry them.
-- **COMP's Clipping** stays at its default when written from the editor's copy.
+- Some knobs stay at their default when written from the editor's copy, whatever
+  is sent: **COMP's Clipping**, and **PITCH's HI PITCH and HI VOL** (hardware,
+  firmware 1.8.0). The same knobs take an edit made by hand and keep it through
+  a save, so it is the patch load the pedal resists, not the control. The editor
+  remembers each one it meets and stops arguing with the pedal about it; the
+  banner lists what the pedal kept its own way, and those you set by hand.
+- A **VOL block's VOLUME** reads the expression treadle's physical position, so
+  a backup taken toe-down restores as wherever the treadle is now.
 - Copies store an expression pedal's **current position** for what it controls.
 - Undo history clears on reload/disconnect. No INSERT (it would take minutes).
   CUT works on one patch at a time.
