@@ -9,7 +9,7 @@ import {
   writeChecked,
 } from './protectBank';
 import { SysExCodec } from './SysExCodec';
-import { sameAsWritten, sameSettings } from './writeFidelity';
+import { describeWriteFidelity, sameAsWritten, sameSettings } from './writeFidelity';
 import type { GP200Preset } from './types';
 
 /**
@@ -144,11 +144,28 @@ export async function restoreBank64(
   const order = [PROTECTED_DEFAULT_SLOT, 252, 253];
   let done = 0;
   let restoredDefault: GP200Preset | null = null;
-  // Slots already holding what the backup says, usable as copy sources. A
-  // write from app data costs 10-20 s; a copy on the pedal costs about two,
-  // and a slot that is already right costs nothing. Bank 64's slots usually
-  // hold the same patch, so most of a restore is skipping and copying.
-  const inPlace: { slot: number; preset: GP200Preset }[] = [];
+  // Slots already dealt with, usable as copy sources: `wanted` is what the
+  // backup asked for, `stored` what the pedal actually kept. A write from app
+  // data costs 10-20 s; a copy on the pedal costs about two, and a slot that
+  // is already right costs nothing. Bank 64's slots usually hold the same
+  // patch, so most of a restore should be skipping and copying.
+  const inPlace: { slot: number; wanted: GP200Preset; stored: GP200Preset }[] = [];
+
+  // Values the pedal has refused during this restore, as "PRE param 3". A
+  // backup can hold one (COMP's Clipping is the known case): the pedal always
+  // stores its own value, so every slot would look wrong for ever and be
+  // rewritten on every restore. Once seen, that parameter stops counting.
+  const stubborn = new Set<string>();
+  const paramKey = (line: string) => /([A-Z][A-Z-]* param \d+)/.exec(line)?.[1];
+  const closeEnough = (current: GP200Preset, wanted: GP200Preset): boolean => {
+    const { identity, values } = describeWriteFidelity(current, wanted);
+    // A wrong name or effect always means write; only values can be excused.
+    if (identity.length > 0) return false;
+    return values.every((line) => {
+      const key = paramKey(line);
+      return key !== undefined && stubborn.has(key);
+    });
+  };
 
   for (const slot of order) {
     const index = (BACKUP_SLOTS as readonly number[]).indexOf(slot);
@@ -161,15 +178,23 @@ export async function restoreBank64(
     }
 
     let written: GP200Preset;
-    if (current && sameAsWritten(current, sent)) {
+    if (current && closeEnough(current, sent)) {
       written = current; // already right
     } else {
-      const source = inPlace.find((candidate) => sameSettings(candidate.preset, sent));
+      // Compare the backup's own patches, not what the pedal made of them:
+      // two slots the backup fills alike can be filled by one copy, even if
+      // the pedal changed a value while storing the first.
+      const source = inPlace.find((candidate) => sameSettings(candidate.wanted, sent));
+      const before = missed.length;
       try {
         written = source
-          ? await device.copySlotOnDevice(source.slot, slot, source.preset, sent.patchName)
+          ? await device.copySlotOnDevice(source.slot, slot, source.stored, sent.patchName)
           : await writeChecked(device, sent, slot, (differences) =>
             `${label(slot)} didn’t take the backup (${differences}); run RESTORE 64 again`, missed);
+        for (const line of missed.slice(before)) {
+          const key = paramKey(line);
+          if (key) stubborn.add(key);
+        }
       } catch (err) {
         if (err instanceof Error && err.message.includes('didn’t take the backup')) throw err;
         const detail = err instanceof Error ? err.message : String(err);
@@ -177,7 +202,7 @@ export async function restoreBank64(
       }
     }
 
-    inPlace.push({ slot, preset: written });
+    inPlace.push({ slot, wanted: sent, stored: written });
     if (slot === PROTECTED_DEFAULT_SLOT) restoredDefault = written;
     done += 1;
     onProgress?.(done, total);
