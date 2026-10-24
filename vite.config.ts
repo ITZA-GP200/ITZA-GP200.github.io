@@ -29,6 +29,44 @@ function appVersion(): AppVersion | null {
 }
 
 /**
+ * Keeps `__APP_VERSION__` honest while developing.
+ *
+ * `define` is worked out once, when the dev server starts, so a server left
+ * running across a few commits kept reporting the commit it was launched from
+ * — which turned up in a support log as a version that did not match the code
+ * being run. A build is immune (it defines and exits), so this applies to the
+ * dev server only: every page load asks git again and re-transforms whichever
+ * modules baked the value in.
+ */
+function devAppVersion(): Plugin {
+  const users = new Set<string>()
+  let server: { moduleGraph: { getModuleById(id: string): unknown; invalidateModule(mod: never): void } } | undefined
+  let current: string | null = null
+  return {
+    name: 'gp200-dev-app-version',
+    apply: 'serve',
+    configureServer(s) {
+      server = s as unknown as typeof server
+    },
+    // Runs for every HTML page the dev server hands out: a page load.
+    transformIndexHtml() {
+      current = null
+      for (const id of users) {
+        const mod = server?.moduleGraph.getModuleById(id)
+        if (mod) server?.moduleGraph.invalidateModule(mod as never)
+      }
+      return undefined
+    },
+    transform(code, id) {
+      if (!code.includes('__APP_VERSION__')) return null
+      users.add(id)
+      current ??= JSON.stringify(appVersion())
+      return { code: code.replaceAll('__APP_VERSION__', current), map: null }
+    },
+  }
+}
+
+/**
  * Serves the prerendered guide pages during `npm run dev`.
  *
  * The guide has no client-side router: src/guide-main.ts renders nothing, and
@@ -86,10 +124,10 @@ export default defineConfig(({ command }) => ({
   // local address (http://localhost:5174/editor). Everything that resolves an
   // asset at runtime goes through import.meta.env.BASE_URL, so both work.
   base: command === 'build' ? '/gp200-studio-PM/' : '/',
-  define: {
-    __APP_VERSION__: JSON.stringify(appVersion()),
-  },
-  plugins: [react(), guideDevServer()],
+  // A build bakes it in; the dev server gets it from devAppVersion instead,
+  // fresh on every page load.
+  define: command === 'build' ? { __APP_VERSION__: JSON.stringify(appVersion()) } : {},
+  plugins: [react(), guideDevServer(), devAppVersion()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
