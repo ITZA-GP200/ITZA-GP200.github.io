@@ -9,6 +9,9 @@ Rebased onto kabir0st's latest stable (his `PRODUCTION` of 25 September 2026),
 which brings his value entry on knobs, tempo sync, the new start screen and his
 landing-page change, with his tests. Our features and fixes are unchanged.
 
+- Each saved log is named for the second it was written
+  (`gp200-studio-log-2026-10-24-07-37-43Z.txt`), so saving twice never
+  produces "… (1).txt" and the files sort into order.
 - **SAVE LOG** in the Patch Manager writes what the editor has been doing to a
   text file: the last 600 of its own lines, plus every warning and error,
   timed from when the page was opened, under a header naming the app version,

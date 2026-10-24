@@ -81,7 +81,7 @@ import { createZip, type ZipEntry } from '@/core/zipStore';
 import { slotsForScope, type BulkScope } from '@/core/bulkApply';
 import { SysExCodec } from '@/core/SysExCodec';
 import { track } from '@/core/analytics';
-import { buildSupportLog } from '@/core/supportLog';
+import { buildSupportLog, supportLogFilename } from '@/core/supportLog';
 import { loadStubbornValues } from '@/core/stubbornValues';
 import { useEngagementTracking } from '@/hooks/useEngagementTracking';
 
@@ -1214,13 +1214,17 @@ function App() {
 
   /** SAVE LOG: what the editor has been doing, as a file to send on. */
   function handleSaveLog() {
-    const day = new Date().toISOString().slice(0, 10);
+    // The pedal can answer the identity request without a version in it, and
+    // an empty array joins to "", not null — which printed a blank firmware.
+    const firmware = midiDevice.deviceInfo
+      ? midiDevice.deviceInfo.firmwareValues.join('.') || 'connected, version not reported'
+      : null;
     downloadText(buildSupportLog({
       appVersion: __APP_VERSION__ ? `${__APP_VERSION__.label} (${__APP_VERSION__.commit})` : null,
-      firmware: midiDevice.deviceInfo?.firmwareValues.join('.') ?? null,
+      firmware,
       refusedKnobs: [...loadStubbornValues()],
       browser: typeof navigator === 'undefined' ? null : navigator.userAgent,
-    }), `gp200-studio-log-${day}.txt`);
+    }), supportLogFilename());
     track('support_log_saved', {});
   }
 
