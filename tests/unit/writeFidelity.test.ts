@@ -37,7 +37,7 @@ describe('describeWriteFidelity: knob slots', () => {
     got.params[1] = 0;
     cab.params[1] = 75; // Volume, real
     const { values } = describeWriteFidelity(actual, sent);
-    expect(values).toEqual(['CAB param 1 0 vs 75']);
+    expect(values).toEqual(['CAB Volume 0 vs 75']);
   });
 });
 

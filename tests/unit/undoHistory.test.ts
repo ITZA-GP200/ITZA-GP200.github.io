@@ -72,7 +72,7 @@ describe('applyHistory: overwrite', () => {
 
   it('a knob changed since also counts as a change', async () => {
     const pedal = fakePedal({ 4: patch('New A', 77), 5: patch('New B') });
-    await expect(applyHistory(pedal.device, entry, 'undo')).rejects.toThrow('2A (DST param 0 77 vs 50) changed since');
+    await expect(applyHistory(pedal.device, entry, 'undo')).rejects.toThrow('2A (DST Gain 77 vs 50) changed since');
   });
 });
 

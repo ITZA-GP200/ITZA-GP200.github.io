@@ -9,6 +9,10 @@ Rebased onto kabir0st's latest stable (his `PRODUCTION` of 25 September 2026),
 which brings his value entry on knobs, tempo sync, the new start screen and his
 landing-page change, with his tests. Our features and fixes are unchanged.
 
+- The report of what the pedal kept its own way now names the knob and rounds
+  the value: "64A PITCH HI PITCH 0 vs 12", not "64A PRE param 0 0 vs
+  84.19125366210938". It is the list of what to set by hand, so it should read
+  like one.
 - When a write misses a knob, only that knob is sent again. Writing a patch
   from app data takes 10-20 seconds, and the check afterwards used to repeat
   the whole write to tell a swallowed message from a value the pedal refuses —

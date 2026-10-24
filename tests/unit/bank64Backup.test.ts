@@ -173,7 +173,7 @@ describe('restoreBank64', () => {
       '254->253 as UTILITY-2', '254->255 as SWAP SLOT',
     ]);
     expect(missed).toHaveLength(1);
-    expect(missed[0]).toMatch(/^64A PRE param 0 99 vs /);
+    expect(missed[0]).toMatch(/^64A PRE Sustain 99 vs /);
   });
 });
 
@@ -228,7 +228,7 @@ describe('restoreBank64: a backup the pedal will not take literally', () => {
     await restoreBank64(pedal.device, wantsClipping0(), undefined, missed);
     expect(pedal.log).toEqual(['write 254', 'write 254', '254->252', '254->253', '254->255']);
     expect(missed).toHaveLength(1);
-    expect(missed[0]).toMatch(/64C PRE param 1 50 vs 0/);
+    expect(missed[0]).toMatch(/64C PRE Volume 50 vs 0/);
   });
 
   it('leaves the bank alone next time, even though the backup still disagrees', async () => {
