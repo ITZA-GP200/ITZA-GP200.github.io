@@ -9,6 +9,14 @@ Rebased onto kabir0st's latest stable (his `PRODUCTION` of 25 September 2026),
 which brings his value entry on knobs, tempo sync, the new start screen and his
 landing-page change, with his tests. Our features and fixes are unchanged.
 
+- The editor remembers which controls this pedal refuses to be told about.
+  Some cannot be set over MIDI (COMP's Clipping on firmware 1.8.0): the pedal
+  takes the message and keeps its own value. A backup holding one used to make
+  every slot look wrong for ever, so a restore rewrote all of it every time,
+  retrying each write to be sure — 49 seconds, every run. Those refusals are
+  now remembered, and a slot that differs only by one counts as correct. On
+  hardware the same restore went from 49 seconds to about 3 on the second run.
+  A wrong name, effect or on/off state is never excused this way.
 - PROTECT 64 and RESTORE 64 now read each slot first: a slot that already
   holds the right patch is left alone, and a slot whose settings match one
   already in place is filled by an on-pedal copy (about two seconds) rather
