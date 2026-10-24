@@ -539,3 +539,65 @@ select option {
 @media (prefers-reduced-motion: reduce) {
   .pm-spinner { animation: led-pulse 2s ease-in-out infinite; }
 }
+
+/* ── "the pedal is busy" band, at the top of the Patch Manager ──
+   The small line by the buttons is easy to miss while watching the list. */
+.pm-busy {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  padding: 8px 16px;
+  border-top: 1px solid var(--accent);
+  border-bottom: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--text-primary);
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.pm-busy-text { white-space: nowrap; }
+.pm-busy-track {
+  flex: 1;
+  min-width: 40px;
+  height: 4px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.pm-busy-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+.pm-busy-fill.indeterminate {
+  width: 35%;
+  animation: pm-slide 1.1s ease-in-out infinite;
+}
+.pm-busy-hint {
+  white-space: nowrap;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+@keyframes pm-slide {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(300%); }
+}
+/* The list is not clickable while the pedal is busy, and says so. */
+.pm-dim {
+  opacity: 0.4;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pm-busy-fill.indeterminate { animation: none; width: 100%; opacity: 0.6; }
+}
+.pm-busy-cancel {
+  white-space: nowrap;
+  font-weight: 400;
+  text-decoration: underline;
+  color: var(--accent-red, #c05050);
+}

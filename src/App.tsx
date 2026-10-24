@@ -720,11 +720,12 @@ function App() {
     const { items } = clipboard;
     const multi = items.length > 1;
     bulkCancelRef.current = false;
-    if (multi) setBulkProgress({ done: 0, total: items.length });
+    const pasteLabel = `PASTING ${items.length} PATCHES`;
+    if (multi) setBulkProgress({ done: 0, total: items.length, label: pasteLabel });
     try {
       const result = await pasteMany(midiDevice, items, slot, {
         bank64Protected,
-        onProgress: (done, total) => { if (multi) setBulkProgress({ done, total }); },
+        onProgress: (done, total) => { if (multi) setBulkProgress({ done, total, label: pasteLabel }); },
         shouldStop: () => bulkCancelRef.current,
       });
       // The pedal now sits on the last target, so show that patch in the editor.
@@ -878,11 +879,12 @@ function App() {
   async function handleProtectBank64() {
     if (bulkProgress) return;
     // Stopping halfway would leave bank 64 half-written, so no cancel link.
-    setBulkProgress({ done: 0, total: 4, cancellable: false });
+    setBulkProgress({ done: 0, total: 4, cancellable: false, label: 'PROTECT 64' });
     try {
       const missed: string[] = [];
       const preset = await protectBank64(
-        midiDevice, loadShippedPatch(), (done, total) => setBulkProgress({ done, total, cancellable: false }), missed,
+        midiDevice, loadShippedPatch(),
+        (done, total) => setBulkProgress({ done, total, cancellable: false, label: 'PROTECT 64' }), missed,
       );
       const next = { slot: PROTECTED_DEFAULT_SLOT, preset };
       saveDefaultPatch(next);
@@ -956,12 +958,13 @@ function App() {
       setLoadError('RESTORE 64 failed: nothing saved in this browser yet (use SAVE 64, or restore from a file)');
       return;
     }
-    setBulkProgress({ done: 0, total: 4, cancellable: false });
+    setBulkProgress({ done: 0, total: 4, cancellable: false, label: 'RESTORE 64' });
     try {
       const { patches } = readBank64Backup(text);
       const missed: string[] = [];
       const preset = await restoreBank64(
-        midiDevice, patches, (done, total) => setBulkProgress({ done, total, cancellable: false }), missed,
+        midiDevice, patches,
+        (done, total) => setBulkProgress({ done, total, cancellable: false, label: 'RESTORE 64' }), missed,
       );
       const next = { slot: PROTECTED_DEFAULT_SLOT, preset };
       saveDefaultPatch(next);
@@ -1583,6 +1586,7 @@ function App() {
         presetNames={midiDevice.presetNames}
         namesLoadProgress={midiDevice.namesLoadProgress}
         namesSyncing={midiDevice.namesSyncing}
+        namesScanning={midiDevice.namesScanning}
         currentSlot={midiDevice.currentSlot}
         onActivate={handleActivateSlot}
         onOpenInEditor={handleOpenInEditorSlot}

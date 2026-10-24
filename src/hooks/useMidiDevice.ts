@@ -142,6 +142,8 @@ export interface UseMidiDeviceReturn {
   /** True while the background re-scan is verifying cache-seeded names against
    *  the device. Distinct from namesLoadProgress (which drives the first-load bar). */
   namesSyncing: boolean;
+  /** True while a name scan owns the MIDI input (block other pedal work). */
+  namesScanning: boolean;
   deviceInfo: { deviceType: number; firmwareValues: number[]; versionAccepted: boolean } | null;
   currentPreset: GP200Preset | null;
   /** User-IR slot names enumerated during the handshake (0x11/0x1C query →
@@ -316,6 +318,11 @@ export function useMidiDevice(): UseMidiDeviceReturn {
   const [presetNames, setPresetNames] = useState<(string | null)[]>(new Array(256).fill(null));
   const [namesLoadProgress, setNamesLoadProgress] = useState(0);
   const [namesSyncing, setNamesSyncing] = useState(false);
+  // True while either name loop is reading the pedal. Those loops hijack the
+  // MIDI input, so anything else talking to the pedal at the same time gets
+  // its replies mixed up — on hardware, PROTECT 64 run during the first scan
+  // wrote the wrong patch. The UI blocks slot actions while this is true.
+  const [namesScanning, setNamesScanning] = useState(false);
   const [deviceInfo, setDeviceInfo] = useState<UseMidiDeviceReturn['deviceInfo']>(null);
   const [currentPreset, setCurrentPreset] = useState<GP200Preset | null>(null);
   const wasConnectedRef = useRef(false);
@@ -701,6 +708,7 @@ export function useMidiDevice(): UseMidiDeviceReturn {
   const disconnect = useCallback(() => {
     namesLoadAbortRef.current = true;
     namesLoadRunningRef.current = false;
+    setNamesScanning(false);
     setNamesSyncing(false);
     if (inputRef.current) inputRef.current.onmidimessage = null;
     outputRef.current = null;
@@ -1147,6 +1155,7 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     if (namesLoadRunningRef.current) return; // already running
     namesLoadRunningRef.current = true;
     namesLoadAbortRef.current = false;
+    setNamesScanning(true);
     // The official editor's cadence: whole reply, ~20ms pause, next slot.
     // It read all 257 slots that way in about 6 seconds.
     const READ_TIMEOUT = 500; // a full reply lands within a few ms
@@ -1173,6 +1182,7 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     setPresetNames([...presetNamesRef.current]);
     if (inputRef.current) inputRef.current.onmidimessage = onMidiMessage;
     namesLoadRunningRef.current = false;
+    setNamesScanning(false);
     // Warm the cache with whatever this pass filled in.
     persistNames();
   }, [onMidiMessage, requestSlotName, persistNames]);
@@ -1188,6 +1198,7 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     if (namesLoadRunningRef.current) return; // a scan is already running
     namesLoadRunningRef.current = true;
     namesLoadAbortRef.current = false;
+    setNamesScanning(true);
     setNamesSyncing(true);
     // Same cadence as loadPresetNames (the official editor's).
     const READ_TIMEOUT = 500;
@@ -1368,6 +1379,7 @@ export function useMidiDevice(): UseMidiDeviceReturn {
   return {
     status, handshakeStep, errorMessage, deviceName, currentSlot, presetNames, namesLoadProgress,
     namesSyncing,
+    namesScanning,
     deviceInfo, currentPreset, userIrNames, deviceState,
     connect, disconnect, loadPresetNames, syncPresetNames, refreshNames, refreshSlotName,
     pullPreset, pushPreset, copySlotOnDevice, writePresetToSlot, saveToSlot, renameSlot,
