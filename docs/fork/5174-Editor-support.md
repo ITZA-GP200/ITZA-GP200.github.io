@@ -51,7 +51,7 @@ latest Chrome and a GP-200 on firmware 1.8.0.
   on hover. Esc closes the menu.
 - Buttons: ACTIVATE (switch the pedal), OPEN (load into the editor), EXPORT,
   IMPORT→[slot], RENAME, PROTECT 64 / RELEASE 64, SAVE 64, RESTORE 64, SAVE ALL,
-  SAVE PATCH, REFRESH; COPY, PASTE, SWAP, ▲UP, ▼DOWN; EXPORT SELECTED / BANK /
+  SAVE PATCH, RELOAD ALL; COPY, PASTE, SWAP, ▲UP, ▼DOWN; EXPORT SELECTED / BANK /
   ALL (ZIP of .prst files).
 - The ⚡ in the top row reloads the app.
 
@@ -90,8 +90,10 @@ lost when you switch patches, and a new name reaches the pedal only on save.
 then asks **Save to [slot]** or **Editor only**. IMPORT→[slot] puts it straight
 into the selected slot after asking.
 
-**REFRESH** re-reads all names from the pedal (after changing things on the
-pedal itself).
+**RELOAD ALL** starts over from the pedal: it forgets the cached names, reads
+all 256 again and re-opens the patch the pedal is on. Reads only, so nothing on
+the pedal changes. Use it after editing on the pedal itself, or if the list
+looks wrong.
 
 ## Protected bank 64
 
@@ -122,7 +124,7 @@ pedal itself).
 | "Set a swap slot first" | Right-click a spare slot → USE FOR SWAP SLOT, or PROTECT 64 |
 | "Set a default patch first" | Right-click a patch → SET AS DEFAULT PATCH |
 | Item greyed out | Hover over it for the reason |
-| Names show "-" or look wrong | Wait for loading, then REFRESH |
+| Names show "-" or look wrong | Wait for loading, then RELOAD ALL |
 | Buttons do nothing / odd behaviour | Only one editor connected; reload with ⚡; reconnect the pedal |
 | Imported patch vanished on switching | It wasn't saved: SAVE PATCH, or choose "Save to [slot]" |
 

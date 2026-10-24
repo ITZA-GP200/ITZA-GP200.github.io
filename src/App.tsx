@@ -906,9 +906,27 @@ function App() {
     }
   }
 
+  // RELOAD ALL (Patches panel): start over from the pedal. Forgets every
+  // cached name, reads all 256 back, and re-pulls the patch the pedal is on
+  // into the editor. Reads only — nothing is written, so bank 64 and the
+  // stored default / swap slot are untouched.
+  function handleReloadAll() {
+    void (async () => {
+      await midiDevice.refreshNames();
+      const slot = midiDevice.currentSlot;
+      if (slot === null) return;
+      try {
+        loadPreset(await midiDevice.pullPreset(slot));
+        setLoadError(null);
+      } catch {
+        setLoadError('Reloaded the patch names, but couldn’t read the patch the pedal is on');
+      }
+    })();
+  }
+
   // SAVE (Patches panel): make the pedal match the editor, by writing the
   // editor's patch from app data into the pedal's current slot (checked, and
-  // retried once like RESTORE 64). REFRESH is the other direction.
+  // retried once like RESTORE 64). RELOAD ALL is the other direction.
   async function handleSaveEditorToPedal(slot: number) {
     if (!preset) return;
     const label = SysExCodec.slotToLabel(slot);
@@ -1608,7 +1626,7 @@ function App() {
         clipboardLabel={clipboard?.label ?? null}
         clipboardSlots={clipboard?.items.map((item) => item.slot) ?? []}
         onRenameSlot={recordedRename}
-        onRefreshNames={() => void midiDevice.refreshNames()}
+        onRefreshNames={handleReloadAll}
         onImportFile={handleFile}
         onExportRequest={() => setShowExportDialog(true)}
         userIrNames={midiDevice.userIrNames}

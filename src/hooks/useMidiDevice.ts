@@ -1244,7 +1244,7 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     await pauseNameLoading();
     if (!outputRef.current || !inputRef.current) return;
     const name = await requestSlotName(target, 500);
-    // A failed read leaves the list as it was; REFRESH re-reads everything.
+    // A failed read leaves the list as it was; RELOAD ALL re-reads everything.
     if (name === null) return;
     presetNamesRef.current[target] = name;
     setPresetNames([...presetNamesRef.current]);
@@ -1255,7 +1255,7 @@ export function useMidiDevice(): UseMidiDeviceReturn {
     await pauseNameLoading();
     // Re-read every slot. This used to keep the current bank's names on the
     // grounds that the handshake had just read them, but a save made since
-    // can leave them stale, and REFRESH then couldn't correct them (hardware:
+    // can leave them stale, and RELOAD ALL then couldn’t correct them (hardware:
     // a patch renamed in the editor and saved kept its old name in the list).
     presetNamesRef.current.fill(null);
     setPresetNames([...presetNamesRef.current]);

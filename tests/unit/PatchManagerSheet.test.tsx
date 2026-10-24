@@ -797,9 +797,9 @@ describe('PatchManagerSheet: SAVE and REFRESH buttons', () => {
     expect(onSaveEditorToPedal).toHaveBeenCalledWith(1);
   });
 
-  it('REFRESH sits in the button row (not the header) and re-reads the names', () => {
+  it('RELOAD ALL sits in the button row (not the header) and re-reads the names', () => {
     const { props } = renderSheet();
-    const buttons = screen.getAllByRole('button', { name: 'REFRESH' });
+    const buttons = screen.getAllByRole('button', { name: 'RELOAD ALL' });
     expect(buttons).toHaveLength(1);
     fireEvent.click(buttons[0]);
     expect(props.onRefreshNames).toHaveBeenCalledTimes(1);
