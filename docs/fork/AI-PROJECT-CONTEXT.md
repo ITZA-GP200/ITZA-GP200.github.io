@@ -137,6 +137,24 @@ testing-library, oxlint. Web MIDI (Chrome/Edge). Upstream base: `PRODUCTION`
 | `fork2-round-complete-2026-09-19` | CUT, UNDO/REDO, SAVE/REFRESH, ⚡ |
 | `fork2-done-2026-09-19` | v1.0: imports fixed, SAVE PATCH / SAVE ALL, right-click SWAP, Ctrl+Z/Y, contact form, docs |
 
+## Asked for, not yet built
+
+Owner's list, 24 Oct 2026, for the next build (in his words, then what it means):
+
+- **Favicon in "the electric teal used in our patches flyout"** — the accent
+  the Patch Manager uses (`--accent`). The favicon is currently upstream's.
+- **"pm.x.y.z" version in the bottom row, just left of the FX LOOP button.**
+  The fork's own version, visibly a PM build. `__APP_VERSION__` already holds
+  the label and commit (appVersion.ts); note it reads `v1.0.0+29` today,
+  counting from upstream's tag, so a `pm.` scheme needs a tag of our own.
+- **Right-click menus on the pedalboard's FX pedals** — the Patch Manager has
+  them, the board does not. Called "the next major build" on 24 Sept.
+- **A note to kabir0st** carrying three fixes he'd want: the `0x5a` save field,
+  read identification in `pullPreset`, and the `npx` prerender bug on Windows.
+- **Verbose logging toggle.** SAVE LOG keeps 600 lines and `pull tx:` hex
+  dumps are over half of a real one, so a long session can evict the readable
+  narration. Either budget hex separately or hide it behind a toggle.
+
 ## Open ideas
 
 - A USB capture of Valeton's desktop editor assigning EXP / CTRL, and moving a
