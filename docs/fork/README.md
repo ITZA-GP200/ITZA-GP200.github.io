@@ -1,6 +1,6 @@
 # GP200 Studio PM: patch-management fork
 
-https://github.com/klynam/gp200-studio-PM ("PM" = patch manager)
+https://github.com/ITZA-GP200/ITZA-GP200.github.io ("PM" = patch manager)
 
 A fork of [GP200 Studio](https://github.com/kabir0st/gp200-studio) by
 **kabir0st**, focused on managing the Valeton GP-200's 256 patches from the

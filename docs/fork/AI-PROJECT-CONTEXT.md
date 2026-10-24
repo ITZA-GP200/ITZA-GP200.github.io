@@ -1,6 +1,6 @@
 # AI project context: GP200 Studio PM (patch-management fork)
 
-Repository: https://github.com/klynam/gp200-studio-PM (branch `fork2/final`; upstream: kabir0st/gp200-studio `PRODUCTION`).
+Repository: https://github.com/ITZA-GP200/ITZA-GP200.github.io (branch `fork2/final`; upstream: kabir0st/gp200-studio `PRODUCTION`).
 
 Read this before changing the fork. It records what the code can't tell you:
 what the hardware actually does, which approaches failed, and the rules the

@@ -117,15 +117,13 @@ function guideDevServer(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig(({ command }) => ({
-  // Upstream is served from the root of its own apex domain (gp200studio.com).
-  // This fork is published to GitHub Pages at klynam.github.io/gp200-studio-PM,
-  // a subfolder, so a build has to carry that prefix — it must match the
-  // repository name exactly, capitals included.
-  //
-  // Only a build: the dev server stays at '/' so the editor keeps its short
-  // local address (http://localhost:5174/editor). Everything that resolves an
-  // asset at runtime goes through import.meta.env.BASE_URL, so both work.
-  base: command === 'build' ? '/gp200-studio-PM/' : '/',
+  // Served from the root of an organisation GitHub Pages site
+  // (itza-gp200.github.io), so there is no subfolder prefix to carry — the
+  // same '/' works for the build and for the dev server at
+  // http://localhost:5174/editor. It was '/gp200-studio-PM/' while the site
+  // lived in a project repo; anything resolving an asset at runtime goes
+  // through import.meta.env.BASE_URL, so neither case needs special handling.
+  base: '/',
   // A build bakes it in; the dev server gets it from devAppVersion instead,
   // fresh on every page load.
   define: command === 'build' ? { __APP_VERSION__: JSON.stringify(appVersion()) } : {},
