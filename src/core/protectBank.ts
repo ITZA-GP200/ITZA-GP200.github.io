@@ -1,5 +1,5 @@
 import { SysExCodec } from './SysExCodec';
-import { describeWriteFidelity } from './writeFidelity';
+import { describeWriteFidelity, sameAsWritten } from './writeFidelity';
 import type { GP200Preset } from './types';
 
 /**
@@ -95,6 +95,7 @@ export async function writeChecked(
 
 /** The pedal operations PROTECT 64 needs (useMidiDevice provides them). */
 export interface ProtectDevice {
+  pullPreset(slot: number): Promise<GP200Preset>;
   /** Write a patch from app data into a slot; resolves with the read-back. */
   writePresetToSlot(preset: GP200Preset, slot: number): Promise<GP200Preset>;
   copySlotOnDevice(fromSlot: number, toSlot: number, copied: GP200Preset, saveAs?: string): Promise<GP200Preset>;
@@ -120,6 +121,18 @@ export async function protectBank64(
   const total = PROTECTED_LAYOUT.length;
   const sent = { ...structuredClone(shipped), patchName: DEFAULT_SLOT_NAME };
   let written: GP200Preset;
+  // Already the shipped patch? Then skip the write: it costs 10-20 s, and a
+  // second PROTECT 64 (after a failure, or on another browser) usually finds
+  // 64C exactly as it left it.
+  try {
+    const current = await device.pullPreset(PROTECTED_DEFAULT_SLOT);
+    if (sameAsWritten(current, sent)) {
+      onProgress?.(1, total);
+      return await copyAcrossBank(device, current, missed, onProgress, total);
+    }
+  } catch {
+    // Unreadable just now: write it, as before.
+  }
   try {
     written = await writeChecked(device, sent, PROTECTED_DEFAULT_SLOT, (differences) =>
       `${label(PROTECTED_DEFAULT_SLOT)} didn’t take the shipped patch (${differences}); `
@@ -130,15 +143,37 @@ export async function protectBank64(
     throw new Error(`${detail}. Stopped at ${label(PROTECTED_DEFAULT_SLOT)}; bank 64 is not protected, run PROTECT 64 again`, { cause: err });
   }
   onProgress?.(1, total);
+  return copyAcrossBank(device, written, missed, onProgress, total);
+}
 
+/**
+ * Fill the bank's other three slots from 64C, each under its fixed name, as
+ * verified on-pedal copies (a couple of seconds each). A slot that already
+ * holds it is left alone.
+ */
+async function copyAcrossBank(
+  device: ProtectDevice,
+  written: GP200Preset,
+  _missed: string[],
+  onProgress: ((done: number, total: number) => void) | undefined,
+  total: number,
+): Promise<GP200Preset> {
   let done = 1;
   for (const { slot, name } of PROTECTED_LAYOUT) {
     if (slot === PROTECTED_DEFAULT_SLOT) continue;
+    let current: GP200Preset | null = null;
     try {
-      await device.copySlotOnDevice(PROTECTED_DEFAULT_SLOT, slot, written, name);
-    } catch (err) {
-      const detail = err instanceof Error ? err.message : String(err);
-      throw new Error(`${detail}. Stopped at ${label(slot)}; bank 64 is not protected, run PROTECT 64 again`, { cause: err });
+      current = await device.pullPreset(slot);
+    } catch {
+      current = null;
+    }
+    if (!current || !sameAsWritten(current, { ...written, patchName: name })) {
+      try {
+        await device.copySlotOnDevice(PROTECTED_DEFAULT_SLOT, slot, written, name);
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        throw new Error(`${detail}. Stopped at ${label(slot)}; bank 64 is not protected, run PROTECT 64 again`, { cause: err });
+      }
     }
     done += 1;
     onProgress?.(done, total);

@@ -75,3 +75,16 @@ export function summarizeWriteFidelity(label: string, name: string, result: Writ
   return `WRITE TEST ${label} "${name}". ${part('Name/blocks', result.identity)}. `
     + `${part('Knobs/volume', result.values)}. ${part('Extras', result.extras)}. Full list in the console`;
 }
+
+/** Does the slot already hold this patch, name and all? */
+export function sameAsWritten(actual: GP200Preset, expected: GP200Preset): boolean {
+  const { identity, values } = describeWriteFidelity(actual, expected);
+  return identity.length === 0 && values.length === 0;
+}
+
+/** The same patch apart from its name — so a slot that already holds these
+ *  settings can be copied on the pedal (seconds) instead of written from app
+ *  data (10-20 s), which is how bank 64's identical slots are filled. */
+export function sameSettings(actual: GP200Preset, expected: GP200Preset): boolean {
+  return sameAsWritten(actual, { ...expected, patchName: actual.patchName });
+}

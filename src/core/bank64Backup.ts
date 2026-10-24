@@ -9,6 +9,7 @@ import {
   writeChecked,
 } from './protectBank';
 import { SysExCodec } from './SysExCodec';
+import { sameAsWritten, sameSettings } from './writeFidelity';
 import type { GP200Preset } from './types';
 
 /**
@@ -120,6 +121,7 @@ export function bank64NameChanges(presetNames: (string | null)[]): string[] {
 
 /** The pedal operations RESTORE 64 needs (useMidiDevice provides them). */
 export interface RestoreDevice {
+  pullPreset(slot: number): Promise<GP200Preset>;
   writePresetToSlot(preset: GP200Preset, slot: number): Promise<GP200Preset>;
   copySlotOnDevice(fromSlot: number, toSlot: number, copied: GP200Preset, saveAs?: string): Promise<GP200Preset>;
 }
@@ -142,27 +144,60 @@ export async function restoreBank64(
   const order = [PROTECTED_DEFAULT_SLOT, 252, 253];
   let done = 0;
   let restoredDefault: GP200Preset | null = null;
+  // Slots already holding what the backup says, usable as copy sources. A
+  // write from app data costs 10-20 s; a copy on the pedal costs about two,
+  // and a slot that is already right costs nothing. Bank 64's slots usually
+  // hold the same patch, so most of a restore is skipping and copying.
+  const inPlace: { slot: number; preset: GP200Preset }[] = [];
+
   for (const slot of order) {
     const index = (BACKUP_SLOTS as readonly number[]).indexOf(slot);
     const sent = { ...structuredClone(patches[index]), patchName: protectedNameFor(slot)! };
-    let written: GP200Preset;
+    let current: GP200Preset | null = null;
     try {
-      written = await writeChecked(device, sent, slot, (differences) =>
-        `${label(slot)} didn’t take the backup (${differences}); run RESTORE 64 again`, missed);
-    } catch (err) {
-      if (err instanceof Error && err.message.includes('didn’t take the backup')) throw err;
-      const detail = err instanceof Error ? err.message : String(err);
-      throw new Error(`${detail}. Stopped at ${label(slot)}; run RESTORE 64 again`, { cause: err });
+      current = await device.pullPreset(slot);
+    } catch {
+      current = null; // unreadable: fall through and write it
     }
+
+    let written: GP200Preset;
+    if (current && sameAsWritten(current, sent)) {
+      written = current; // already right
+    } else {
+      const source = inPlace.find((candidate) => sameSettings(candidate.preset, sent));
+      try {
+        written = source
+          ? await device.copySlotOnDevice(source.slot, slot, source.preset, sent.patchName)
+          : await writeChecked(device, sent, slot, (differences) =>
+            `${label(slot)} didn’t take the backup (${differences}); run RESTORE 64 again`, missed);
+      } catch (err) {
+        if (err instanceof Error && err.message.includes('didn’t take the backup')) throw err;
+        const detail = err instanceof Error ? err.message : String(err);
+        throw new Error(`${detail}. Stopped at ${label(slot)}; run RESTORE 64 again`, { cause: err });
+      }
+    }
+
+    inPlace.push({ slot, preset: written });
     if (slot === PROTECTED_DEFAULT_SLOT) restoredDefault = written;
     done += 1;
     onProgress?.(done, total);
   }
+
+  // 64D is only ever a copy of the default under its own name.
+  const wantedSwap = { ...restoredDefault!, patchName: SWAP_SLOT_NAME };
+  let swapNow: GP200Preset | null = null;
   try {
-    await device.copySlotOnDevice(PROTECTED_DEFAULT_SLOT, PROTECTED_SWAP_SLOT, restoredDefault!, SWAP_SLOT_NAME);
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
-    throw new Error(`${detail}. Stopped at 64D; run RESTORE 64 again`, { cause: err });
+    swapNow = await device.pullPreset(PROTECTED_SWAP_SLOT);
+  } catch {
+    swapNow = null;
+  }
+  if (!swapNow || !sameAsWritten(swapNow, wantedSwap)) {
+    try {
+      await device.copySlotOnDevice(PROTECTED_DEFAULT_SLOT, PROTECTED_SWAP_SLOT, restoredDefault!, SWAP_SLOT_NAME);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      throw new Error(`${detail}. Stopped at 64D; run RESTORE 64 again`, { cause: err });
+    }
   }
   onProgress?.(total, total);
   return restoredDefault!;

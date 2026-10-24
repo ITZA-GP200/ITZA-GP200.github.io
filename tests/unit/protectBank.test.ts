@@ -171,3 +171,33 @@ describe('writeChecked', () => {
     expect(calls).toBe(1);
   });
 });
+
+describe('protectBank64: not doing work that is already done', () => {
+  it('skips the write when 64C already holds the shipped patch', async () => {
+    const shipped = patch("It's GP-200");
+    const slots = new Map<number, GP200Preset>([[254, { ...structuredClone(shipped), patchName: 'ITZA GP-200' }]]);
+    const log: string[] = [];
+    const device: ProtectDevice = {
+      async pullPreset(slot) {
+        const held = slots.get(slot);
+        if (!held) throw new Error('unreadable');
+        return structuredClone(held);
+      },
+      async writePresetToSlot(preset, slot) {
+        log.push(`write ${slot}`);
+        slots.set(slot, structuredClone(preset));
+        return structuredClone(preset);
+      },
+      async copySlotOnDevice(from, to, _copied, saveAs) {
+        log.push(`${from}->${to} as ${saveAs}`);
+        const copy = { ...structuredClone(slots.get(from)!), patchName: saveAs! };
+        slots.set(to, copy);
+        return structuredClone(copy);
+      },
+    };
+    const result = await protectBank64(device, shipped);
+    // No write at all: 64C was right, the other three are copies of it.
+    expect(log).toEqual(['254->252 as UTILITY-1', '254->253 as UTILITY-2', '254->255 as SWAP SLOT']);
+    expect(result.patchName).toBe('ITZA GP-200');
+  });
+});

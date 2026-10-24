@@ -74,47 +74,103 @@ describe('bank64NameChanges', () => {
 });
 
 describe('restoreBank64', () => {
-  function fakePedal(dropKnobAt?: number) {
+  // A pedal that remembers its slots, so the restore can see what is already
+  // right. `different` gives a slot settings of its own (not a copy of 64C).
+  function fakePedal(options: { dropKnobAt?: number; start?: Record<number, GP200Preset> } = {}) {
     const log: string[] = [];
-    const slots = new Map<number, GP200Preset>();
+    const slots = new Map<number, GP200Preset>(
+      Object.entries(options.start ?? {}).map(([slot, preset]) => [Number(slot), structuredClone(preset)]),
+    );
     const device: RestoreDevice = {
+      async pullPreset(slot) {
+        const held = slots.get(slot);
+        if (!held) throw new Error(`${slot} unreadable`);
+        return structuredClone(held);
+      },
       async writePresetToSlot(preset, slot) {
         log.push(`write ${slot} as ${preset.patchName}`);
         const stored = structuredClone(preset);
-        if (slot === dropKnobAt) stored.effects[0].params[0] = 99;
+        if (slot === options.dropKnobAt) stored.effects[0].params[0] = 99;
         slots.set(slot, stored);
         return structuredClone(stored);
       },
       async copySlotOnDevice(from, to, _copied, saveAs) {
         log.push(`${from}->${to} as ${saveAs}`);
-        return { ...structuredClone(slots.get(from)!), patchName: saveAs! };
+        const copy = { ...structuredClone(slots.get(from)!), patchName: saveAs! };
+        slots.set(to, copy);
+        return structuredClone(copy);
       },
     };
-    return { device, log };
+    return { device, log, nameAt: (slot: number) => slots.get(slot)?.patchName };
   }
 
-  it('writes 64C first, then 64A and 64B under their fixed names, then rebuilds 64D', async () => {
+  const backup = () => [named('x'), named('y'), named('z')];
+
+  it('writes 64C once, then fills the rest by copying it on the pedal', async () => {
     const pedal = fakePedal();
     const seen: string[] = [];
-    const result = await restoreBank64(pedal.device, [named('x'), named('y'), named('z')], (d, t) => seen.push(`${d}/${t}`));
+    const result = await restoreBank64(pedal.device, backup(), (d, t) => seen.push(`${d}/${t}`));
+    // One write (10-20 s), three copies (about two seconds each).
     expect(pedal.log).toEqual([
       'write 254 as ITZA GP-200',
-      'write 252 as UTILITY-1',
-      'write 253 as UTILITY-2',
+      '254->252 as UTILITY-1',
+      '254->253 as UTILITY-2',
       '254->255 as SWAP SLOT',
     ]);
     expect(result.patchName).toBe('ITZA GP-200');
     expect(seen).toEqual(['1/4', '2/4', '3/4', '4/4']);
   });
 
+  it('touches nothing when the bank already holds the backup', async () => {
+    const pedal = fakePedal({
+      start: {
+        252: { ...named('x'), patchName: 'UTILITY-1' },
+        253: { ...named('y'), patchName: 'UTILITY-2' },
+        254: { ...named('z'), patchName: 'ITZA GP-200' },
+        255: { ...named('z'), patchName: 'SWAP SLOT' },
+      },
+    });
+    await restoreBank64(pedal.device, backup());
+    expect(pedal.log).toEqual([]);
+  });
+
+  it('puts only the swap slot back when only it drifted', async () => {
+    const pedal = fakePedal({
+      start: {
+        252: { ...named('x'), patchName: 'UTILITY-1' },
+        253: { ...named('y'), patchName: 'UTILITY-2' },
+        254: { ...named('z'), patchName: 'ITZA GP-200' },
+        255: { ...named('someone else'), patchName: 'Marcelo Roascio1' },
+      },
+    });
+    await restoreBank64(pedal.device, backup());
+    expect(pedal.log).toEqual(['254->255 as SWAP SLOT']);
+    expect(pedal.nameAt(255)).toBe('SWAP SLOT');
+  });
+
+  it('writes a slot whose settings differ, rather than copying', async () => {
+    const own = named('own');
+    own.effects[2].params[0] = 71;
+    const pedal = fakePedal();
+    await restoreBank64(pedal.device, [own, named('y'), named('z')]);
+    expect(pedal.log).toEqual([
+      'write 254 as ITZA GP-200',
+      'write 252 as UTILITY-1',
+      '254->253 as UTILITY-2',
+      '254->255 as SWAP SLOT',
+    ]);
+  });
+
   it('finishes when the pedal keeps a value its own way, and says which', async () => {
-    const pedal = fakePedal(252);
+    const own = named('own');
+    own.effects[2].params[0] = 71;
+    const pedal = fakePedal({ dropKnobAt: 252 });
     const missed: string[] = [];
-    await restoreBank64(pedal.device, [named('x'), named('y'), named('z')], undefined, missed);
+    await restoreBank64(pedal.device, [own, named('y'), named('z')], undefined, missed);
     // 64A is written twice (a value-only miss is retried once), then it carries on.
     expect(pedal.log).toEqual([
       'write 254 as ITZA GP-200', 'write 252 as UTILITY-1', 'write 252 as UTILITY-1',
-      'write 253 as UTILITY-2', '254->255 as SWAP SLOT',
+      '254->253 as UTILITY-2', '254->255 as SWAP SLOT',
     ]);
     expect(missed).toHaveLength(1);
     expect(missed[0]).toMatch(/^64A PRE param 0 99 vs /);
