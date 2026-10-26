@@ -3,11 +3,12 @@
 Versions are **X.Y.Z**: X = a major feature release, Y = a functional release
 within a version, Z = an iterative release (typos, labels and similar).
 
-## 1.1.0: released 25 October 2026 as `pm.1.1.0`
+## 1.1.1: released 25 October 2026 as `pm.1.1.1`
 
-The fork's first numbered release under its own name and its own version
-scheme. It moved to its own home at the same time: the site is served from
-https://itza-gp200.github.io and the repository is ITZA-GP200/ITZA-GP200.github.io.
+The release the project starts from. `pm.1.1.0` went out the day before and
+was live for a few hours; this closes it with the front door rebuilt, and the
+tag was left where it was rather than moved, so the history says what actually
+happened.
 
 - The start screen is the fork's front door now: **ITZA GP-200 STUDIO**, four
   bullets saying what this fork adds rather than what the original does, and a
@@ -20,6 +21,13 @@ https://itza-gp200.github.io and the repository is ITZA-GP200/ITZA-GP200.github.
   landing hero, the phone shell, the credits block and three documents. A
   donation ask belongs on his site, not on a fork of his work. Every credit to
   him stays, and the byline now reads "Originally built by Kabir Tamari".
+
+## 1.1.0: released 24 October 2026 as `pm.1.1.0`
+
+The fork's first numbered release under its own name and version scheme. It
+moved to its own home at the same time: the site is served from
+https://itza-gp200.github.io and the repository is
+ITZA-GP200/ITZA-GP200.github.io.
 
 Rebased onto kabir0st's latest stable (his `PRODUCTION` of 25 September 2026),
 which brings his value entry on knobs, tempo sync, the new start screen and his
