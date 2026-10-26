@@ -3,7 +3,23 @@
 Versions are **X.Y.Z**: X = a major feature release, Y = a functional release
 within a version, Z = an iterative release (typos, labels and similar).
 
-## 1.1.0: 23 October 2026 (in progress, not yet released)
+## 1.1.0: released 25 October 2026 as `pm.1.1.0`
+
+The fork's first numbered release under its own name and its own version
+scheme. It moved to its own home at the same time: the site is served from
+https://itza-gp200.github.io and the repository is ITZA-GP200/ITZA-GP200.github.io.
+
+- The start screen is the fork's front door now: **ITZA GP-200 STUDIO**, four
+  bullets saying what this fork adds rather than what the original does, and a
+  **Why ITZA GP-200** panel explaining what it is and what it needs. The panel
+  is a `<details>`, because the page is prerendered and has to read with
+  JavaScript off. "What is GP200 Studio?" and "Read the guide" point at
+  kabir0st's own site — he should get the visit, and his pages are the ones he
+  keeps current. The version reads as the fork's own: accent, not grey.
+- kabir0st's support link is gone from the whole fork — the editor chrome, the
+  landing hero, the phone shell, the credits block and three documents. A
+  donation ask belongs on his site, not on a fork of his work. Every credit to
+  him stays, and the byline now reads "Originally built by Kabir Tamari".
 
 Rebased onto kabir0st's latest stable (his `PRODUCTION` of 25 September 2026),
 which brings his value entry on knobs, tempo sync, the new start screen and his
