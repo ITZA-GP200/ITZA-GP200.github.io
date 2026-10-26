@@ -62,6 +62,6 @@ section 6.
 
 ## Thanks
 
-To **kabir0st** for GP200 Studio and for making it open source
-([buy him a coffee](https://buymeacoffee.com/kabir0st)). GP-200 and Valeton are
+To **kabir0st** for GP200 Studio and for making it open source. GP-200 and
+Valeton are
 their trademarks; this project is not affiliated with or endorsed by them.

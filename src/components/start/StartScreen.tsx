@@ -18,12 +18,13 @@ interface StartScreenProps {
   onDismissError: () => void;
 }
 
+/** Written in sentence case and capitalised by CSS (.start-feature), so the
+ *  text stays readable in the source and to a screen reader. */
 const FEATURES: string[] = [
-  'Multi-layer loop station: stack unlimited loops over USB audio, hands-free from the pedal',
-  'Visual pedalboard editor: drag to reorder, tweak every knob',
-  'Assign EXP pedals, CTRL footswitches, and the FX loop',
-  'Live USB-MIDI sync with your GP-200 (Chrome / Edge)',
-  'Import & export .prst, manage all 256 device patches',
+  'The GP200 Studio web app, plus',
+  'New patch management features',
+  'New right-click functions',
+  'New default patch customizer',
 ];
 
 /**
@@ -79,7 +80,7 @@ export function StartScreen({
         <div className="start-logo">
           <Logo size={72} />
         </div>
-        <h1 className="start-title">GP200 Studio</h1>
+        <h1 className="start-title">ITZA GP-200 STUDIO</h1>
         <p className="start-sub">Valeton GP-200 pedalboard editor &amp; loop station</p>
 
         <div className="start-actions">
@@ -144,12 +145,34 @@ export function StartScreen({
           ))}
         </ul>
 
-        {/* Real anchors, not buttons: this page is prerendered, and these are
-            its crawlable edges into the tour and the guide. */}
+        {/* Real anchors, not buttons: this page is prerendered. Both point at
+            kabir0st's own site rather than this fork's copies of his tour and
+            guide — he should get the visit, and his pages are the ones he
+            keeps current. */}
         <p className="start-links">
-          <a href="/home">What is GP200 Studio? →</a>
-          <a href="/guide">Read the guide →</a>
+          <a href="https://gp200studio.com" target="_blank" rel="noopener noreferrer">
+            What is GP200 Studio? →
+          </a>
+          <a href="https://gp200studio.com/guide" target="_blank" rel="noopener noreferrer">
+            Read the guide →
+          </a>
         </p>
+
+        {/* <details> rather than a React toggle: this page is prerendered and
+            must read with JavaScript off, and the open/closed state, the
+            keyboard handling and the screen-reader announcement all come free. */}
+        <details className="start-why">
+          <summary>Why ITZA GP-200</summary>
+          <p className="start-why-text">
+            ITZA GP-200 is an ongoing user interface expansion of the
+            GP200Studio.com web app for the Valeton GP200 guitar multi-fx pedal.
+            The first release, pm.1.1.0, expands patch management with new
+            functions and right-click options, including your own custom default
+            patches. Designed and built for Windows 11 running Chrome. You'll need
+            a USB cable to connect your GP-200 to your computer. Thanks for trying
+            out my fork of the original GP200 Studio online editor.
+          </p>
+        </details>
 
         <Credits className="start-credits" />
       </div>

@@ -10,7 +10,7 @@ Build patches on a pedalboard you can actually see, manage all 256 of them,
 and stack loops over your own playing. It runs in the browser, so there is
 nothing to install and nothing to sign up for.
 
-**[▶ Open the app](https://gp200studio.com/)** · **[☕ Buy me a coffee](https://buymeacoffee.com/kabir0st)**
+**[▶ Open the app](https://gp200studio.com/)**
 
 > **This is a fork** focused on patch management in the PATCHES slide-out (copy, cut, paste, swap, undo,
 > a protected bank 64 and more). See **[docs/fork](docs/fork/README.md)** for what it adds, the user guide,
@@ -274,8 +274,7 @@ every site that uses them, so hiding it would buy nothing.
 ## Thanks and license
 
 Bug reports, protocol captures from your own pedal and pull requests are all
-welcome on [GitHub](https://github.com/kabir0st/gp200-studio). If this saved you
-from the 4" screen, [buy me a coffee](https://buymeacoffee.com/kabir0st). ☕
+welcome on [GitHub](https://github.com/kabir0st/gp200-studio).
 
 Everything else you see above is a screenshot of the app. GP-200
 and Valeton are their trademarks; this project is not affiliated with or endorsed

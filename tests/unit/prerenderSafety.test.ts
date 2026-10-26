@@ -129,8 +129,9 @@ describe('prerender safety', () => {
 
   /**
    * '/' is the app's front door: the two ways into the editor and nothing in
-   * front of them. It must still reach the tour and the guide with real
-   * anchors, or everything that moved to /home is cut off from the root.
+   * front of them. It must still reach kabir0st's tour and guide with real
+   * anchors, so someone who arrived here without knowing the app can find out
+   * what it is.
    */
   it('puts both ways into the editor on the start screen, and links out', async () => {
     const { render } = await import('@/prerender/entry-server');
@@ -138,10 +139,25 @@ describe('prerender safety', () => {
 
     expect(body).toContain('CONNECT YOUR GP-200');
     expect(body).toContain('OPEN WITHOUT CONNECTING');
-    expect(body).toContain('href="/home"');
-    expect(body).toContain('href="/guide"');
+    expect(body).toContain('href="https://gp200studio.com"');
+    expect(body).toContain('href="https://gp200studio.com/guide"');
     // The tour's hero must not have leaked onto the start screen.
     expect(body).not.toContain('class="lp ');
+  });
+
+  /** The fork's own name and number, and the "why" written out in full with
+   *  no JavaScript — which is why it is a <details> rather than React state. */
+  it('names the fork, and explains itself with scripting off', async () => {
+    const { render } = await import('@/prerender/entry-server');
+    const body = render('/').body;
+
+    expect(body).toContain('ITZA GP-200 STUDIO');
+    expect(body).toContain('<details class="start-why">');
+    expect(body).toContain('Why ITZA GP-200');
+    expect(body).toContain('ongoing user interface expansion');
+    // His support link belongs on his site; his credit stays on ours.
+    expect(body).toContain('Originally built by Kabir Tamari');
+    expect(body).not.toContain('buymeacoffee');
   });
 
   it('emits a sitemap listing every indexable URL', async () => {
