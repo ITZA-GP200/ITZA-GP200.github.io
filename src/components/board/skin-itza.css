@@ -665,32 +665,63 @@
    screen, so the thing you tapped stays where it was and the chain stays on
    screen around it.
    ════════════════════════════════════════════════════════════════════════ */
-.m-pedal-card.m-pk {
+.mobile-view .m-pedal-card.m-pk {
+  /* The chevron hangs below the card, and the enclosure clipped it. */
+  overflow: visible;
   background: #232326;
   border: 1px solid var(--key);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--key) 20%, transparent),
               0 0 20px -8px var(--key);
   flex-wrap: wrap;
 }
-.m-pedal-card.m-pk.bypassed {
+.mobile-view .m-pedal-card.m-pk.bypassed {
   background: #141416;
   border-color: #34343a;
   box-shadow: none;
 }
-.m-pedal-card.m-pk::before,
-.m-pedal-card.m-pk::after {
-  display: none; /* gloss and scrim: the card says it its own way */
+.mobile-view .m-pedal-card.m-pk::before {
+  display: none; /* gloss: the card says it its own way */
 }
-.m-pedal-card.m-pk .m-card-thumb,
-.m-pedal-card.m-pk .m-card-led {
+
+/* ── signal flow down the list ──
+   The board points right at the next card; a vertical chain points down. Same
+   solid triangle in the same key colour, turned a quarter. It replaces the
+   patch cable, which belongs to the enclosures this skin does away with. */
+.m-list .m-pedal-card.m-pk::after {
+  content: '';
+  display: block;
+  position: absolute;
+  inset: auto;
+  left: 50%;
+  margin-left: -9px;
+  bottom: -10px;
+  width: 0;
+  height: 0;
+  border-radius: 0;
+  background: none;
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+  border-top: 10px solid var(--key);
+  border-bottom: 0;
+  opacity: 1;
+  transform: none;
+  box-shadow: none;
+  pointer-events: none;
+  z-index: 2;
+}
+.m-list .m-pedal-card.m-pk.bypassed::after {
+  border-top-color: #34343a;
+}
+.mobile-view .m-pedal-card.m-pk .m-card-thumb,
+.mobile-view .m-pedal-card.m-pk .m-card-led {
   display: none;
 }
-.m-pedal-card.m-pk .m-card-name {
+.mobile-view .m-pedal-card.m-pk .m-card-name {
   font-size: 19px;
   font-weight: 800;
   letter-spacing: 0.02em;
 }
-.m-pedal-card.m-pk .m-card-module {
+.mobile-view .m-pedal-card.m-pk .m-card-module {
   font-size: 13px;
   letter-spacing: 0.12em;
   color: #8e8e96;
@@ -698,17 +729,17 @@
   border: none;
   padding: 0;
 }
-.m-pedal-card.m-pk .m-card-summary {
+.mobile-view .m-pedal-card.m-pk .m-card-summary {
   font-size: 13px;
   color: #8e8e96;
 }
-.m-pedal-card.m-pk.bypassed .m-card-module,
-.m-pedal-card.m-pk.bypassed .m-card-summary {
+.mobile-view .m-pedal-card.m-pk.bypassed .m-card-module,
+.mobile-view .m-pedal-card.m-pk.bypassed .m-card-summary {
   color: #6e6e76;
 }
 
 /* The caret says the card opens, and which way it is facing. */
-.m-pedal-card.m-pk .m-card-caret {
+.mobile-view .m-pedal-card.m-pk .m-card-caret {
   display: inline-flex;
   align-items: center;
   width: 22px;
@@ -716,17 +747,17 @@
   color: #8e8e96;
   transition: transform 0.16s ease;
 }
-.m-pedal-card.m-pk .m-card-caret svg {
+.mobile-view .m-pedal-card.m-pk .m-card-caret svg {
   width: 22px;
   height: 22px;
 }
-.m-pedal-card.m-pk.expanded .m-card-caret {
+.mobile-view .m-pedal-card.m-pk.expanded .m-card-caret {
   transform: rotate(180deg);
   color: var(--key);
 }
 
 /* The controls take the full width of the card, under its head. */
-.m-pedal-card.m-pk .m-card-controls {
+.mobile-view .m-pedal-card.m-pk .m-card-controls {
   flex: 0 0 100%;
   display: flex;
   flex-wrap: wrap;
@@ -737,20 +768,20 @@
   padding-top: 14px;
   border-top: 1px solid #2f2f34;
 }
-.m-pedal-card.m-pk .m-card-controls .knob {
+.mobile-view .m-pedal-card.m-pk .m-card-controls .knob {
   width: 72px;
   color: var(--key);
   --knob-glow: color-mix(in srgb, var(--key) 62%, transparent);
   --knob-glow-soft: color-mix(in srgb, var(--key) 30%, transparent);
 }
-.m-pedal-card.m-pk .m-card-controls .knob svg {
+.mobile-view .m-pedal-card.m-pk .m-card-controls .knob svg {
   width: 70px;
   height: 70px;
 }
-.m-pedal-card.m-pk .m-card-controls .knob .k-value {
+.mobile-view .m-pedal-card.m-pk .m-card-controls .knob .k-value {
   display: none;
 }
-.m-pedal-card.m-pk .m-card-controls .k-label {
+.mobile-view .m-pedal-card.m-pk .m-card-controls .k-label {
   font-size: 14px;
   color: #8e8e96;
   white-space: normal;
@@ -758,10 +789,18 @@
   text-align: center;
   max-width: 72px;
 }
-.m-pedal-card.m-pk .m-card-controls .pbar {
+.mobile-view .m-pedal-card.m-pk .m-card-controls .pbar {
   flex: 0 0 100%;
 }
-.m-pedal-card.m-pk.bypassed .m-card-controls {
+.mobile-view .m-pedal-card.m-pk.bypassed .m-card-controls {
   opacity: 0.5;
   filter: grayscale(1);
+}
+
+/* The cable goes with the enclosures; the chevron says the same thing. */
+.m-list.m-pk-chain .m-cable {
+  display: none;
+}
+.m-list.m-pk-chain .m-row-wrap {
+  margin-bottom: 22px;
 }

@@ -73,7 +73,10 @@ export function ChainScreen({
           moves them by transform and the real reorder is committed once, on
           drop , so layout stays frozen and the animation geometry stays exact
           (see useDragReorder). */}
-      <ul className={`m-list${drag.from !== null ? ' dragging' : ''}`} ref={listRef}>
+      <ul
+        className={`m-list${drag.from !== null ? ' dragging' : ''}${skinned ? ' m-pk-chain' : ''}`}
+        ref={listRef}
+      >
         <li className="m-marker">
           <span>IN</span>
         </li>
