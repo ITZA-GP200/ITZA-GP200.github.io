@@ -2,16 +2,11 @@ import { useState, type CSSProperties } from 'react';
 import type { EffectSlot } from '@/core/types';
 import { getEffectName, getSlotModule } from '@/core/effectNames';
 import { EFFECT_DESCRIPTIONS } from '@/core/effectDescriptions';
-import { getEffectParams } from '@/core/effectParams';
-import { isKnobSynced } from '@/core/tempoSync';
 import { getBodySpec } from './boardPalette';
 import { pedalIsWide } from './boardLayout';
 import { type PedalArtEntry } from './pedalManifest';
 import { ModuleGlyph } from './ModuleGlyph';
-import { PedalKnob } from './PedalKnob';
-import { PedalFader } from './PedalFader';
-import { PedalBar } from './PedalBar';
-import { ComboSelect, MiniSwitch } from './MiniSwitch';
+import { PedalControls } from './PedalControls';
 import { PedalSkinTools } from './PedalSkinTools';
 import { DEFAULT_KEY, type BlockSkin, type ControlStyle } from '@/core/boardSkin';
 
@@ -80,7 +75,6 @@ export function Pedal({
   const moduleName = getSlotModule(slot.slotIndex);
   // authentic per-effect colors from the artwork spec; module palette as fallback
   const spec = art?.colors ?? getBodySpec(moduleName);
-  const defs = getEffectParams(slot.effectId);
   // the pedal keeps its natural size, but never wider than its fixed bay, so
   // swapping an effect only changes the padding inside the bay, never a
   // neighbour's position (see pedalIsWide)
@@ -213,69 +207,17 @@ export function Pedal({
           e.stopPropagation();
         }}
       >
-        {defs.map((def) => {
-          const value = slot.params[def.idx] ?? def.default;
-          // Two defs can share an idx (generated table quirk: Slapback's
-          // Sync + Trail both map param 3), so the key needs the name too.
-          const defKey = `${def.idx}-${def.name}`;
-          if (def.type === 'knob') {
-            if (useBars) {
-              return (
-                <PedalBar
-                  key={defKey}
-                  param={def}
-                  value={value}
-                  onChange={(v) => { if (!locked) onParamChange(def.idx, v); }}
-                  pedalName={effectName}
-                />
-              );
-            }
-            if (useFaders) {
-              return (
-                <PedalFader
-                  key={defKey}
-                  param={def}
-                  value={value}
-                  onChange={(v) => { if (!locked) onParamChange(def.idx, v); }}
-                  pedalName={effectName}
-                />
-              );
-            }
-            return (
-              <PedalKnob
-                key={defKey}
-                param={def}
-                value={value}
-                onChange={(v) => { if (!locked) onParamChange(def.idx, v); }}
-                knobStyle={spec.knob}
-                ink={knobInk}
-                arc={skinned}
-                pedalName={effectName}
-                synced={isKnobSynced(slot.effectId, def, slot.params)}
-              />
-            );
-          }
-          if (def.type === 'switch') {
-            return (
-              <MiniSwitch
-                key={defKey}
-                param={def}
-                value={value}
-                onChange={(v) => { if (!locked) onParamChange(def.idx, v); }}
-                pedalName={effectName}
-              />
-            );
-          }
-          return (
-            <ComboSelect
-              key={defKey}
-              param={def}
-              value={value}
-              onChange={(v) => { if (!locked) onParamChange(def.idx, v); }}
-              pedalName={effectName}
-            />
-          );
-        })}
+        <PedalControls
+          slot={slot}
+          effectName={effectName}
+          spec={spec}
+          knobInk={knobInk}
+          onParamChange={onParamChange}
+          locked={locked}
+          arc={skinned}
+          bars={useBars}
+          faders={useFaders}
+        />
       </div>
 
       <span className={`p-led${slot.enabled ? ' on' : ''}`} />

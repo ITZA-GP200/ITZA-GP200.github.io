@@ -641,3 +641,127 @@
   gap: 9px 0;
   align-content: flex-start;
 }
+
+/* ── the whole card drags, wherever the hand shows ──
+   The skin gives .controls flex: 1, so most of a card's empty space is inside
+   it — and .controls carries upstream's dragstart guard (it must, or turning a
+   knob would drag the pedal). The cursor said "grab" over space that refused
+   to be grabbed.
+
+   pointer-events: none lets that empty space fall through to the article,
+   which is the draggable element; the controls themselves take their events
+   back, so knobs, switches and selectors are untouched. */
+.board-view[data-skin='itza'] .pedal.pk .controls {
+  pointer-events: none;
+}
+.board-view[data-skin='itza'] .pedal.pk .controls > * {
+  pointer-events: auto;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   The phone shell wears the same skin.
+
+   Tapping a card opens its controls in place rather than pushing a second
+   screen, so the thing you tapped stays where it was and the chain stays on
+   screen around it.
+   ════════════════════════════════════════════════════════════════════════ */
+.m-pedal-card.m-pk {
+  background: #232326;
+  border: 1px solid var(--key);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--key) 20%, transparent),
+              0 0 20px -8px var(--key);
+  flex-wrap: wrap;
+}
+.m-pedal-card.m-pk.bypassed {
+  background: #141416;
+  border-color: #34343a;
+  box-shadow: none;
+}
+.m-pedal-card.m-pk::before,
+.m-pedal-card.m-pk::after {
+  display: none; /* gloss and scrim: the card says it its own way */
+}
+.m-pedal-card.m-pk .m-card-thumb,
+.m-pedal-card.m-pk .m-card-led {
+  display: none;
+}
+.m-pedal-card.m-pk .m-card-name {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.m-pedal-card.m-pk .m-card-module {
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  color: #8e8e96;
+  background: none;
+  border: none;
+  padding: 0;
+}
+.m-pedal-card.m-pk .m-card-summary {
+  font-size: 13px;
+  color: #8e8e96;
+}
+.m-pedal-card.m-pk.bypassed .m-card-module,
+.m-pedal-card.m-pk.bypassed .m-card-summary {
+  color: #6e6e76;
+}
+
+/* The caret says the card opens, and which way it is facing. */
+.m-pedal-card.m-pk .m-card-caret {
+  display: inline-flex;
+  align-items: center;
+  width: 22px;
+  height: 22px;
+  color: #8e8e96;
+  transition: transform 0.16s ease;
+}
+.m-pedal-card.m-pk .m-card-caret svg {
+  width: 22px;
+  height: 22px;
+}
+.m-pedal-card.m-pk.expanded .m-card-caret {
+  transform: rotate(180deg);
+  color: var(--key);
+}
+
+/* The controls take the full width of the card, under its head. */
+.m-pedal-card.m-pk .m-card-controls {
+  flex: 0 0 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 10px;
+  justify-content: center;
+  align-content: flex-start;
+  margin-top: 12px;
+  padding-top: 14px;
+  border-top: 1px solid #2f2f34;
+}
+.m-pedal-card.m-pk .m-card-controls .knob {
+  width: 72px;
+  color: var(--key);
+  --knob-glow: color-mix(in srgb, var(--key) 62%, transparent);
+  --knob-glow-soft: color-mix(in srgb, var(--key) 30%, transparent);
+}
+.m-pedal-card.m-pk .m-card-controls .knob svg {
+  width: 70px;
+  height: 70px;
+}
+.m-pedal-card.m-pk .m-card-controls .knob .k-value {
+  display: none;
+}
+.m-pedal-card.m-pk .m-card-controls .k-label {
+  font-size: 14px;
+  color: #8e8e96;
+  white-space: normal;
+  line-height: 1.15;
+  text-align: center;
+  max-width: 72px;
+}
+.m-pedal-card.m-pk .m-card-controls .pbar {
+  flex: 0 0 100%;
+}
+.m-pedal-card.m-pk.bypassed .m-card-controls {
+  opacity: 0.5;
+  filter: grayscale(1);
+}

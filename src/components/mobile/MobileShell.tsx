@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PedalBoardProps } from '@/components/board/PedalBoard';
+// The phone shell is a separate tree from the board, so it loads the skin
+// itself; CSS is global once imported either way.
+import '@/components/board/skin-itza.css';
 import { usePedalManifest } from '@/components/board/pedalManifest';
 import { LooperPanel } from '@/components/board/LooperPanel';
 import { DrumsPanel } from '@/components/board/DrumsPanel';
@@ -118,6 +121,9 @@ export default function MobileShell({
   onPushRequest,
   pushProgress,
   firmware,
+  boardSkin = {},
+  boardStyle = 'dial',
+  onBlockSkinChange,
 }: PedalBoardProps) {
   const [tab, setTab] = useState<MobileTab>('chain');
   const [sheet, setSheet] = useState<Sheet>(null);
@@ -223,6 +229,10 @@ export default function MobileShell({
             onMove={onMove}
             onOpenSlot={setEditingIndex}
             onOpenFxLoop={() => openSheet('fxloop')}
+            skinned={Boolean(onBlockSkinChange)}
+            boardSkin={boardSkin}
+            boardStyle={boardStyle}
+            onParamChange={onParamChange}
           />
         )}
 

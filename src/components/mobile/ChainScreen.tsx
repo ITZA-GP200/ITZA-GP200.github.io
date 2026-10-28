@@ -1,10 +1,11 @@
-import { useRef, type RefObject } from 'react';
+import { useState, useRef, type RefObject } from 'react';
 import type { GP200Preset } from '@/core/types';
 import type { ManifestIndex } from '@/components/board/pedalManifest';
 import { lookupPedalArt } from '@/components/board/pedalManifest';
 import { displayPosition, useDragReorder } from '@/hooks/useDragReorder';
 import { ChainRow } from './ChainRow';
 import { ChainCable } from './ChainCable';
+import { blockSkin, styleFor, type BoardSkin, type ControlStyle } from '@/core/boardSkin';
 
 interface ChainScreenProps {
   preset: GP200Preset;
@@ -15,6 +16,11 @@ interface ChainScreenProps {
   onMove: (from: number, to: number) => void;
   onOpenSlot: (index: number) => void;
   onOpenFxLoop: () => void;
+  /* ── ITZA skin (fork) ────────────────────────────────────────────────── */
+  skinned?: boolean;
+  boardSkin?: BoardSkin;
+  boardStyle?: ControlStyle;
+  onParamChange?: (slotIndex: number, effectId: number, paramIndex: number, value: number) => void;
 }
 
 /**
@@ -38,7 +44,14 @@ export function ChainScreen({
   onMove,
   onOpenSlot,
   onOpenFxLoop,
+  skinned = false,
+  boardSkin = {},
+  boardStyle = 'dial',
+  onParamChange,
 }: ChainScreenProps) {
+  // Which cards have their controls open, by block position so the set
+  // survives a reorder.
+  const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
   const listRef = useRef<HTMLUListElement>(null);
   const chain = preset.effects;
 
@@ -68,6 +81,19 @@ export function ChainScreen({
         {chain.map((slot, position) => (
           <li key={slot.slotIndex} className="m-row-wrap">
             <ChainRow
+              skinned={skinned}
+              blockSkin={blockSkin(boardSkin, slot.slotIndex)}
+              controlStyle={styleFor(boardSkin, slot.slotIndex, boardStyle)}
+              expanded={expanded.has(slot.slotIndex)}
+              onToggleExpand={() => setExpanded((open) => {
+                const next = new Set(open);
+                if (!next.delete(slot.slotIndex)) next.add(slot.slotIndex);
+                return next;
+              })}
+              onParamChange={
+                onParamChange && ((paramIdx, value) =>
+                  onParamChange(slot.slotIndex, slot.effectId, paramIdx, value))
+              }
               slot={slot}
               index={position}
               displayIndex={displayPosition(position, drag.from, drag.target)}

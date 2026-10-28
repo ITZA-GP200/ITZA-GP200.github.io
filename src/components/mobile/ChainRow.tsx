@@ -7,6 +7,8 @@ import { getBodySpec } from '@/components/board/boardPalette';
 import { formatValue } from '@/components/board/paramValue';
 import type { PedalArtEntry } from '@/components/board/pedalManifest';
 import { PedalArt } from './PedalArt';
+import { PedalControls } from '@/components/board/PedalControls';
+import { DEFAULT_KEY, type BlockSkin, type ControlStyle } from '@/core/boardSkin';
 
 interface ChainRowProps {
   slot: EffectSlot;
@@ -24,6 +26,15 @@ interface ChainRowProps {
   onDragHandleDown: (index: number, e: PointerEvent) => void;
   /** true while this row is the one being dragged */
   dragging: boolean;
+  /* ── ITZA skin (fork) ────────────────────────────────────────────────── */
+  /** Draw as an ITZA card, with its controls opening in place. */
+  skinned?: boolean;
+  blockSkin?: BlockSkin;
+  controlStyle?: ControlStyle;
+  /** Controls are showing below the card's head. */
+  expanded?: boolean;
+  onToggleExpand?: () => void;
+  onParamChange?: (paramIdx: number, value: number) => void;
 }
 
 /** The first two knob params, as "Drive 62 · Tone 40" , a glance-level summary. */
@@ -60,6 +71,12 @@ export function ChainRow({
   onMove,
   onDragHandleDown,
   dragging,
+  skinned = false,
+  blockSkin = {},
+  controlStyle = 'dial',
+  expanded = false,
+  onToggleExpand,
+  onParamChange,
 }: ChainRowProps) {
   const effectName = getEffectName(slot.effectId);
   // module identity is the physical block, never the effectId (slot 5 is always CAB)
@@ -67,7 +84,11 @@ export function ChainRow({
   const spec = art?.colors ?? getBodySpec(moduleName);
   const summary = summarize(slot.effectId, slot.params);
 
+  const locked = skinned && blockSkin.locked === true;
+  const keyColor = blockSkin.color ?? DEFAULT_KEY[moduleName] ?? spec.body;
+
   const vars = {
+    ...(skinned ? { '--key': keyColor } : {}),
     '--body': spec.body,
     '--body-deep': spec.bodyDeep,
     '--ink': spec.ink,
@@ -90,7 +111,8 @@ export function ChainRow({
     // data-drag-row sits on the card, not the <li> that wraps it: the card is
     // what GSAP transforms, and the cable in the gap below has to stay put.
     <div
-      className={`m-pedal-card${slot.enabled ? '' : ' bypassed'}${dragging ? ' dragging' : ''}`}
+      className={`m-pedal-card${slot.enabled ? '' : ' bypassed'}${dragging ? ' dragging' : ''}`
+        + `${skinned ? ' m-pk' : ''}${expanded ? ' expanded' : ''}`}
       style={vars}
       data-drag-row=""
     >
@@ -104,7 +126,14 @@ export function ChainRow({
         <span className="m-grip-dots" aria-hidden="true" />
       </button>
 
-      <button type="button" className="m-card-main" onClick={onOpen}>
+      {/* Skinned, the body opens the controls in place rather than pushing a
+          second screen: the thing you tapped stays where it was. */}
+      <button
+        type="button"
+        className="m-card-main"
+        aria-expanded={skinned ? expanded : undefined}
+        onClick={skinned && onToggleExpand ? onToggleExpand : onOpen}
+      >
         <span className="m-card-pos">{displayIndex + 1}</span>
         {/* Fixed box, so eleven cards of wildly different shapes — a tall
             stompbox, a wide amp head — still line up as one list. The artwork
@@ -114,13 +143,23 @@ export function ChainRow({
             most of the column on a 320px screen — "Green OD" came out as
             "Gr…" — and the chip pairs more naturally with the values anyway. */}
         <span className="m-card-text">
-          <span className="m-card-name">{effectName}</span>
+          <span className="m-card-name" style={skinned ? { color: keyColor } : undefined}>
+            {effectName}
+          </span>
           <span className="m-card-bottom">
             <span className="m-card-module">{moduleName}</span>
             {summary && <span className="m-card-summary">{summary}</span>}
           </span>
         </span>
       </button>
+
+      {skinned && (
+        <span className="m-card-caret" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </span>
+      )}
 
       <span className="m-card-led" aria-hidden="true" />
 
@@ -134,6 +173,21 @@ export function ChainRow({
       >
         <span className="m-switch-knob" aria-hidden="true" />
       </button>
+
+      {skinned && expanded && onParamChange && (
+        <div className="m-card-controls">
+          <PedalControls
+            slot={slot}
+            effectName={effectName}
+            spec={spec}
+            knobInk={spec.ink}
+            onParamChange={onParamChange}
+            locked={locked}
+            arc
+            bars={controlStyle === 'bar'}
+          />
+        </div>
+      )}
     </div>
   );
 }
