@@ -164,7 +164,7 @@
 }
 .board-view[data-skin='itza'] .pedal.pk .treadle::after,
 .board-view[data-skin='itza'] .pedal.pk .stomp-round::after {
-  content: 'ON';
+  content: 'ACTIVE';
 }
 .board-view[data-skin='itza'] .pedal.pk.bypassed .treadle,
 .board-view[data-skin='itza'] .pedal.pk.bypassed .stomp-round {
@@ -553,4 +553,52 @@
    Its signal goes to the › OUT badge, which already says so. */
 .board-view[data-skin='itza'] .board-row:last-of-type .pedal-bay:last-of-type .pedal.pk::before {
   display: none;
+}
+
+/* ── dials above, switches below ──
+   Mixed in one wrapping row, a switch could land beside a dial and get
+   stretched to the dial's height — ROOM's TRAIL read as a bare word with its
+   toggle lost in the space. The zero-height ::after is a flex line break:
+   everything at order 0 (the dials) fills the first rows, the break forces a
+   new line, and the switches and selectors follow at order 2. */
+.board-view[data-skin='itza'] .pedal.pk .controls::after {
+  content: '';
+  order: 1;
+  flex: 0 0 100%;
+  height: 0;
+}
+.board-view[data-skin='itza'] .pedal.pk .mini-switch,
+.board-view[data-skin='itza'] .pedal.pk .combo-select {
+  order: 2;
+  align-self: flex-start;
+}
+
+/* ── the state button reacts to the hand ──
+   Up a touch under the pointer, past its own size on the press, back on the
+   way out. transform only, so nothing reflows. */
+.board-view[data-skin='itza'] .pedal.pk .treadle,
+.board-view[data-skin='itza'] .pedal.pk .stomp-round {
+  transition: transform 0.14s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.1s ease;
+  transform-origin: center;
+}
+.board-view[data-skin='itza'] .pedal.pk .treadle:hover,
+.board-view[data-skin='itza'] .pedal.pk .stomp-round:hover {
+  transform: scale(1.03);
+}
+.board-view[data-skin='itza'] .pedal.pk .treadle:active,
+.board-view[data-skin='itza'] .pedal.pk .stomp-round:active {
+  transform: scale(0.965);
+  transition-duration: 0.06s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .board-view[data-skin='itza'] .pedal.pk .treadle,
+  .board-view[data-skin='itza'] .pedal.pk .stomp-round {
+    transition: none;
+  }
+  .board-view[data-skin='itza'] .pedal.pk .treadle:hover,
+  .board-view[data-skin='itza'] .pedal.pk .stomp-round:hover,
+  .board-view[data-skin='itza'] .pedal.pk .treadle:active,
+  .board-view[data-skin='itza'] .pedal.pk .stomp-round:active {
+    transform: none;
+  }
 }

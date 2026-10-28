@@ -264,7 +264,17 @@ export function PedalKnob({
               strokeDasharray={`${(ARC_LEN * knobPct(value, param)).toFixed(2)} ${CIRCUMFERENCE.toFixed(2)}`}
               transform="rotate(135 50 50)"
             />
-            <text x={50} y={57} textAnchor="middle" fill="#f0f0f3" fontSize={25} fontWeight={500}>
+            {/* Long readings have to fit inside the arc: a cab's high cut is
+                "20001", a synced delay "1/8.". Step the size down by length
+                rather than letting it spill over the ring. */}
+            <text
+              x={50}
+              y={57}
+              textAnchor="middle"
+              fill="#f0f0f3"
+              fontWeight={500}
+              fontSize={readout.length > 5 ? 15 : readout.length > 4 ? 18 : readout.length > 3 ? 21 : 25}
+            >
               {readout}
             </text>
           </>
