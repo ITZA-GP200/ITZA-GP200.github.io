@@ -53,7 +53,24 @@ export function PedalSkinTools({
 }: PedalSkinToolsProps) {
   const [picking, setPicking] = useState(false);
   const wrap = useRef<HTMLSpanElement>(null);
+  const lumInput = useRef<HTMLInputElement>(null);
   const locked = skin.locked === true;
+
+  // The wheel turns the brightness, as it turns every other control in this
+  // skin. It has to be a native non-passive listener: React's onWheel is
+  // registered passively, so preventDefault there is ignored and the popover
+  // scrolls out from under the pointer instead.
+  useEffect(() => {
+    const el = lumInput.current;
+    if (!el || !onLabelLumChange) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const step = e.shiftKey ? 1 : 3;
+      onLabelLumChange(labelLum + (e.deltaY < 0 ? step : -step));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [labelLum, onLabelLumChange, picking]);
 
   // Close the palette on an outside click or Escape, like any other popover.
   useEffect(() => {
@@ -73,20 +90,7 @@ export function PedalSkinTools({
   }, [picking]);
 
   return (
-    <span
-      className="pk-tools"
-      ref={wrap}
-      /* The board's pedal is a `draggable` <article>, so pressing and moving
-         anywhere inside it starts a reorder drag — including on the slider,
-         whose whole gesture is press and move. Cancelling dragstart here lets
-         these controls keep the pointer; the card still drags by any of the
-         surface around them. */
-      draggable={false}
-      onDragStart={(e) => {
-        e.preventDefault();
-        e.stopPropagation();
-      }}
-    >
+    <span className="pk-tools" ref={wrap}>
       <button
         type="button"
         className="pk-swatch"
@@ -124,6 +128,7 @@ export function PedalSkinTools({
             <label className="pk-lum">
               <span className="pk-lum-label">LABEL BRIGHTNESS · ALL PEDALS</span>
               <input
+                ref={lumInput}
                 type="range"
                 min={LABEL_LUM_MIN}
                 max={LABEL_LUM_MAX}

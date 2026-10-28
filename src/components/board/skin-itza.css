@@ -638,38 +638,43 @@
 /* ── bars ──
    The track is the parameter's whole range, the lit part is the value in it.
    A readout you can grab, not a slider: no cap, nothing to aim at. Full width
-   of the card so a row of them reads as a list. */
-.board-view[data-skin='itza'] .pedal.pk .pbar {
+   of the card so a row of them reads as a list.
+
+   Unprefixed on purpose: PedalBar is only ever rendered with `bars`, which
+   only this skin turns on, and the board and the phone card must show the
+   same bar. Scoping it to .board-view is what left the phone with three
+   unstyled lines of text where the bars should have been. */
+.pbar {
   flex: 0 0 100%;
   cursor: ns-resize;
   touch-action: none;
   user-select: none;
   padding: 1px 0;
 }
-.board-view[data-skin='itza'] .pedal.pk .pbar:focus-visible {
+.pbar:focus-visible {
   outline: 2px solid var(--key);
   outline-offset: 3px;
   border-radius: 3px;
 }
-.board-view[data-skin='itza'] .pedal.pk .pb-head {
+.pb-head {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   gap: 8px;
   font-size: 15px;
 }
-.board-view[data-skin='itza'] .pedal.pk .pb-name {
+.pb-name {
   color: var(--pk-label);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.board-view[data-skin='itza'] .pedal.pk .pb-value {
+.pb-value {
   color: #f0f0f3;
   font-weight: 500;
   flex: none;
 }
-.board-view[data-skin='itza'] .pedal.pk .pb-track {
+.pb-track {
   display: block;
   height: 8px;
   margin-top: 5px;
@@ -677,14 +682,14 @@
   background: #2f2f34;
   overflow: hidden;
 }
-.board-view[data-skin='itza'] .pedal.pk .pb-fill {
+.pb-fill {
   display: block;
   height: 100%;
   border-radius: 2px;
   background: var(--key);
   transition: width 0.06s linear;
 }
-.board-view[data-skin='itza'] .pedal.pk .pbar.dragging .pb-fill {
+.pbar.dragging .pb-fill {
   transition: none;
 }
 /* Bars fill the card, so they stack rather than wrap into columns. */
@@ -912,12 +917,12 @@
   top: 26px;
   right: -6px;
   z-index: 30;
-  width: 50vw;
-  max-width: 50vw;
+  width: 40vw;
+  max-width: 40vw;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  padding: 11px;
+  gap: 7px;
+  padding: 9px;
   border-radius: 10px;
   background: #1b1b1e;
   border: 1px solid #3a3a42;
@@ -933,6 +938,18 @@
 }
 .mobile-view .m-pedal-card.m-pk .pk-chip.picked {
   box-shadow: 0 0 0 2px #1b1b1e, 0 0 0 3px #f0f0f3;
+}
+
+/* ── the open palette wins the stack ──
+   Each card's flow chevron is its own ::after hanging below it, and a card
+   later in the list paints over one earlier in it. The palette lives inside
+   the card it belongs to, so the next two cards' chevrons were landing on top
+   of the colours. Lift the whole row while it is open — the chevrons still
+   paint normally everywhere else. */
+.mobile-view .m-row-wrap:has(.pk-palette),
+.mobile-view .m-pedal-card.m-pk:has(.pk-palette) {
+  position: relative;
+  z-index: 40;
 }
 
 /* ── one visual row ──
@@ -1004,6 +1021,16 @@
 }
 .mobile-view .m-pedal-card.m-pk .m-card-controls .pbar {
   flex: 0 0 100%;
+  font-size: 15px;
+}
+/* Bars fill the card, so they stack rather than wrap into columns — and
+   because they run the full width of what contains them, the inset has to
+   come from here. Even on all four sides: a bar that reaches the card's
+   border reads as part of the border. */
+.mobile-view .m-pedal-card.m-pk .m-card-controls:has(.pbar) {
+  gap: 12px 0;
+  align-content: flex-start;
+  padding: 16px;
 }
 .mobile-view .m-pedal-card.m-pk.bypassed .m-card-controls {
   opacity: 0.5;

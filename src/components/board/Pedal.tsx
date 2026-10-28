@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react';
+import { useRef, useState, type CSSProperties } from 'react';
 import type { EffectSlot } from '@/core/types';
 import { getEffectName, getSlotModule } from '@/core/effectNames';
 import { EFFECT_DESCRIPTIONS } from '@/core/effectDescriptions';
@@ -100,6 +100,8 @@ export function Pedal({
   // A locked block's style and values are frozen; its position and its on/off
   // switch deliberately are not.
   const locked = skinned && blockSkin.locked === true;
+  /** whether the press that may become a drag started on the tool cluster */
+  const pressedInTools = useRef(false);
   const keyColor = blockSkin.color ?? DEFAULT_KEY[moduleName] ?? spec.body;
 
   const bodyVars = {
@@ -141,7 +143,22 @@ export function Pedal({
       data-chain={index}
       data-flip-id={`pedal-${slot.slotIndex}`}
       draggable
+      /* HTML5 drag fires `dragstart` on the DRAGGABLE element — this article —
+         not on whatever the pointer actually went down on. So a guard placed
+         on the inner control never runs, and press-and-slide on the brightness
+         slider reordered the pedal instead of moving the thumb. Record where
+         the press landed on the way down, and refuse the drag if it was inside
+         the tool cluster. */
+      onPointerDownCapture={(e) => {
+        pressedInTools.current = Boolean(
+          (e.target as HTMLElement).closest?.('.pk-tools'),
+        );
+      }}
       onDragStart={(e) => {
+        if (pressedInTools.current) {
+          e.preventDefault();
+          return;
+        }
         e.dataTransfer.effectAllowed = 'move';
         // Required: a dragstart that sets no data lets the browser abort the drag
         // outright, after this handler has already set dragIndex. Nothing then
