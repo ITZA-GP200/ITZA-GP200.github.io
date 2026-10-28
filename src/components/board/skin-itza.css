@@ -22,6 +22,26 @@
   display: none;
 }
 
+/* ── one grey, one slider ──
+   Labels, module chips, chain numbers, value names, info chips and tool icons
+   were drawn in four different greys that were all trying to be the same
+   thing. They are now one colour at one lightness, and --pk-label-l — set on
+   .board-view and .mobile-view from the colour popover's Label Brightness
+   slider — is the only thing that moves.
+
+   A bypassed card uses the same hue a step down rather than a second hard
+   coded grey, so it tracks the slider too and can never cross the lit value.
+   The floor keeps it legible at the bottom of the slider's range.
+
+   Hairlines and surfaces are deliberately NOT in here: they are structure,
+   not ink, and a 1px divider at label brightness reads as a drawn box rather
+   than an edge. */
+.board-view[data-skin='itza'],
+.mobile-view {
+  --pk-label: hsl(240 4% var(--pk-label-l, 57%));
+  --pk-label-dim: hsl(240 4% max(20%, calc(var(--pk-label-l, 57%) - 13%)));
+}
+
 /* ── the card ──
    Uniform width, flat surface, key colour on the border. The glow is a tight
    ring plus a short shadow: eleven soft halos at once read as fog. */
@@ -75,7 +95,7 @@
   color: var(--key);
 }
 .board-view[data-skin='itza'] .pedal.pk.bypassed .module-chip {
-  color: #6e6e76;
+  color: var(--pk-label-dim);
 }
 .board-view[data-skin='itza'] .pedal.pk .chain-num {
   position: static;
@@ -86,7 +106,7 @@
   margin-right: 7px;
   font-size: 16px;
   letter-spacing: 0.14em;
-  color: #6e6e76;
+  color: var(--pk-label);
 }
 .board-view[data-skin='itza'] .pedal.pk .info-chip {
   position: absolute;
@@ -170,7 +190,7 @@
 .board-view[data-skin='itza'] .pedal.pk.bypassed .stomp-round {
   background: #19191b;
   border-color: #2f2f34;
-  color: #636369;
+  color: var(--pk-label-dim);
 }
 .board-view[data-skin='itza'] .pedal.pk.bypassed .treadle::after,
 .board-view[data-skin='itza'] .pedal.pk.bypassed .stomp-round::after {
@@ -209,7 +229,7 @@
   justify-content: center;
   background: none;
   border: none;
-  color: #6e6e76;
+  color: var(--pk-label);
   cursor: pointer;
 }
 .board-view[data-skin='itza'] .pk-tool svg {
@@ -223,7 +243,7 @@
 }
 .board-view[data-skin='itza'] .pedal.pk.bypassed .pk-swatch,
 .board-view[data-skin='itza'] .pedal.pk.bypassed .pk-tool {
-  color: #6e6e76 !important;
+  color: var(--pk-label-dim) !important;
 }
 
 /* ── the key-colour palette ── */
@@ -262,6 +282,37 @@
 .pk-style .deck-btn.pk-on {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* ── Label Brightness ──
+   Sits under the sixteen chips, spanning the palette's full width. A native
+   range, so it drags, takes arrow keys and works under a thumb on the phone
+   without a line of pointer handling; accent-color (set inline to the block's
+   key colour) paints the track and the thumb in every current browser. */
+.pk-lum {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 9px;
+  border-top: 1px solid #2f2f34;
+}
+.pk-lum-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--pk-label);
+}
+.pk-lum input[type='range'] {
+  width: 100%;
+  height: 18px;
+  margin: 0;
+  cursor: pointer;
+}
+.pk-chip:disabled {
+  opacity: 0.3;
+  cursor: default;
 }
 
 /* ── card layout ──
@@ -305,7 +356,7 @@
 }
 .board-view[data-skin='itza'] .pedal.pk .k-label {
   font-size: 14px;
-  color: #8e8e96;
+  color: var(--pk-label);
   white-space: normal;
   line-height: 1.15;
   text-align: center;
@@ -528,7 +579,7 @@
   border-radius: 0;
   font-size: 13px;
   line-height: 1;
-  color: #6e6e76;
+  color: var(--pk-label);
   box-shadow: none;
 }
 .board-view[data-skin='itza'] .pedal.pk .info-chip.pinned {
@@ -608,7 +659,7 @@
   font-size: 15px;
 }
 .board-view[data-skin='itza'] .pedal.pk .pb-name {
-  color: #a8a8b0;
+  color: var(--pk-label);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -721,21 +772,36 @@
   font-weight: 800;
   letter-spacing: 0.02em;
 }
+/* The chain position reads as part of the chip line, not as a second label:
+   same size and tracking as the module beside it, one grey. */
+.mobile-view .m-pedal-card.m-pk .m-card-pos {
+  flex: none;
+  align-self: auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  opacity: 1;
+  color: var(--pk-label);
+}
+.mobile-view .m-pedal-card.m-pk.bypassed .m-card-pos {
+  color: var(--pk-label-dim);
+}
 .mobile-view .m-pedal-card.m-pk .m-card-module {
   font-size: 13px;
   letter-spacing: 0.12em;
-  color: #8e8e96;
+  color: var(--pk-label);
   background: none;
   border: none;
   padding: 0;
 }
 .mobile-view .m-pedal-card.m-pk .m-card-summary {
   font-size: 13px;
-  color: #8e8e96;
+  color: var(--pk-label);
 }
 .mobile-view .m-pedal-card.m-pk.bypassed .m-card-module,
 .mobile-view .m-pedal-card.m-pk.bypassed .m-card-summary {
-  color: #6e6e76;
+  color: var(--pk-label-dim);
 }
 
 /* ── the two handles ──
@@ -753,7 +819,7 @@
   background: none;
   border: none;
   border-left: 1px solid #2f2f34;
-  color: #8e8e96;
+  color: var(--pk-label);
   cursor: pointer;
 }
 .mobile-view .m-pedal-card.m-pk .m-expand svg {
@@ -767,7 +833,7 @@
   color: var(--key);
 }
 .mobile-view .m-pedal-card.m-pk.bypassed .m-expand {
-  color: #6e6e76;
+  color: var(--pk-label-dim);
 }
 .mobile-view .m-pedal-card.m-pk.expanded .m-expand svg {
   transform: rotate(180deg);
@@ -776,7 +842,7 @@
 /* The grip reads the same on every card: the enclosure ink it used to borrow
    varies per effect, so some were nearly invisible on a dark card. */
 .mobile-view .m-pedal-card.m-pk .m-grip-dots {
-  color: #8e8e96;
+  color: var(--pk-label);
   opacity: 1;
 }
 
@@ -784,6 +850,122 @@
 .mobile-view .m-pedal-card.m-pk .m-switch.on {
   background: var(--key);
   border-color: var(--key);
+}
+
+/* ── the per-block tools on a phone card ──
+   The same three controls as the board's header, but in the flow of the card's
+   head rather than absolutely placed in a corner: a phone card has one row to
+   work with, and the swatch/style/lock cluster shares it with the switch. */
+.mobile-view .m-pedal-card.m-pk .pk-tools {
+  position: relative;
+  z-index: 2;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-right: 9px;
+}
+.mobile-view .m-pedal-card.m-pk .pk-swatch {
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border-radius: 3px;
+  background: none;
+  border: 1.5px solid currentColor;
+  cursor: pointer;
+}
+.mobile-view .m-pedal-card.m-pk .pk-tool {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--pk-label);
+  cursor: pointer;
+}
+.mobile-view .m-pedal-card.m-pk .pk-tool svg {
+  width: 19px;
+  height: 19px;
+}
+.mobile-view .m-pedal-card.m-pk .pk-swatch:disabled,
+.mobile-view .m-pedal-card.m-pk .pk-tool:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.mobile-view .m-pedal-card.m-pk.bypassed .pk-swatch,
+.mobile-view .m-pedal-card.m-pk.bypassed .pk-tool {
+  color: var(--pk-label-dim) !important;
+}
+/* The palette hangs off the cluster rather than the card, so it opens under
+   the swatch that summoned it and never over the card's own name.
+
+   Half the viewport, all sixteen colours: the board's 26px chips are sized by
+   a .board-view rule that never reaches the phone, which left these as bare
+   unsized buttons in a column a few pixels wide. Here the grid sets the size
+   and the chips simply fill their cells, so the palette scales with the
+   screen instead of being measured twice. */
+.mobile-view .m-pedal-card.m-pk .pk-palette {
+  position: absolute;
+  top: 26px;
+  right: -6px;
+  z-index: 30;
+  width: 50vw;
+  max-width: 50vw;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  padding: 11px;
+  border-radius: 10px;
+  background: #1b1b1e;
+  border: 1px solid #3a3a42;
+  box-shadow: 0 10px 28px -8px rgba(0, 0, 0, 0.8);
+}
+.mobile-view .m-pedal-card.m-pk .pk-chip {
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+}
+.mobile-view .m-pedal-card.m-pk .pk-chip.picked {
+  box-shadow: 0 0 0 2px #1b1b1e, 0 0 0 3px #f0f0f3;
+}
+
+/* ── one visual row ──
+   The head's right-hand cluster lines up with the NAME, not with the card's
+   full height: the module chip and the value summary sit on a second line, and
+   centring the switch over both left it floating between the two. The name
+   gets a fixed line box so the offsets below are arithmetic, not a guess
+   (.m-card-main's 8px top padding + half of 24px). */
+.mobile-view .m-pedal-card.m-pk .m-card-name {
+  line-height: 24px;
+}
+.mobile-view .m-pedal-card.m-pk .pk-tools,
+.mobile-view .m-pedal-card.m-pk .m-switch {
+  align-self: flex-start;
+  margin-top: 10px;
+}
+
+/* 30% off the stock paddle. The phone card carries a name, a chain number, a
+   grip and a caret in one row, and at 48px the switch was the loudest thing
+   on it; the thumb target is still comfortably over the 24px minimum. */
+.mobile-view .m-pedal-card.m-pk .m-switch {
+  width: 34px;
+  height: 20px;
+  margin-right: 8px;
+}
+.mobile-view .m-pedal-card.m-pk .m-switch-knob {
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+}
+.mobile-view .m-pedal-card.m-pk .m-switch.on .m-switch-knob {
+  transform: translateX(14px);
 }
 
 /* The controls take the full width of the card, under its head. */
@@ -796,6 +978,7 @@
   align-content: flex-start;
   margin-top: 12px;
   padding-top: 14px;
+  padding-bottom: 30px;
   border-top: 1px solid #2f2f34;
 }
 .mobile-view .m-pedal-card.m-pk .m-card-controls .knob {
@@ -813,7 +996,7 @@
 }
 .mobile-view .m-pedal-card.m-pk .m-card-controls .k-label {
   font-size: 14px;
-  color: #8e8e96;
+  color: var(--pk-label);
   white-space: normal;
   line-height: 1.15;
   text-align: center;
@@ -827,10 +1010,40 @@
   filter: grayscale(1);
 }
 
+/* ── the tab bar's sixth button ──
+   The board-wide style switch has no home on a phone: there is no app bar.
+   It rides at the end of the tab bar, which means six columns, not five. */
+.mobile-view .m-tabbar.m-pk-bar {
+  grid-template-columns: repeat(6, 1fr);
+}
+.mobile-view .m-tabbar .m-tab-all {
+  color: var(--pk-label);
+}
+
+/* ── IN and OUT ──
+   They label the ends of the run; a full-width dashed box across the column
+   read as a container the chain sat inside. Shrink to the text and centre, so
+   they sit on the signal path the chevrons draw. */
+.m-list.m-pk-chain .m-marker:not(.fx) {
+  width: auto;
+  align-self: center;
+  padding: 0 18px;
+}
+
 /* The cable goes with the enclosures; the chevron says the same thing. */
 .m-list.m-pk-chain .m-cable {
   display: none;
 }
 .m-list.m-pk-chain .m-row-wrap {
   margin-bottom: 22px;
+}
+
+/* An FX marker lives inside the row-wrap of the block before it, so the gap
+   above it was the wrap's own 6px while the gap below the last marker was that
+   plus the wrap's 22px margin — the send looked stuck to the card above it.
+   Pay the 22px here too so the pair sits evenly in the run, with room for the
+   card's chevron to hang into. */
+.m-list.m-pk-chain .m-pedal-card + .m-marker.fx,
+.m-list.m-pk-chain .m-cable + .m-marker.fx {
+  margin-top: 22px;
 }

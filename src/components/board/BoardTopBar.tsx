@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { BarsIcon, DialIcon } from './StyleIcons';
 import type { PushProgress } from '@/core/devicePush';
 import { SysExCodec } from '@/core/SysExCodec';
 import { tunerShow, type CCCommand } from '@/core/ccControl';
@@ -218,9 +219,7 @@ export function BoardTopBar({
               aria-label="Dials on every pedal"
               onClick={() => onBoardStyleChange('dial')}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                <circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="2.5" /><path d="M12 5v3" />
-              </svg>
+              <DialIcon />
             </button>
             <button
               type="button"
@@ -230,9 +229,7 @@ export function BoardTopBar({
               aria-label="Bars on every pedal"
               onClick={() => onBoardStyleChange('bar')}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                <path d="M4 19V10" /><path d="M10 19V5" /><path d="M16 19v-6" /><path d="M22 19V8" />
-              </svg>
+              <BarsIcon />
             </button>
           </span>
         )}

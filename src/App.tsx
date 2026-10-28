@@ -84,12 +84,15 @@ import { track } from '@/core/analytics';
 import { buildSupportLog, supportLogFilename } from '@/core/supportLog';
 import { loadStubbornValues } from '@/core/stubbornValues';
 import {
+  clampLabelLum,
   clearStyleOverrides,
   isLocked,
   loadBoardSkin,
   loadBoardStyle,
+  loadLabelLum,
   saveBoardSkin,
   saveBoardStyle,
+  saveLabelLum,
   withBlock,
   type BlockSkin,
   type ControlStyle,
@@ -271,6 +274,9 @@ function App() {
   // position and kept across reloads (see core/boardSkin.ts).
   const [boardSkin, setBoardSkin] = useState(loadBoardSkin);
   const [boardStyle, setBoardStyle] = useState<ControlStyle>(loadBoardStyle);
+  // One grey for every label on the board, at this lightness. Board-wide: a
+  // legibility setting, not a per-pedal one.
+  const [labelLum, setLabelLum] = useState<number>(loadLabelLum);
   // PROTECT 64: bank 64 set aside for the app (see core/protectBank.ts).
   const [bank64Protected, setBank64Protected] = useState(loadBankProtected);
   // When the last SAVE 64 in this browser was made (ISO), for RESTORE's menu.
@@ -1493,9 +1499,18 @@ function App() {
     saveBoardStyle(style);
   }
 
+  /** The colour popover's Label Brightness slider: one grey, whole board. */
+  function handleLabelLum(lum: number) {
+    const next = clampLabelLum(lum);
+    setLabelLum(next);
+    saveLabelLum(next);
+  }
+
   const boardProps: PedalBoardProps = {
     boardSkin,
     boardStyle,
+    labelLum,
+    onLabelLumChange: handleLabelLum,
     onBlockSkinChange: handleBlockSkinChange,
     onBoardStyleChange: handleBoardStyle,
     preset: preset,

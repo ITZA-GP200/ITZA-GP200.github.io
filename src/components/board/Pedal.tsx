@@ -45,6 +45,9 @@ export interface PedalProps {
   /** The style this block renders with, already resolved against the board. */
   controlStyle?: ControlStyle;
   onSkinChange?: (change: BlockSkin) => void;
+  /** Board-wide label grey, as a lightness percentage. */
+  labelLum?: number;
+  onLabelLumChange?: (lum: number) => void;
 }
 
 /** One effect slot rendered as a physical pedal (docs/board-design-system.md). */
@@ -66,6 +69,8 @@ export function Pedal({
   blockSkin = {},
   controlStyle = 'dial',
   onSkinChange,
+  labelLum,
+  onLabelLumChange,
 }: PedalProps) {
   const [dragging, setDragging] = useState(false);
 
@@ -167,6 +172,8 @@ export function Pedal({
           style={controlStyle}
           keyColor={keyColor}
           onChange={onSkinChange}
+          labelLum={labelLum}
+          onLabelLumChange={onLabelLumChange}
         />
       )}
       <button

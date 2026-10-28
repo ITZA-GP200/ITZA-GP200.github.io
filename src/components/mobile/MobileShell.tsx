@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { PedalBoardProps } from '@/components/board/PedalBoard';
 // The phone shell is a separate tree from the board, so it loads the skin
 // itself; CSS is global once imported either way.
 import '@/components/board/skin-itza.css';
 import { EffectPicker } from '@/components/board/EffectPicker';
 import { getSlotModule } from '@/core/effectNames';
+import { keyColorFor, LABEL_LUM_DEFAULT } from '@/core/boardSkin';
 import { usePedalManifest } from '@/components/board/pedalManifest';
 import { LooperPanel } from '@/components/board/LooperPanel';
 import { DrumsPanel } from '@/components/board/DrumsPanel';
@@ -126,6 +127,9 @@ export default function MobileShell({
   boardSkin = {},
   boardStyle = 'dial',
   onBlockSkinChange,
+  onBoardStyleChange,
+  labelLum = LABEL_LUM_DEFAULT,
+  onLabelLumChange,
 }: PedalBoardProps) {
   const [tab, setTab] = useState<MobileTab>('chain');
   // Which block's effect browser is open, from a tap on a chain card. The
@@ -192,7 +196,9 @@ export default function MobileShell({
   const editingSlot = editingIndex === null ? null : preset.effects[editingIndex];
 
   return (
-    <div className="mobile-view">
+    // The board's grey, published once on the shell so every card, chip and
+    // tool icon below derives from it.
+    <div className="mobile-view" style={{ '--pk-label-l': `${labelLum}%` } as CSSProperties}>
       {/* one copy of the cable gradients for every cable on the chain screen */}
       <CableDefs />
 
@@ -239,6 +245,9 @@ export default function MobileShell({
             boardStyle={boardStyle}
             onParamChange={onParamChange}
             onOpenPicker={setPickerSlot}
+            onBlockSkinChange={onBlockSkinChange}
+            labelLum={labelLum}
+            onLabelLumChange={onLabelLumChange}
           />
         )}
 
@@ -341,7 +350,12 @@ export default function MobileShell({
         )}
       </main>
 
-      <MobileTabBar active={tab} onChange={setTab} />
+      <MobileTabBar
+        active={tab}
+        onChange={setTab}
+        boardStyle={boardStyle}
+        onBoardStyleChange={onBoardStyleChange}
+      />
 
       {/* One sheet depth maximum: Dialog locks page scroll, and stacking two
           double-fires the restore. */}
@@ -444,6 +458,9 @@ export default function MobileShell({
             setPickerSlot(null);
           }}
           onClose={() => setPickerSlot(null)}
+          accentOverride={
+            onBlockSkinChange ? keyColorFor(boardSkin, pickerSlot, getSlotModule(pickerSlot)) : undefined
+          }
         />
       )}
     </div>

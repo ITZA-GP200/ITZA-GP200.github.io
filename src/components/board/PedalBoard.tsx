@@ -1,8 +1,24 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type DragEvent,
+} from 'react';
 import type { GP200Preset, EffectSlot } from '@/core/types';
 import type { PushProgress } from '@/core/devicePush';
 import { getSlotModule } from '@/core/effectNames';
-import { blockSkin, styleFor, type BlockSkin, type BoardSkin, type ControlStyle } from '@/core/boardSkin';
+import {
+  blockSkin,
+  keyColorFor,
+  LABEL_LUM_DEFAULT,
+  styleFor,
+  type BlockSkin,
+  type BoardSkin,
+  type ControlStyle,
+} from '@/core/boardSkin';
 import { isWideSlot } from './boardLayout';
 import { useFlipReorder } from './useFlipReorder';
 import { useBoardFit } from './useBoardFit';
@@ -90,6 +106,9 @@ export interface PedalBoardProps {
   boardStyle?: ControlStyle;
   onBlockSkinChange?: (slotIndex: number, change: BlockSkin) => void;
   onBoardStyleChange?: (style: ControlStyle) => void;
+  /** Board-wide label grey, as a lightness percentage. */
+  labelLum?: number;
+  onLabelLumChange?: (lum: number) => void;
   /** FX-loop routing mode: 0 = parallel, 1 = serial. */
   onFxModeChange: (mode: number) => void;
   /** Per-patch style tag (index into PATCH_STYLES). */
@@ -241,6 +260,8 @@ export function PedalBoard({
   boardStyle = 'dial',
   onBlockSkinChange,
   onBoardStyleChange,
+  labelLum = LABEL_LUM_DEFAULT,
+  onLabelLumChange,
 }: PedalBoardProps) {
   const artIndex = usePedalManifest();
 
@@ -390,16 +411,22 @@ export function PedalBoard({
           onSkinChange={
             onBlockSkinChange && ((change) => onBlockSkinChange(slot.slotIndex, change))
           }
+          labelLum={labelLum}
+          onLabelLumChange={onLabelLumChange}
         />
       </div>
     );
   };
 
+  // One custom property drives every grey on the board: the skin derives both
+  // the lit and the bypassed label colour from it, so the brightness slider
+  // needs no per-element plumbing.
   return (
     <div
       className={`board-view${flickering ? ' flickering' : ''}`}
       data-skin={onBlockSkinChange ? 'itza' : undefined}
       data-chrome={chromeOpen ? 'open' : 'closed'}
+      style={{ '--pk-label-l': `${labelLum}%` } as CSSProperties}
     >
       <BoardTopBar
         boardStyle={boardStyle}
@@ -671,6 +698,11 @@ export function PedalBoard({
           artIndex={artIndex}
           onSelect={(effectId) => onChangeEffect(pickerEffect.slotIndex, effectId)}
           onClose={() => setPickerSlot(null)}
+          accentOverride={
+            onBlockSkinChange
+              ? keyColorFor(boardSkin, pickerEffect.slotIndex, getSlotModule(pickerEffect.slotIndex))
+              : undefined
+          }
         />
       )}
     </div>

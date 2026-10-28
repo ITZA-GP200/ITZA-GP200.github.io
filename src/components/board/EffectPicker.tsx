@@ -12,6 +12,9 @@ interface EffectPickerProps {
   artIndex: ManifestIndex | null;
   onSelect: (effectId: number) => void;
   onClose: () => void;
+  /** ITZA skin: the key colour of the card this was opened from, so the
+   *  browser's accents match the block being changed rather than the module. */
+  accentOverride?: string;
 }
 
 interface PickerRow {
@@ -100,6 +103,7 @@ export function EffectPicker({
   artIndex,
   onSelect,
   onClose,
+  accentOverride,
 }: EffectPickerProps) {
   const rows = useMemo(() => buildRows(module, artIndex), [module, artIndex]);
   const categories = useMemo(() => buildCategories(rows), [rows]);
@@ -128,7 +132,9 @@ export function EffectPicker({
   });
   const groups = groupRows(visibleRows, categories);
 
-  const accent = (MODULE_COLORS[module] ?? MODULE_COLORS.VOL).accent;
+  // The ITZA skin passes the block's own key colour so the browser matches
+  // the card it was opened from; otherwise the module's standard accent.
+  const accent = accentOverride ?? (MODULE_COLORS[module] ?? MODULE_COLORS.VOL).accent;
   const pickerStyle = { '--ep-accent': accent } as CSSProperties;
 
   function railClass(target: string): string {

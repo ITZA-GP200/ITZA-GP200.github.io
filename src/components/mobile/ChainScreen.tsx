@@ -5,7 +5,7 @@ import { lookupPedalArt } from '@/components/board/pedalManifest';
 import { displayPosition, useDragReorder } from '@/hooks/useDragReorder';
 import { ChainRow } from './ChainRow';
 import { ChainCable } from './ChainCable';
-import { blockSkin, styleFor, type BoardSkin, type ControlStyle } from '@/core/boardSkin';
+import { blockSkin, styleFor, type BlockSkin, type BoardSkin, type ControlStyle } from '@/core/boardSkin';
 
 interface ChainScreenProps {
   preset: GP200Preset;
@@ -22,6 +22,10 @@ interface ChainScreenProps {
   boardStyle?: ControlStyle;
   onParamChange?: (slotIndex: number, effectId: number, paramIndex: number, value: number) => void;
   onOpenPicker?: (slotIndex: number) => void;
+  onBlockSkinChange?: (slotIndex: number, change: BlockSkin) => void;
+  /** Board-wide label grey, as a lightness percentage. */
+  labelLum?: number;
+  onLabelLumChange?: (lum: number) => void;
 }
 
 /**
@@ -50,6 +54,9 @@ export function ChainScreen({
   boardStyle = 'dial',
   onParamChange,
   onOpenPicker,
+  onBlockSkinChange,
+  labelLum,
+  onLabelLumChange,
 }: ChainScreenProps) {
   // Which cards have their controls open, by block position so the set
   // survives a reorder.
@@ -100,6 +107,11 @@ export function ChainScreen({
                   onParamChange(slot.slotIndex, slot.effectId, paramIdx, value))
               }
               onOpenPicker={onOpenPicker && (() => onOpenPicker(slot.slotIndex))}
+              onSkinChange={
+                onBlockSkinChange && ((change) => onBlockSkinChange(slot.slotIndex, change))
+              }
+              labelLum={labelLum}
+              onLabelLumChange={onLabelLumChange}
               slot={slot}
               index={position}
               displayIndex={displayPosition(position, drag.from, drag.target)}

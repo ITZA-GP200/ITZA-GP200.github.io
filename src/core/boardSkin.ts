@@ -68,8 +68,49 @@ export function keyColorFor(skin: BoardSkin, slotIndex: number, moduleName: stri
   return blockSkin(skin, slotIndex).color ?? DEFAULT_KEY[moduleName] ?? '#c9d1d9';
 }
 
+/**
+ * Label brightness: the lightness, in percent, of the one grey every label,
+ * chip, chain number and tool icon on a card is drawn in.
+ *
+ * Board-wide rather than per-block, because it is a legibility setting, not a
+ * design choice about one pedal — nobody wants to set the same readability
+ * eleven times. It is reached from a card's colour popover because that is
+ * where the rest of the appearance controls already live.
+ *
+ * The default is the grey the skin shipped with (#8e8e96 is hsl(240 4% 57%)),
+ * so an existing board looks untouched until the slider is moved.
+ */
+export const LABEL_LUM_DEFAULT = 57;
+export const LABEL_LUM_MIN = 28;
+export const LABEL_LUM_MAX = 88;
+
 const STORAGE_KEY = 'gp200:boardSkin';
 const STYLE_KEY = 'gp200:boardStyle';
+const LABEL_LUM_KEY = 'gp200:labelLum';
+
+/** Clamp to the slider's range, falling back to the default for junk input. */
+export function clampLabelLum(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return LABEL_LUM_DEFAULT;
+  return Math.min(LABEL_LUM_MAX, Math.max(LABEL_LUM_MIN, Math.round(n)));
+}
+
+export function loadLabelLum(): number {
+  try {
+    const raw = localStorage.getItem(LABEL_LUM_KEY);
+    return raw === null ? LABEL_LUM_DEFAULT : clampLabelLum(raw);
+  } catch {
+    return LABEL_LUM_DEFAULT;
+  }
+}
+
+export function saveLabelLum(lum: number): void {
+  try {
+    localStorage.setItem(LABEL_LUM_KEY, String(clampLabelLum(lum)));
+  } catch {
+    // Storage unavailable: the choice just won't survive a reload.
+  }
+}
 
 const isStyle = (v: unknown): v is ControlStyle => v === 'dial' || v === 'bar';
 
