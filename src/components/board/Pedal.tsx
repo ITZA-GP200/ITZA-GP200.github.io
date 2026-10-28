@@ -10,6 +10,7 @@ import { type PedalArtEntry } from './pedalManifest';
 import { ModuleGlyph } from './ModuleGlyph';
 import { PedalKnob } from './PedalKnob';
 import { PedalFader } from './PedalFader';
+import { PedalBar } from './PedalBar';
 import { ComboSelect, MiniSwitch } from './MiniSwitch';
 import { PedalSkinTools } from './PedalSkinTools';
 import { DEFAULT_KEY, type BlockSkin, type ControlStyle } from '@/core/boardSkin';
@@ -91,10 +92,12 @@ export function Pedal({
   const panelText = art?.colors?.panelText ?? spec.ink;
   let knobInk = spec.ink;
   if (panel) knobInk = panelText;
-  // graphic EQs get faders, not knobs — and under the skin, so does any block
-  // set to bars.
+  // Graphic EQs get faders on the stock board: a graphic EQ should look like
+  // one. The skin has no faders at all — every block is dials or bars, EQ
+  // included, so the whole board reads as one instrument.
   const isEq = moduleName === 'EQ';
-  const useFaders = isEq || (skinned && controlStyle === 'bar');
+  const useFaders = !skinned && isEq;
+  const useBars = skinned && controlStyle === 'bar';
   // A locked block's style and values are frozen; its position and its on/off
   // switch deliberately are not.
   const locked = skinned && blockSkin.locked === true;
@@ -216,6 +219,17 @@ export function Pedal({
           // Sync + Trail both map param 3), so the key needs the name too.
           const defKey = `${def.idx}-${def.name}`;
           if (def.type === 'knob') {
+            if (useBars) {
+              return (
+                <PedalBar
+                  key={defKey}
+                  param={def}
+                  value={value}
+                  onChange={(v) => { if (!locked) onParamChange(def.idx, v); }}
+                  pedalName={effectName}
+                />
+              );
+            }
             if (useFaders) {
               return (
                 <PedalFader

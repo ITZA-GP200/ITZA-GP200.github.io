@@ -311,9 +311,9 @@
   text-align: center;
   max-width: 64px;
 }
-/* The reading lives inside the arc now, so the separate one underneath would
-   only say it twice. */
-.board-view[data-skin='itza'] .pedal.pk .k-value {
+/* On a dial the reading lives inside the arc, so the one underneath would say
+   it twice. Bars carry their own and are not touched by this. */
+.board-view[data-skin='itza'] .pedal.pk .knob .k-value {
   display: none;
 }
 
@@ -358,7 +358,6 @@
 .board-view[data-skin='itza'] .pedal.pk .controls {
   gap: 12px 10px;
 }
-.board-view[data-skin='itza'] .pedal.pk .fader .k-label,
 .board-view[data-skin='itza'] .pedal.pk .k-label {
   font-size: 13px;
   white-space: normal;
@@ -389,19 +388,6 @@
   height: 100%;
 }
 
-/* ── faders ──
-   30px is enough for a bare cap but not for a 13px band label, so the names
-   ran into each other. Wider, with a taller track and a label that wraps. */
-.board-view[data-skin='itza'] .pedal.pk .fader {
-  width: 54px;
-  gap: 4px;
-}
-.board-view[data-skin='itza'] .pedal.pk .fader .f-track {
-  height: 64px;
-}
-.board-view[data-skin='itza'] .pedal.pk .fader .k-label {
-  max-width: 54px;
-}
 
 /* ── the treadle's hinge ──
    `all: unset` resets an element but never its pseudo-elements, so upstream's
@@ -549,11 +535,6 @@
   color: var(--key);
 }
 
-/* ── the last pedal has nothing to point at ──
-   Its signal goes to the › OUT badge, which already says so. */
-.board-view[data-skin='itza'] .board-row:last-of-type .pedal-bay:last-of-type .pedal.pk::before {
-  display: none;
-}
 
 /* ── dials above, switches below ──
    Mixed in one wrapping row, a switch could land beside a dial and get
@@ -601,4 +582,62 @@
   .board-view[data-skin='itza'] .pedal.pk .stomp-round:active {
     transform: none;
   }
+}
+
+/* ── bars ──
+   The track is the parameter's whole range, the lit part is the value in it.
+   A readout you can grab, not a slider: no cap, nothing to aim at. Full width
+   of the card so a row of them reads as a list. */
+.board-view[data-skin='itza'] .pedal.pk .pbar {
+  flex: 0 0 100%;
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+  padding: 1px 0;
+}
+.board-view[data-skin='itza'] .pedal.pk .pbar:focus-visible {
+  outline: 2px solid var(--key);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+.board-view[data-skin='itza'] .pedal.pk .pb-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 15px;
+}
+.board-view[data-skin='itza'] .pedal.pk .pb-name {
+  color: #a8a8b0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.board-view[data-skin='itza'] .pedal.pk .pb-value {
+  color: #f0f0f3;
+  font-weight: 500;
+  flex: none;
+}
+.board-view[data-skin='itza'] .pedal.pk .pb-track {
+  display: block;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 2px;
+  background: #2f2f34;
+  overflow: hidden;
+}
+.board-view[data-skin='itza'] .pedal.pk .pb-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--key);
+  transition: width 0.06s linear;
+}
+.board-view[data-skin='itza'] .pedal.pk .pbar.dragging .pb-fill {
+  transition: none;
+}
+/* Bars fill the card, so they stack rather than wrap into columns. */
+.board-view[data-skin='itza'] .pedal.pk .controls:has(.pbar) {
+  gap: 9px 0;
+  align-content: flex-start;
 }

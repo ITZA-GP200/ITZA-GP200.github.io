@@ -97,10 +97,12 @@ export function PedalSkinTools({ moduleName, skin, style, keyColor, onChange }: 
         className="pk-tool"
         style={{ color: locked ? undefined : keyColor }}
         disabled={locked}
-        aria-label={`${moduleName} controls: ${style === 'dial' ? 'dials' : 'bars'}`}
+        aria-label={`${moduleName} controls: switch to ${style === 'dial' ? 'bars' : 'dials'}`}
         onClick={() => onChange({ style: style === 'dial' ? 'bar' : 'dial' })}
       >
-        {style === 'dial' ? <Dial /> : <Bars />}
+        {/* The icon is the destination, not the current state: showing bars
+            while dials are on reads as "press for bars". */}
+        {style === 'dial' ? <Bars /> : <Dial />}
       </button>
       <button
         type="button"
