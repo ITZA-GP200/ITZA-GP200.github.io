@@ -21,6 +21,7 @@ interface ChainScreenProps {
   boardSkin?: BoardSkin;
   boardStyle?: ControlStyle;
   onParamChange?: (slotIndex: number, effectId: number, paramIndex: number, value: number) => void;
+  onOpenPicker?: (slotIndex: number) => void;
 }
 
 /**
@@ -48,6 +49,7 @@ export function ChainScreen({
   boardSkin = {},
   boardStyle = 'dial',
   onParamChange,
+  onOpenPicker,
 }: ChainScreenProps) {
   // Which cards have their controls open, by block position so the set
   // survives a reorder.
@@ -97,6 +99,7 @@ export function ChainScreen({
                 onParamChange && ((paramIdx, value) =>
                   onParamChange(slot.slotIndex, slot.effectId, paramIdx, value))
               }
+              onOpenPicker={onOpenPicker && (() => onOpenPicker(slot.slotIndex))}
               slot={slot}
               index={position}
               displayIndex={displayPosition(position, drag.from, drag.target)}

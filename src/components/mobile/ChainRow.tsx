@@ -35,6 +35,8 @@ interface ChainRowProps {
   expanded?: boolean;
   onToggleExpand?: () => void;
   onParamChange?: (paramIdx: number, value: number) => void;
+  /** open the effect browser for this block (the board's name button) */
+  onOpenPicker?: () => void;
 }
 
 /** The first two knob params, as "Drive 62 · Tone 40" , a glance-level summary. */
@@ -77,6 +79,7 @@ export function ChainRow({
   expanded = false,
   onToggleExpand,
   onParamChange,
+  onOpenPicker,
 }: ChainRowProps) {
   const effectName = getEffectName(slot.effectId);
   // module identity is the physical block, never the effectId (slot 5 is always CAB)
@@ -131,8 +134,8 @@ export function ChainRow({
       <button
         type="button"
         className="m-card-main"
-        aria-expanded={skinned ? expanded : undefined}
-        onClick={skinned && onToggleExpand ? onToggleExpand : onOpen}
+        aria-label={skinned ? `Change ${moduleName} effect: ${effectName}` : undefined}
+        onClick={skinned && onOpenPicker ? onOpenPicker : onOpen}
       >
         <span className="m-card-pos">{displayIndex + 1}</span>
         {/* Fixed box, so eleven cards of wildly different shapes — a tall
@@ -153,14 +156,6 @@ export function ChainRow({
         </span>
       </button>
 
-      {skinned && (
-        <span className="m-card-caret" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="m6 9 6 6 6-6" />
-          </svg>
-        </span>
-      )}
-
       <span className="m-card-led" aria-hidden="true" />
 
       <button
@@ -173,6 +168,23 @@ export function ChainRow({
       >
         <span className="m-switch-knob" aria-hidden="true" />
       </button>
+
+      {/* The opposite end from the grip: one handle drags the block, the other
+          opens its controls. Neither is the card itself, so tapping the card
+          can go on meaning "change this effect". */}
+      {skinned && onToggleExpand && (
+        <button
+          type="button"
+          className="m-expand"
+          aria-expanded={expanded}
+          aria-label={`${effectName} controls`}
+          onClick={onToggleExpand}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
+      )}
 
       {skinned && expanded && onParamChange && (
         <div className="m-card-controls">

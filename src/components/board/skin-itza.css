@@ -738,22 +738,52 @@
   color: #6e6e76;
 }
 
-/* The caret says the card opens, and which way it is facing. */
-.mobile-view .m-pedal-card.m-pk .m-card-caret {
+/* ── the two handles ──
+   The grip at one end drags the block, the caret at the other opens its
+   controls. Neither is the card, so a tap on the card still means "change
+   this effect" — the same thing the board's name button does. */
+.mobile-view .m-pedal-card.m-pk .m-expand {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 34px;
+  align-self: stretch;
+  padding: 0;
+  background: none;
+  border: none;
+  border-left: 1px solid #2f2f34;
+  color: #8e8e96;
+  cursor: pointer;
+}
+.mobile-view .m-pedal-card.m-pk .m-expand svg {
   width: 22px;
   height: 22px;
-  color: #8e8e96;
   transition: transform 0.16s ease;
 }
-.mobile-view .m-pedal-card.m-pk .m-card-caret svg {
-  width: 22px;
-  height: 22px;
-}
-.mobile-view .m-pedal-card.m-pk.expanded .m-card-caret {
-  transform: rotate(180deg);
+/* Lit with the block, not with the panel: the caret follows the pedal's
+   on/off state, and still opens the controls either way. */
+.mobile-view .m-pedal-card.m-pk .m-expand {
   color: var(--key);
+}
+.mobile-view .m-pedal-card.m-pk.bypassed .m-expand {
+  color: #6e6e76;
+}
+.mobile-view .m-pedal-card.m-pk.expanded .m-expand svg {
+  transform: rotate(180deg);
+}
+
+/* The grip reads the same on every card: the enclosure ink it used to borrow
+   varies per effect, so some were nearly invisible on a dark card. */
+.mobile-view .m-pedal-card.m-pk .m-grip-dots {
+  color: #8e8e96;
+  opacity: 1;
+}
+
+/* On means this block's colour, not one green for the whole chain. */
+.mobile-view .m-pedal-card.m-pk .m-switch.on {
+  background: var(--key);
+  border-color: var(--key);
 }
 
 /* The controls take the full width of the card, under its head. */

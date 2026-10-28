@@ -3,6 +3,8 @@ import type { PedalBoardProps } from '@/components/board/PedalBoard';
 // The phone shell is a separate tree from the board, so it loads the skin
 // itself; CSS is global once imported either way.
 import '@/components/board/skin-itza.css';
+import { EffectPicker } from '@/components/board/EffectPicker';
+import { getSlotModule } from '@/core/effectNames';
 import { usePedalManifest } from '@/components/board/pedalManifest';
 import { LooperPanel } from '@/components/board/LooperPanel';
 import { DrumsPanel } from '@/components/board/DrumsPanel';
@@ -126,6 +128,9 @@ export default function MobileShell({
   onBlockSkinChange,
 }: PedalBoardProps) {
   const [tab, setTab] = useState<MobileTab>('chain');
+  // Which block's effect browser is open, from a tap on a chain card. The
+  // board opens the same picker from the pedal's name button.
+  const [pickerSlot, setPickerSlot] = useState<number | null>(null);
   const [sheet, setSheet] = useState<Sheet>(null);
   const [patchTab, setPatchTab] = useState<PatchSettingsTab>('exp');
 
@@ -233,6 +238,7 @@ export default function MobileShell({
             boardSkin={boardSkin}
             boardStyle={boardStyle}
             onParamChange={onParamChange}
+            onOpenPicker={setPickerSlot}
           />
         )}
 
@@ -424,6 +430,22 @@ export default function MobileShell({
           )}
         </div>
       </MobileSheet>
+
+      {/* The chain card's effect browser — the same picker the board opens
+          from a pedal's name. */}
+      {pickerSlot !== null && (
+        <EffectPicker
+          open
+          module={getSlotModule(pickerSlot)}
+          currentEffectId={preset.effects.find((e) => e.slotIndex === pickerSlot)?.effectId ?? 0}
+          artIndex={artIndex}
+          onSelect={(effectId) => {
+            onChangeEffect(pickerSlot, effectId);
+            setPickerSlot(null);
+          }}
+          onClose={() => setPickerSlot(null)}
+        />
+      )}
     </div>
   );
 }
