@@ -11,6 +11,8 @@ import { ModuleGlyph } from './ModuleGlyph';
 import { PedalKnob } from './PedalKnob';
 import { PedalFader } from './PedalFader';
 import { ComboSelect, MiniSwitch } from './MiniSwitch';
+import { PedalSkinTools } from './PedalSkinTools';
+import { DEFAULT_KEY, type BlockSkin, type ControlStyle } from '@/core/boardSkin';
 
 export interface PedalProps {
   slot: EffectSlot;
@@ -37,6 +39,16 @@ export interface PedalProps {
   showMoveButtons?: boolean;
   /** chain length, for the move bounds + the grip's announced position */
   chainLength: number;
+  /* ── ITZA skin (fork) ──────────────────────────────────────────────────
+     Absent on the stock board, so everything below is optional and the
+     component behaves exactly as upstream's without it. */
+  /** Draw as an ITZA card: header tools, key colour, dark field. */
+  skinned?: boolean;
+  /** This block's saved preferences (core/boardSkin.ts). */
+  blockSkin?: BlockSkin;
+  /** The style this block renders with, already resolved against the board. */
+  controlStyle?: ControlStyle;
+  onSkinChange?: (change: BlockSkin) => void;
 }
 
 /** One effect slot rendered as a physical pedal (docs/board-design-system.md). */
@@ -54,6 +66,10 @@ export function Pedal({
   isPinned,
   showMoveButtons,
   chainLength,
+  skinned = false,
+  blockSkin = {},
+  controlStyle = 'dial',
+  onSkinChange,
 }: PedalProps) {
   const [dragging, setDragging] = useState(false);
 
@@ -75,10 +91,17 @@ export function Pedal({
   const panelText = art?.colors?.panelText ?? spec.ink;
   let knobInk = spec.ink;
   if (panel) knobInk = panelText;
-  // graphic EQs get faders, not knobs
+  // graphic EQs get faders, not knobs — and under the skin, so does any block
+  // set to bars.
   const isEq = moduleName === 'EQ';
+  const useFaders = isEq || (skinned && controlStyle === 'bar');
+  // A locked block's style and values are frozen; its position and its on/off
+  // switch deliberately are not.
+  const locked = skinned && blockSkin.locked === true;
+  const keyColor = blockSkin.color ?? DEFAULT_KEY[moduleName] ?? spec.body;
 
   const bodyVars = {
+    '--key': keyColor,
     '--body': spec.body,
     '--body-deep': spec.bodyDeep,
     '--ink': spec.ink,
@@ -87,6 +110,8 @@ export function Pedal({
   } as CSSProperties;
 
   const classes = ['pedal'];
+  if (skinned) classes.push('pk');
+  if (locked) classes.push('pk-locked');
   if (wide) classes.push('wide');
   if (dragging) classes.push('dragging');
   if (!slot.enabled) classes.push('bypassed');
@@ -138,6 +163,15 @@ export function Pedal({
       <span className="screw tl" /><span className="screw tr" />
       <span className="screw bl" /><span className="screw br" />
       <span className="module-chip">{moduleName}</span>
+      {skinned && onSkinChange && (
+        <PedalSkinTools
+          moduleName={moduleName}
+          skin={blockSkin}
+          style={controlStyle}
+          keyColor={keyColor}
+          onChange={onSkinChange}
+        />
+      )}
       <button
         type="button"
         className={`info-chip${isPinned ? ' pinned' : ''}`}
@@ -182,13 +216,13 @@ export function Pedal({
           // Sync + Trail both map param 3), so the key needs the name too.
           const defKey = `${def.idx}-${def.name}`;
           if (def.type === 'knob') {
-            if (isEq) {
+            if (useFaders) {
               return (
                 <PedalFader
                   key={defKey}
                   param={def}
                   value={value}
-                  onChange={(v) => onParamChange(def.idx, v)}
+                  onChange={(v) => { if (!locked) onParamChange(def.idx, v); }}
                   pedalName={effectName}
                 />
               );
@@ -198,9 +232,10 @@ export function Pedal({
                 key={defKey}
                 param={def}
                 value={value}
-                onChange={(v) => onParamChange(def.idx, v)}
+                onChange={(v) => { if (!locked) onParamChange(def.idx, v); }}
                 knobStyle={spec.knob}
                 ink={knobInk}
+                arc={skinned}
                 pedalName={effectName}
                 synced={isKnobSynced(slot.effectId, def, slot.params)}
               />
@@ -212,7 +247,7 @@ export function Pedal({
                 key={defKey}
                 param={def}
                 value={value}
-                onChange={(v) => onParamChange(def.idx, v)}
+                onChange={(v) => { if (!locked) onParamChange(def.idx, v); }}
                 pedalName={effectName}
               />
             );
@@ -222,7 +257,7 @@ export function Pedal({
               key={defKey}
               param={def}
               value={value}
-              onChange={(v) => onParamChange(def.idx, v)}
+              onChange={(v) => { if (!locked) onParamChange(def.idx, v); }}
               pedalName={effectName}
             />
           );

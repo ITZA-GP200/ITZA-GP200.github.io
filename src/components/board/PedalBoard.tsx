@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } fro
 import type { GP200Preset, EffectSlot } from '@/core/types';
 import type { PushProgress } from '@/core/devicePush';
 import { getSlotModule } from '@/core/effectNames';
+import { blockSkin, styleFor, type BlockSkin, type BoardSkin, type ControlStyle } from '@/core/boardSkin';
 import { isWideSlot } from './boardLayout';
 import { useFlipReorder } from './useFlipReorder';
 import { useBoardFit } from './useBoardFit';
@@ -43,6 +44,7 @@ import { Tabs } from '@/components/ui/Tabs';
 import { useCoarsePointer, useSingleRowBoard } from '@/hooks/useMediaQuery';
 import { prefersReducedMotion } from '@/lib/motion';
 import './board.css';
+import './skin-itza.css';
 
 type PatchSettingsTab = 'details' | 'exp' | 'ctrl' | 'bulk';
 
@@ -83,6 +85,11 @@ export interface PedalBoardProps {
   onFxReturnChange: (pos: number) => void;
   /** Applies an FX-loop scenario by id (see core/fxScenarios). */
   onApplyFxScenario: (scenarioId: string) => void;
+  /** ITZA skin (fork): per-block preferences and the board-wide style. */
+  boardSkin?: BoardSkin;
+  boardStyle?: ControlStyle;
+  onBlockSkinChange?: (slotIndex: number, change: BlockSkin) => void;
+  onBoardStyleChange?: (style: ControlStyle) => void;
   /** FX-loop routing mode: 0 = parallel, 1 = serial. */
   onFxModeChange: (mode: number) => void;
   /** Per-patch style tag (index into PATCH_STYLES). */
@@ -230,6 +237,10 @@ export function PedalBoard({
   onPushRequest,
   pushProgress,
   firmware,
+  boardSkin = {},
+  boardStyle = 'dial',
+  onBlockSkinChange,
+  onBoardStyleChange,
 }: PedalBoardProps) {
   const artIndex = usePedalManifest();
 
@@ -373,6 +384,12 @@ export function PedalBoard({
           isPinned={pinnedSlot === slot.slotIndex}
           showMoveButtons={touch}
           chainLength={preset.effects.length}
+          skinned={Boolean(onBlockSkinChange)}
+          blockSkin={blockSkin(boardSkin, slot.slotIndex)}
+          controlStyle={styleFor(boardSkin, slot.slotIndex, boardStyle)}
+          onSkinChange={
+            onBlockSkinChange && ((change) => onBlockSkinChange(slot.slotIndex, change))
+          }
         />
       </div>
     );
@@ -381,9 +398,12 @@ export function PedalBoard({
   return (
     <div
       className={`board-view${flickering ? ' flickering' : ''}`}
+      data-skin={onBlockSkinChange ? 'itza' : undefined}
       data-chrome={chromeOpen ? 'open' : 'closed'}
     >
       <BoardTopBar
+        boardStyle={boardStyle}
+        onBoardStyleChange={onBoardStyleChange}
         chromeOpen={chromeOpen}
         onToggleChrome={() => setChromeOpen((prev) => !prev)}
         connected={connected}

@@ -38,6 +38,9 @@ interface BoardTopBarProps {
   /* mute for the rocker's clack (src/lib/uiSound.ts) */
   soundOn: boolean;
   onToggleSound: () => void;
+  /** ITZA skin (fork): the board-wide control style and its setter. */
+  boardStyle?: 'dial' | 'bar';
+  onBoardStyleChange?: (style: 'dial' | 'bar') => void;
   /** Tablet band only: is the full chrome showing, or just the patch island?
    *  Rendered on every tree, but board.css only acts on it between 640px and
    *  the tablet ceiling , the desktop bar has the width to show everything and
@@ -107,6 +110,8 @@ export function BoardTopBar({
   onToggleLights,
   soundOn,
   onToggleSound,
+  boardStyle,
+  onBoardStyleChange,
   chromeOpen,
   onToggleChrome,
 }: BoardTopBarProps) {
@@ -203,6 +208,34 @@ export function BoardTopBar({
           onToggle={onToggleLights}
         />
         <SoundToggle on={soundOn} onToggle={onToggleSound} />
+        {onBoardStyleChange && (
+          <span className="pk-style">
+            <button
+              type="button"
+              className={`deck-btn quiet${boardStyle === 'dial' ? ' pk-on' : ''}`}
+              aria-pressed={boardStyle === 'dial'}
+              title="Show every unlocked pedal's controls as dials"
+              aria-label="Dials on every pedal"
+              onClick={() => onBoardStyleChange('dial')}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="2.5" /><path d="M12 5v3" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className={`deck-btn quiet${boardStyle === 'bar' ? ' pk-on' : ''}`}
+              aria-pressed={boardStyle === 'bar'}
+              title="Show every unlocked pedal's controls as bars"
+              aria-label="Bars on every pedal"
+              onClick={() => onBoardStyleChange('bar')}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                <path d="M4 19V10" /><path d="M10 19V5" /><path d="M16 19v-6" /><path d="M22 19V8" />
+              </svg>
+            </button>
+          </span>
+        )}
       </div>
 
       <div className="board-topbar-status">

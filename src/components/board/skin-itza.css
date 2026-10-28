@@ -1,0 +1,556 @@
+/* ════════════════════════════════════════════════════════════════════════
+   ITZA skin — the fork's board.
+
+   Everything here is scoped to [data-skin="itza"], so kabir0st's board is
+   untouched and this file is the whole visual diff. The component changes it
+   needs are small and marked in Pedal.tsx / PedalBoard.tsx / BoardTopBar.tsx.
+
+   The idea: effects are digital, so draw them as cards rather than as
+   enclosures. One key colour per block (--key, set inline from the saved
+   preference or the artwork), carried by the border, the name and the
+   controls. Bypassed cards go dark and grayscale, keeping colour only in the
+   name and the border.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── the field ──
+   No stage surface, no gloss, no cables: a plain dark field the cards sit on. */
+.board-view[data-skin='itza'] .stage {
+  background: #1a1a1c;
+}
+.board-view[data-skin='itza'] .cables-svg,
+.board-view[data-skin='itza'] .stage-flicker {
+  display: none;
+}
+
+/* ── the card ──
+   Uniform width, flat surface, key colour on the border. The glow is a tight
+   ring plus a short shadow: eleven soft halos at once read as fog. */
+.board-view[data-skin='itza'] .pedal.pk {
+  background: #232326;
+  border: 1px solid var(--key);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--key) 20%, transparent),
+              0 0 22px -7px var(--key);
+  color: #f0f0f3;
+  padding: 13px 14px 14px;
+  display: flex;
+  flex-direction: column;
+}
+.board-view[data-skin='itza'] .pedal.pk::before,
+.board-view[data-skin='itza'] .pedal.pk::after {
+  display: none; /* gloss sweep and its partner */
+}
+
+/* Bypassed: the whole card goes dark and the controls lose their colour.
+   Only the name and the border stay keyed. */
+.board-view[data-skin='itza'] .pedal.pk.bypassed {
+  background: #141416;
+  /* No border-color here: it is set from --edge further down, so the border
+     and the chevron can never drift apart. This rule used to win on
+     specificity and leave a tinted border beside a grey chevron. */
+  box-shadow: none;
+}
+.board-view[data-skin='itza'] .pedal.pk.bypassed .controls {
+  opacity: 0.5;
+  filter: grayscale(1);
+}
+
+/* ── the enclosure's furniture, gone ── */
+.board-view[data-skin='itza'] .pedal.pk .screw,
+.board-view[data-skin='itza'] .pedal.pk .jack,
+.board-view[data-skin='itza'] .pedal.pk .pedal-grip,
+.board-view[data-skin='itza'] .pedal.pk .brand-strip,
+.board-view[data-skin='itza'] .pedal.pk .p-led {
+  display: none;
+}
+
+/* ── header: module type and chain position, then the three tools ── */
+.board-view[data-skin='itza'] .pedal.pk .module-chip {
+  position: static;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--key);
+}
+.board-view[data-skin='itza'] .pedal.pk.bypassed .module-chip {
+  color: #6e6e76;
+}
+.board-view[data-skin='itza'] .pedal.pk .chain-num {
+  position: static;
+  order: -1;
+  background: none;
+  border: none;
+  padding: 0;
+  margin-right: 7px;
+  font-size: 16px;
+  letter-spacing: 0.14em;
+  color: #6e6e76;
+}
+.board-view[data-skin='itza'] .pedal.pk .info-chip {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 3;
+}
+
+/* ── the name: the loudest thing on the card, and keyed even when bypassed ── */
+.board-view[data-skin='itza'] .pedal.pk .p-name {
+  position: static;
+  margin: 8px 0 12px;
+}
+.board-view[data-skin='itza'] .pedal.pk .p-name-btn {
+  padding: 0;
+  background: none;
+  border: none;
+  text-align: left;
+}
+.board-view[data-skin='itza'] .pedal.pk .p-name-icon {
+  display: none;
+}
+.board-view[data-skin='itza'] .pedal.pk .p-name-text {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--key);
+  white-space: normal;
+  line-height: 1.1;
+}
+.board-view[data-skin='itza'] .pedal.pk .p-desc {
+  display: none;
+}
+
+/* ── controls ──
+   Centred, with room to wrap; the labels are HTML so a long one wraps rather
+   than being clipped the way SVG text is. */
+.board-view[data-skin='itza'] .pedal.pk .controls {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 6px;
+  justify-content: center;
+  align-content: center;
+  min-height: 150px;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+/* ── the footswitch becomes the card's ON / BYPASSED bar ── */
+.board-view[data-skin='itza'] .pedal.pk .treadle,
+.board-view[data-skin='itza'] .pedal.pk .stomp-round,
+.board-view[data-skin='itza'] .pedal.pk .fs-row {
+  all: unset;
+}
+.board-view[data-skin='itza'] .pedal.pk .treadle,
+.board-view[data-skin='itza'] .pedal.pk .stomp-round {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  box-sizing: border-box;
+  border-radius: 5px;
+  padding: 11px 0;
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-align: center;
+  cursor: pointer;
+  background: var(--key);
+  border: 1px solid var(--key);
+  color: #0c0c0e;
+}
+.board-view[data-skin='itza'] .pedal.pk .treadle::after,
+.board-view[data-skin='itza'] .pedal.pk .stomp-round::after {
+  content: 'ON';
+}
+.board-view[data-skin='itza'] .pedal.pk.bypassed .treadle,
+.board-view[data-skin='itza'] .pedal.pk.bypassed .stomp-round {
+  background: #19191b;
+  border-color: #2f2f34;
+  color: #636369;
+}
+.board-view[data-skin='itza'] .pedal.pk.bypassed .treadle::after,
+.board-view[data-skin='itza'] .pedal.pk.bypassed .stomp-round::after {
+  content: 'BYPASSED';
+}
+.board-view[data-skin='itza'] .pedal.pk .p-off-tag {
+  display: none; /* the bar says it */
+}
+
+/* ── the three header tools ── */
+.board-view[data-skin='itza'] .pk-tools {
+  position: absolute;
+  top: 13px;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  z-index: 4;
+}
+.board-view[data-skin='itza'] .pk-swatch {
+  width: 14px;
+  height: 14px;
+  margin: 0 2px;
+  padding: 0;
+  border-radius: 3px;
+  background: none;
+  border: 1.5px solid currentColor;
+  cursor: pointer;
+}
+.board-view[data-skin='itza'] .pk-tool {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: #6e6e76;
+  cursor: pointer;
+}
+.board-view[data-skin='itza'] .pk-tool svg {
+  width: 17px;
+  height: 17px;
+}
+.board-view[data-skin='itza'] .pk-swatch:disabled,
+.board-view[data-skin='itza'] .pk-tool:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.board-view[data-skin='itza'] .pedal.pk.bypassed .pk-swatch,
+.board-view[data-skin='itza'] .pedal.pk.bypassed .pk-tool {
+  color: #6e6e76 !important;
+}
+
+/* ── the key-colour palette ── */
+.board-view[data-skin='itza'] .pk-palette {
+  position: absolute;
+  top: 24px;
+  right: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 7px;
+  padding: 9px;
+  border-radius: 8px;
+  background: #0c0c0e;
+  border: 1px solid #2f2f34;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+.board-view[data-skin='itza'] .pk-chip {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+}
+.board-view[data-skin='itza'] .pk-chip.picked {
+  box-shadow: 0 0 0 2px #0c0c0e, 0 0 0 3px #f0f0f3;
+}
+
+/* ── the top bar's board-wide style buttons ── */
+.pk-style {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.pk-style .deck-btn.pk-on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── card layout ──
+   The card is a flex column, but the markup's order is the enclosure's, not a
+   card's: controls come before the name. Flex `order` rearranges it without
+   touching the DOM, which keeps the diff to upstream's component small and
+   leaves the stock board's markup untouched. */
+.board-view[data-skin='itza'] .pedal.pk .chain-num {
+  position: absolute;
+  top: 13px;
+  left: 14px;
+  margin: 0;
+}
+.board-view[data-skin='itza'] .pedal.pk .module-chip {
+  order: 1;
+  margin-left: 38px; /* clear of the chain number beside it */
+}
+.board-view[data-skin='itza'] .pedal.pk .p-name { order: 2; }
+.board-view[data-skin='itza'] .pedal.pk .controls { order: 3; }
+.board-view[data-skin='itza'] .pedal.pk .treadle,
+.board-view[data-skin='itza'] .pedal.pk .stomp-round,
+.board-view[data-skin='itza'] .pedal.pk .fs-row { order: 4; }
+
+/* A card needs more width than an enclosure bay: 22px names, three header
+   tools and wrapped control labels do not fit 172px. */
+.board-view[data-skin='itza'] .pedal-bay { width: 216px; }
+.board-view[data-skin='itza'] .pedal-bay.wide { width: 330px; }
+.board-view[data-skin='itza'] .pedal.pk { width: 100%; }
+
+/* ── the gauge ──
+   The knob keeps all its behaviour and swaps its SVG for a value arc
+   (PedalKnob `arc`). `currentColor` is what the arc fills with, so the key
+   colour reaches it without the component knowing about the skin. */
+.board-view[data-skin='itza'] .pedal.pk .knob {
+  width: 64px;
+  color: var(--key);
+}
+.board-view[data-skin='itza'] .pedal.pk .knob svg {
+  width: 62px;
+  height: 62px;
+}
+.board-view[data-skin='itza'] .pedal.pk .k-label {
+  font-size: 14px;
+  color: #8e8e96;
+  white-space: normal;
+  line-height: 1.15;
+  text-align: center;
+  max-width: 64px;
+}
+/* The reading lives inside the arc now, so the separate one underneath would
+   only say it twice. */
+.board-view[data-skin='itza'] .pedal.pk .k-value {
+  display: none;
+}
+
+/* ── the deck surface ──
+   The plank lines and bezel come from .board-deck, not .stage: a card board
+   has no surface to sit on, so it goes entirely. */
+.board-view[data-skin='itza'] .board-deck {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 10px 14px;
+}
+
+/* ── the name reads left, like a heading ──
+   Upstream centres it and clips it to one line with an ellipsis; a 22px card
+   title wants the full name, wrapped if it must. */
+.board-view[data-skin='itza'] .pedal.pk .p-name {
+  text-align: left;
+  margin-top: 0;
+}
+.board-view[data-skin='itza'] .pedal.pk .p-name-btn {
+  display: block;
+  width: 100%;
+}
+.board-view[data-skin='itza'] .pedal.pk .p-name-text {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+/* The amp's control-panel colours must not win over the key colour. */
+.board-view[data-skin='itza'] .pedal.pk .p-name-text,
+.board-view[data-skin='itza'] .pedal.pk.wide .p-name-btn,
+.board-view[data-skin='itza'] .pedal.pk .controls.amp-panel .p-name-text {
+  color: var(--key);
+  font-size: 22px;
+  font-weight: 800;
+}
+
+/* ── faders (EQ, and any block set to bars) ──
+   Their labels collided once the type grew: the band names need room and a
+   line to wrap onto, like the knob labels. */
+.board-view[data-skin='itza'] .pedal.pk .controls {
+  gap: 12px 10px;
+}
+.board-view[data-skin='itza'] .pedal.pk .fader .k-label,
+.board-view[data-skin='itza'] .pedal.pk .k-label {
+  font-size: 13px;
+  white-space: normal;
+  line-height: 1.15;
+  text-align: center;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+/* ── the amp panel is a card like any other ── */
+.board-view[data-skin='itza'] .pedal.pk .controls.amp-panel {
+  background: none;
+  border: none;
+  box-shadow: none;
+}
+
+/* ── one height for every card ──
+   Bays stretch so a row of cards lines up; the control area takes the slack,
+   so a one-knob block has air rather than a short card. */
+.board-view[data-skin='itza'] .board-row,
+.board-view[data-skin='itza'] .pedal-row {
+  align-items: stretch;
+}
+.board-view[data-skin='itza'] .pedal-bay {
+  align-items: stretch;
+}
+.board-view[data-skin='itza'] .pedal.pk {
+  height: 100%;
+}
+
+/* ── faders ──
+   30px is enough for a bare cap but not for a 13px band label, so the names
+   ran into each other. Wider, with a taller track and a label that wraps. */
+.board-view[data-skin='itza'] .pedal.pk .fader {
+  width: 54px;
+  gap: 4px;
+}
+.board-view[data-skin='itza'] .pedal.pk .fader .f-track {
+  height: 64px;
+}
+.board-view[data-skin='itza'] .pedal.pk .fader .k-label {
+  max-width: 54px;
+}
+
+/* ── the treadle's hinge ──
+   `all: unset` resets an element but never its pseudo-elements, so upstream's
+   hinge (absolute, top: -3px, 299px wide) kept drawing — the grey bar above
+   every non-wide card. The wide pedals were exempt because they use
+   .stomp-round, which has no hinge. */
+.board-view[data-skin='itza'] .pedal.pk .treadle::before,
+.board-view[data-skin='itza'] .pedal.pk .stomp-round::before {
+  display: none;
+}
+
+/* ── signal flow ──
+   The chain is series, so each card points at the next. The chevron is a
+   square rotated 45° with two edges drawn: its own background masks the
+   straight border behind it, so the card's edge reads as bending to a point
+   rather than having a badge stuck on it.
+
+   --edge carries the border colour so the chevron tracks it, including the
+   dimmer border a bypassed card gets. */
+.board-view[data-skin='itza'] .pedal.pk {
+  --edge: var(--key);
+}
+.board-view[data-skin='itza'] .pedal.pk.bypassed {
+  --edge: color-mix(in srgb, var(--key) 48%, transparent);
+}
+.board-view[data-skin='itza'] .pedal.pk {
+  border-color: var(--edge);
+}
+.board-view[data-skin='itza'] .pedal.pk::after {
+  content: '';
+  display: block;
+  position: absolute;
+  top: 50%;
+  right: -8px;
+  width: 15px;
+  height: 15px;
+  margin-top: -8px;
+  background: inherit;
+  border-top: 1px solid var(--edge);
+  border-right: 1px solid var(--edge);
+  transform: rotate(45deg);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* ── upstream's flow badge ──
+   The little arc to the left of every pedal. The card's own chevron says the
+   same thing on the side the signal is going, so this would be saying it
+   twice, in the wrong place. */
+.board-view[data-skin='itza'] .flow-badge {
+  display: none;
+}
+
+/* ── bypassed: the name is the only thing left lit ──
+   The border goes grey with everything else, and the chevron follows it
+   because both read --edge. */
+.board-view[data-skin='itza'] .pedal.pk.bypassed {
+  --edge: #34343a;
+}
+
+/* ── the hover glow takes the card's key colour ──
+   Upstream's --knob-glow is one cyan for the whole board; here every block has
+   its own colour, and a cyan halo on an orange gauge reads as a mistake.
+   color-mix carries the key colour at the same two strengths. */
+.board-view[data-skin='itza'] .pedal.pk .knob {
+  --knob-glow: color-mix(in srgb, var(--key) 62%, transparent);
+  --knob-glow-soft: color-mix(in srgb, var(--key) 30%, transparent);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Corrections
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* IN › and › OUT are .flow-badge, and only those two — hiding the class took
+   the ends of the signal chain with it. They stay. */
+.board-view[data-skin='itza'] .flow-badge {
+  display: inline-flex;
+}
+
+/* ── signal flow, properly this time ──
+   The first attempt inherited upstream's `inset: 0` and `border-radius: 12px`
+   from .pedal::after. `left: 0` beat the `right` I set, so the mark sat on the
+   LEFT edge, and a 15px box with a 12px radius is a circle — the "arc" on
+   every card. Both symptoms, one cause.
+
+   Now a plain solid triangle: no radius, no inherited inset, nothing to
+   misread. */
+/* On ::before, NOT ::after. Upstream's .pedal::after is the bypass scrim —
+   inset: 0, opacity 0, going to opacity 1 on .bypassed — so a chevron built on
+   it is invisible while the pedal is on and grey while it is off. That was the
+   whole fault: the mark was never missing, it was wearing the scrim's opacity.
+   ::before is upstream's gloss sweep, which this skin switches off anyway. */
+.board-view[data-skin='itza'] .pedal.pk::before {
+  content: '';
+  display: block;
+  position: absolute;
+  inset: auto;
+  left: auto;
+  right: -10px;
+  top: 50%;
+  margin-top: -9px;
+  width: 0;
+  height: 0;
+  border-radius: 0;
+  background: none;
+  border-top: 9px solid transparent;
+  border-bottom: 9px solid transparent;
+  border-left: 10px solid var(--edge);
+  border-right: 0;
+  transform: none;
+  box-shadow: none;
+  opacity: 1;
+  pointer-events: none;
+  z-index: 2;
+}
+/* The scrim stays off: this skin dims a bypassed card its own way. */
+.board-view[data-skin='itza'] .pedal.pk::after {
+  display: none;
+}
+
+/* ── the ⓘ joins the tool row ──
+   It pins this effect's description in the bar at the top of the board. It was
+   floating over the lock; now it sits with the other three. The offset is the
+   tools' own width: swatch 18 + gap 9 + icon 18 + gap 9 + icon 18 = 72. */
+.board-view[data-skin='itza'] .pedal.pk .info-chip {
+  position: absolute;
+  top: 13px;
+  right: 95px;
+  bottom: auto;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
+  font-size: 13px;
+  line-height: 1;
+  color: #6e6e76;
+  box-shadow: none;
+}
+.board-view[data-skin='itza'] .pedal.pk .info-chip.pinned {
+  color: var(--key);
+}
+
+/* ── the last pedal has nothing to point at ──
+   Its signal goes to the › OUT badge, which already says so. */
+.board-view[data-skin='itza'] .board-row:last-of-type .pedal-bay:last-of-type .pedal.pk::before {
+  display: none;
+}
