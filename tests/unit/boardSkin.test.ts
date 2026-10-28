@@ -10,6 +10,7 @@ import {
   saveBoardStyle,
   styleFor,
   withBlock,
+  type BlockSkin,
   type BoardSkin,
 } from '@/core/boardSkin';
 
@@ -91,5 +92,34 @@ describe('boardSkin: storage', () => {
     expect(loadBoardSkin()).toEqual({});
     localStorage.setItem('gp200:boardStyle', 'nonsense');
     expect(loadBoardStyle()).toBe('dial');
+  });
+});
+
+/**
+ * The lock guard lives in App.handleBlockSkinChange, but its shape is the
+ * thing worth pinning: a change that CARRIES a locked key is a change to the
+ * lock itself and must get through, even when that key's value is undefined.
+ * Testing `change.locked === undefined` made the lock one-way.
+ */
+describe('boardSkin: the lock can always be undone', () => {
+  const allowed = (skin: BoardSkin, slot: number, change: BlockSkin) =>
+    !(isLocked(skin, slot) && !('locked' in change));
+
+  it('lets the lock itself be turned off', () => {
+    const skin = withBlock({}, 4, { locked: true });
+    expect(allowed(skin, 4, { locked: undefined })).toBe(true);
+    const next = withBlock(skin, 4, { locked: undefined });
+    expect(isLocked(next, 4)).toBe(false);
+  });
+
+  it('still refuses a colour or a style while locked', () => {
+    const skin = withBlock({}, 4, { locked: true });
+    expect(allowed(skin, 4, { color: SKIN_PALETTE[0] })).toBe(false);
+    expect(allowed(skin, 4, { style: 'bar' })).toBe(false);
+  });
+
+  it('allows anything on a block that is not locked', () => {
+    expect(allowed({}, 4, { color: SKIN_PALETTE[0] })).toBe(true);
+    expect(allowed({}, 4, { locked: true })).toBe(true);
   });
 });

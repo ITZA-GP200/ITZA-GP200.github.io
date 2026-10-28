@@ -1474,8 +1474,11 @@ function App() {
   /** One block's preferences changed from its header tools. */
   function handleBlockSkinChange(slotIndex: number, change: BlockSkin) {
     // Everything but the lock itself is refused while locked, so a stale
-    // render can't sneak a change past the lock.
-    if (isLocked(boardSkin, slotIndex) && change.locked === undefined) return;
+    // render can't sneak a change past the lock. The test is whether the key
+    // is PRESENT, not whether it is undefined: unlocking sends
+    // { locked: undefined }, and `=== undefined` refused it — the lock could
+    // be turned on and never off.
+    if (isLocked(boardSkin, slotIndex) && !('locked' in change)) return;
     const next = withBlock(boardSkin, slotIndex, change);
     setBoardSkin(next);
     saveBoardSkin(next);
