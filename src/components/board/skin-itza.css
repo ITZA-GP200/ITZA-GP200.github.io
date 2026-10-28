@@ -863,7 +863,12 @@
    work with, and the swatch/style/lock cluster shares it with the switch. */
 .mobile-view .m-pedal-card.m-pk .pk-tools {
   position: relative;
-  z-index: 2;
+  /* Above the card's own flow chevron, which is a z-index: 2 ::after painted
+     after this cluster. The palette's own z-index cannot help: it is a child
+     of this stacking context and can never paint outside it, so the lift has
+     to happen here. The grip and the switch stay at 2 — they only need to
+     clear the bypass scrim. */
+  z-index: 5;
   flex: none;
   display: flex;
   align-items: center;
