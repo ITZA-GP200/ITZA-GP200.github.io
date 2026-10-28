@@ -1047,3 +1047,150 @@
 .m-list.m-pk-chain .m-cable + .m-marker.fx {
   margin-top: 22px;
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   The other four screens.
+
+   PATCHES, LOOP, DRUMS and DEVICE mount the desktop's own panels in rack
+   units, and they arrived wearing the stock stage: cream ink, brushed rack
+   ears with screws, filled beige buttons, native cyan range tracks. Next to a
+   skinned chain they read as a different application.
+
+   Almost none of that needs rewriting. The phone chrome is already drawn from
+   a handful of custom properties, so the skin redefines those — neutral and
+   cool instead of warm, one hairline weight, one ink — and only the few
+   genuinely skeuomorphic pieces get a rule of their own. That keeps this
+   section short enough to stay true as upstream's panels change.
+   ════════════════════════════════════════════════════════════════════════ */
+.mobile-view[data-skin='itza'] {
+  --chrome-bg: #1b1b1e;
+  --chrome-border: #2f2f34;
+  --chrome-text: #f0f0f3;
+  --chrome-muted: var(--pk-label);
+  --strip-bg: #232326;
+  --bg-deep: #141416;
+  --bg-input: #19191b;
+  --knob-track: #2f2f34;
+  /* The cream fill was the loudest thing on the DEVICE screen — a beige slab
+     where the board has a dark card with a lit edge. */
+  --stub-ink: #2f2f34;
+  --stub-ink-on: #f0f0f3;
+}
+
+/* ── racks become cards ──
+   The ears and their screws are the rack metaphor; this skin does not have
+   one. What is left is a titled card, which is what the chain cards are. */
+.mobile-view[data-skin='itza'] .m-rack {
+  border-color: #2f2f34;
+  border-radius: 12px;
+  background: #1b1b1e;
+}
+.mobile-view[data-skin='itza'] .m-rack-ear {
+  display: none;
+}
+.mobile-view[data-skin='itza'] .m-rack-plate {
+  padding: 11px 14px;
+  background: none;
+  border-bottom: 1px solid #2f2f34;
+}
+.mobile-view[data-skin='itza'] .m-rack-title,
+.mobile-view[data-skin='itza'] .m-chassis-title,
+.mobile-view[data-skin='itza'] .m-screen-title,
+.mobile-view[data-skin='itza'] .m-section-title,
+.mobile-view[data-skin='itza'] .m-sheet-title {
+  /* The weight the card names carry, so a panel heading and a pedal name
+     belong to one typeface decision rather than two. */
+  text-align: left;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--pk-label);
+}
+.mobile-view[data-skin='itza'] .m-chassis,
+.mobile-view[data-skin='itza'] .m-panel,
+.mobile-view[data-skin='itza'] .m-section {
+  border-radius: 12px;
+  background: #1b1b1e;
+}
+.mobile-view[data-skin='itza'] .m-panel {
+  border-color: #2f2f34;
+}
+
+/* The knob strip loses the moulded enclosure it was set into: the board's
+   cards are flat, and so is this. */
+.mobile-view[data-skin='itza'] .m-face {
+  background: #19191b;
+  border: 1px solid #2f2f34;
+  box-shadow: none;
+}
+.mobile-view[data-skin='itza'] .m-face.amp-panel {
+  background: #19191b;
+}
+.mobile-view[data-skin='itza'] .m-panel-jack {
+  background: #19191b;
+  box-shadow: inset 0 0 0 1.5px #3a3a42;
+}
+
+/* ── buttons ──
+   One resting face, and a lit one that borrows the board bar's idiom: a
+   tinted wash inside the accent rather than a solid fill. */
+.mobile-view[data-skin='itza'] .m-btn {
+  border-radius: 10px;
+  border-color: #2f2f34;
+  background: #232326;
+  color: #f0f0f3;
+}
+.mobile-view[data-skin='itza'] .m-btn.ghost {
+  background: transparent;
+  color: var(--pk-label);
+}
+.mobile-view[data-skin='itza'] .m-btn.primary,
+.mobile-view[data-skin='itza'] .m-btn.active {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.mobile-view[data-skin='itza'] .m-select,
+.mobile-view[data-skin='itza'] .m-input {
+  border-color: #2f2f34;
+  border-radius: 8px;
+  background: #19191b;
+  color: #f0f0f3;
+}
+
+/* ── native ranges ──
+   The drum machine's BPM, swing and volume are plain <input type=range>. The
+   stock thumb is a 28px cream disc; here the track is the skin's hairline and
+   the thumb is the accent, which is the bars' reading of a value in a range. */
+.mobile-view[data-skin='itza'] .m-slider::-webkit-slider-runnable-track,
+.mobile-view[data-skin='itza'] .m-slider::-moz-range-track {
+  height: 8px;
+  border-radius: 4px;
+  background: #2f2f34;
+}
+.mobile-view[data-skin='itza'] .m-slider::-webkit-slider-thumb {
+  width: 22px;
+  height: 22px;
+  margin-top: -7px;
+  background: var(--accent);
+  border: 2px solid #19191b;
+  box-shadow: none;
+}
+.mobile-view[data-skin='itza'] .m-slider::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  background: var(--accent);
+  border: 2px solid #19191b;
+}
+
+/* The DEVICE screen's three patch knobs wear the board's gauge, so the arc
+   needs the same room and the same ink the chain cards give it. */
+.mobile-view[data-skin='itza'] .m-face .m-knob {
+  color: var(--accent);
+  --knob-glow: color-mix(in srgb, var(--accent) 62%, transparent);
+  --knob-glow-soft: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.mobile-view[data-skin='itza'] .m-face .m-knob-label {
+  font-size: 13px;
+  color: var(--pk-label);
+}

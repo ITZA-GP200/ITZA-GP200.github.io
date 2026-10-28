@@ -8,17 +8,9 @@ import {
 import type { KnobParam } from '@/core/effectParams';
 import { KNOB_STYLES, type BodySpec } from './boardPalette';
 import { entryText, formatValue, snapValue, stepValue } from './paramValue';
-import { KNOB_VIEWBOX, SWEEP, knobAngle, tickPaths } from './knobGeometry';
+import { KNOB_VIEWBOX, knobAngle, tickPaths } from './knobGeometry';
+import { KnobArc } from './KnobArc';
 
-/** Arc geometry for the skin's gauge: r=36 on the shared 100 viewBox. */
-const ARC_R = 36;
-const CIRCUMFERENCE = 2 * Math.PI * ARC_R;
-const ARC_LEN = CIRCUMFERENCE * (SWEEP / 360);
-/** Where a value sits in its own range, 0..1. */
-const knobPct = (value: number, param: { min: number; max: number }) =>
-  (param.max === param.min
-    ? 0
-    : Math.min(1, Math.max(0, (value - param.min) / (param.max - param.min))));
 import { ValueEntry } from './ValueEntry';
 
 interface PedalKnobProps {
@@ -248,36 +240,7 @@ export function PedalKnob({
         onKeyDown={onKeyDown}
       >
         {arc ? (
-          <>
-            {/* 270° of track, then the same arc filled to the value. The dash
-                length is the sweep's share of the circumference, so this stays
-                tied to SWEEP rather than to a hand-tuned number. */}
-            <circle
-              cx={50} cy={50} r={ARC_R} fill="none"
-              stroke="rgba(255,255,255,.12)" strokeWidth={7} strokeLinecap="round"
-              strokeDasharray={`${ARC_LEN.toFixed(2)} ${CIRCUMFERENCE.toFixed(2)}`}
-              transform="rotate(135 50 50)"
-            />
-            <circle
-              cx={50} cy={50} r={ARC_R} fill="none"
-              stroke="currentColor" strokeWidth={7} strokeLinecap="round"
-              strokeDasharray={`${(ARC_LEN * knobPct(value, param)).toFixed(2)} ${CIRCUMFERENCE.toFixed(2)}`}
-              transform="rotate(135 50 50)"
-            />
-            {/* Long readings have to fit inside the arc: a cab's high cut is
-                "20001", a synced delay "1/8.". Step the size down by length
-                rather than letting it spill over the ring. */}
-            <text
-              x={50}
-              y={57}
-              textAnchor="middle"
-              fill="#f0f0f3"
-              fontWeight={500}
-              fontSize={readout.length > 5 ? 15 : readout.length > 4 ? 18 : readout.length > 3 ? 21 : 25}
-            >
-              {readout}
-            </text>
-          </>
+          <KnobArc value={value} param={param} readout={readout} />
         ) : (
           <>
             {ticks.map((tick) => (

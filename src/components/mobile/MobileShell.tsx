@@ -198,7 +198,11 @@ export default function MobileShell({
   return (
     // The board's grey, published once on the shell so every card, chip and
     // tool icon below derives from it.
-    <div className="mobile-view" style={{ '--pk-label-l': `${labelLum}%` } as CSSProperties}>
+    <div
+      className="mobile-view"
+      data-skin={onBlockSkinChange ? 'itza' : undefined}
+      style={{ '--pk-label-l': `${labelLum}%` } as CSSProperties}
+    >
       {/* one copy of the cable gradients for every cable on the chain screen */}
       <CableDefs />
 
@@ -325,6 +329,7 @@ export default function MobileShell({
               </button>
             </div>
             <DeviceScreen
+              skinned={Boolean(onBlockSkinChange)}
               connected={connected}
               firmware={firmware}
               currentSlot={currentSlot}
