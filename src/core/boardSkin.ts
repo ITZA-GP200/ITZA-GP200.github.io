@@ -63,6 +63,17 @@ export const DEFAULT_KEY: Record<string, string> = {
   VOL: '#2fd4a7',
 };
 
+/**
+ * The FX loop's two markers, taken from the palette above so the loop reads in
+ * the same language as the blocks around it.
+ *
+ * Fixed rather than chosen: send and return are roles, not blocks, and there
+ * is exactly one of each. Warm for the signal leaving, cool for it coming
+ * back, which is the one pairing in the palette nobody has to be taught.
+ */
+export const FX_SEND_COLOR = '#ff8c42';
+export const FX_RETURN_COLOR = '#5a8ff0';
+
 /** The colour a block is drawn in: its own choice, else the module default. */
 export function keyColorFor(skin: BoardSkin, slotIndex: number, moduleName: string): string {
   return blockSkin(skin, slotIndex).color ?? DEFAULT_KEY[moduleName] ?? '#c9d1d9';
