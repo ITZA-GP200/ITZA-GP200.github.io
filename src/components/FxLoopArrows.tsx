@@ -78,8 +78,11 @@ export function FxLoopArrows({ send, ret, onSendChange, onReturnChange }: FxLoop
     <div
       className="relative mb-2 font-mono-display select-none"
       style={{
-        background: 'rgba(0,0,0,0.03)',
-        border: '1px solid rgba(0,0,0,0.10)',
+        // Theme variables, not fixed black at 3%: on the dark stage that
+        // washed out to nothing, so the panel had no edge at all and the two
+        // bands floated in the sheet. These follow whichever stage is on.
+        background: 'var(--strip-bg)',
+        border: '1px solid var(--chrome-border)',
         borderRadius: 8,
         padding: '4px 4px',
       }}
