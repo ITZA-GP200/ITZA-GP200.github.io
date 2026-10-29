@@ -22,13 +22,22 @@ const BLOCKS = ['PRE', 'WAH', 'BST', 'AMP', 'NR', 'CAB', 'EQ', 'MOD', 'DLY', 'RV
 const BLOCK_LABEL = 'hsl(240 4% 75%)';
 
 /**
- * Eleven labels and eleven drop targets share a 375px row, which leaves each
- * gap about 18px — the whole reason these were hard to hit. The marker is
- * allowed to spill symmetrically past its gap so the target is wider than the
- * space it sits in, stopping just short of the ~32px pitch between gap centres
- * so two targets can never overlap and leave the drop ambiguous.
+ * Two bands, not one row.
+ *
+ * Eleven labels and eleven drop targets cannot share a 375px row: the labels
+ * need about 20px each, which left every target an 11px sliver and the
+ * triangle sitting on the text either side of it. So the labels keep the top
+ * band to themselves and the markers get their own underneath, where each one
+ * is free to be a whole column wide.
+ *
+ * Alignment is structural rather than measured: both bands are the same
+ * eleven flex columns, and a marker is absolutely placed over the RIGHT EDGE
+ * of its column — which is exactly the boundary "after this block" means. One
+ * column wide and centred on that edge, so the targets tile the band with no
+ * dead strip between them. The last boundary sits past the final column, so
+ * both bands carry a trailing half column: equal widths and somewhere for it
+ * to land, neither of them guessed.
  */
-const MARKER_W = 30;
 
 /**
  * Up for the signal leaving, down for it coming back.
@@ -43,8 +52,8 @@ const MARKER_W = 30;
 function Chevron({ dir }: { dir: 'up' | 'down' }) {
   return (
     <svg
-      width="15"
-      height="11"
+      width="20"
+      height="13"
       viewBox="0 0 24 16"
       fill="currentColor"
       aria-hidden="true"
@@ -88,83 +97,102 @@ export function FxLoopArrows({ send, ret, onSendChange, onReturnChange }: FxLoop
   return (
     <div
       className="relative mb-2 font-mono-display select-none"
-      style={{ background: 'rgba(0,0,0,0.03)', border: '1px solid rgba(0,0,0,0.10)', borderRadius: 8, padding: '6px 4px' }}
+      style={{
+        background: 'rgba(0,0,0,0.03)',
+        border: '1px solid rgba(0,0,0,0.10)',
+        borderRadius: 8,
+        padding: '6px 4px',
+      }}
     >
-      <div className="flex items-stretch justify-between gap-1 text-label uppercase tracking-wider">
+      {/* band one: the blocks you are aiming between */}
+      <div className="flex text-label uppercase tracking-wider">
+        {BLOCKS.map((name) => (
+          <div
+            key={name}
+            className="text-center"
+            style={{ flex: '1 1 0', minWidth: 0, color: BLOCK_LABEL }}
+          >
+            {name}
+          </div>
+        ))}
+        {/* Half a column, in both bands, so they keep identical column widths
+            AND the boundary after the last block has somewhere to sit. A
+            guessed right padding cannot do both; this is exact by
+            construction. */}
+        <div aria-hidden="true" style={{ flex: '0.5 1 0' }} />
+      </div>
+
+      {/* band two: one drop target per boundary, each a full column wide and
+          centred on the edge it belongs to. A gap holding both markers stacks
+          send over return; a gap holding one centres it in the band. */}
+      <div className="flex" style={{ minHeight: 44 }}>
         {BLOCKS.map((name, idx) => (
-          <div key={name} className="flex items-center" style={{ flex: '1 1 0', minWidth: 0 }}>
-            <span className="px-1" style={{ color: BLOCK_LABEL }}>{name}</span>
+          <div key={name} className="relative" style={{ flex: '1 1 0', minWidth: 0 }}>
             {/* One drop gap after every block, VOL included: position 11 puts
                 the loop after the whole chain, which is what the 4-cable
-                method uses and what real device exports store.
-
-                Column, centred: with both markers here they stack send over
-                return, and with one it sits in the middle of the row on its
-                own — no nudging either into place, which is what left a lone
-                marker looking off-centre before. */}
+                method uses and what real device exports store. */}
             <div
-                role="presentation"
-                data-gap={idx + 1}
-                onDragOver={handleDragOver}
-                onDrop={() => handleDrop(idx + 1)}
-                className="relative flex-1 flex flex-col items-center justify-center"
-                style={{ minHeight: 40 }}
-              >
-                {send === idx + 1 && (
-                  <button
-                    type="button"
-                    tabIndex={0}
-                    draggable
-                    onDragStart={(e) => handleDragStart('send', e)}
-                    onKeyDown={(e) => handleArrowKey('send', e)}
-                    aria-label={idx < 10 ? `FX Loop Send position, currently between effects ${idx + 1} and ${idx + 2}` : 'FX Loop Send position, currently after the last effect'}
-                    aria-valuemin={1}
-                    aria-valuemax={11}
-                    aria-valuenow={send}
-                    role="slider"
-                    data-bypass={bypass}
-                    title={bypass ? 'FX Loop bypass (Send = Return)' : 'Send'}
-                    className="flex items-center justify-center leading-none cursor-grab"
-                    style={{
-                      color: FX_SEND_COLOR,
-                      opacity: bypass ? 0.5 : 1,
-                      width: MARKER_W,
-                      marginInline: `calc((100% - ${MARKER_W}px) / 2)`,
-                      minHeight: 20,
-                    }}
-                  >
-                    <Chevron dir="up" />
-                  </button>
-                )}
-                {ret === idx + 1 && (
-                  <button
-                    type="button"
-                    tabIndex={0}
-                    draggable
-                    onDragStart={(e) => handleDragStart('return', e)}
-                    onKeyDown={(e) => handleArrowKey('return', e)}
-                    aria-label={idx < 10 ? `FX Loop Return position, currently between effects ${idx + 1} and ${idx + 2}` : 'FX Loop Return position, currently after the last effect'}
-                    aria-valuemin={1}
-                    aria-valuemax={11}
-                    aria-valuenow={ret}
-                    role="slider"
-                    data-bypass={bypass}
-                    title={bypass ? 'FX Loop bypass (Send = Return)' : 'Return'}
-                    className="flex items-center justify-center leading-none cursor-grab"
-                    style={{
-                      color: FX_RETURN_COLOR,
-                      opacity: bypass ? 0.5 : 1,
-                      width: MARKER_W,
-                      marginInline: `calc((100% - ${MARKER_W}px) / 2)`,
-                      minHeight: 20,
-                    }}
-                  >
-                    <Chevron dir="down" />
-                  </button>
-                )}
+              role="presentation"
+              data-gap={idx + 1}
+              onDragOver={handleDragOver}
+              onDrop={() => handleDrop(idx + 1)}
+              className="absolute top-0 bottom-0 flex flex-col items-center justify-center"
+              style={{ right: '-50%', width: '100%' }}
+            >
+              {send === idx + 1 && (
+                <button
+                  type="button"
+                  tabIndex={0}
+                  draggable
+                  onDragStart={(e) => handleDragStart('send', e)}
+                  onKeyDown={(e) => handleArrowKey('send', e)}
+                  aria-label={idx < 10 ? `FX Loop Send position, currently between effects ${idx + 1} and ${idx + 2}` : 'FX Loop Send position, currently after the last effect'}
+                  aria-valuemin={1}
+                  aria-valuemax={11}
+                  aria-valuenow={send}
+                  role="slider"
+                  data-bypass={bypass}
+                  title={bypass ? 'FX Loop bypass (Send = Return)' : 'Send'}
+                  className="flex items-center justify-center leading-none cursor-grab"
+                  style={{
+                    color: FX_SEND_COLOR,
+                    opacity: bypass ? 0.5 : 1,
+                    alignSelf: 'stretch',
+                    minHeight: 20,
+                  }}
+                >
+                  <Chevron dir="up" />
+                </button>
+              )}
+              {ret === idx + 1 && (
+                <button
+                  type="button"
+                  tabIndex={0}
+                  draggable
+                  onDragStart={(e) => handleDragStart('return', e)}
+                  onKeyDown={(e) => handleArrowKey('return', e)}
+                  aria-label={idx < 10 ? `FX Loop Return position, currently between effects ${idx + 1} and ${idx + 2}` : 'FX Loop Return position, currently after the last effect'}
+                  aria-valuemin={1}
+                  aria-valuemax={11}
+                  aria-valuenow={ret}
+                  role="slider"
+                  data-bypass={bypass}
+                  title={bypass ? 'FX Loop bypass (Send = Return)' : 'Return'}
+                  className="flex items-center justify-center leading-none cursor-grab"
+                  style={{
+                    color: FX_RETURN_COLOR,
+                    opacity: bypass ? 0.5 : 1,
+                    alignSelf: 'stretch',
+                    minHeight: 20,
+                  }}
+                >
+                  <Chevron dir="down" />
+                </button>
+              )}
             </div>
           </div>
         ))}
+        <div aria-hidden="true" style={{ flex: '0.5 1 0' }} />
       </div>
     </div>
   );
