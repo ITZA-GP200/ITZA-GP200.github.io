@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { BarsIcon, DialIcon } from './StyleIcons';
 import type { PushProgress } from '@/core/devicePush';
 import { SysExCodec } from '@/core/SysExCodec';
 import { tunerShow, type CCCommand } from '@/core/ccControl';
@@ -38,6 +39,9 @@ interface BoardTopBarProps {
   /* mute for the rocker's clack (src/lib/uiSound.ts) */
   soundOn: boolean;
   onToggleSound: () => void;
+  /** ITZA skin (fork): the board-wide control style and its setter. */
+  boardStyle?: 'dial' | 'bar';
+  onBoardStyleChange?: (style: 'dial' | 'bar') => void;
   /** Tablet band only: is the full chrome showing, or just the patch island?
    *  Rendered on every tree, but board.css only acts on it between 640px and
    *  the tablet ceiling , the desktop bar has the width to show everything and
@@ -107,6 +111,8 @@ export function BoardTopBar({
   onToggleLights,
   soundOn,
   onToggleSound,
+  boardStyle,
+  onBoardStyleChange,
   chromeOpen,
   onToggleChrome,
 }: BoardTopBarProps) {
@@ -203,6 +209,30 @@ export function BoardTopBar({
           onToggle={onToggleLights}
         />
         <SoundToggle on={soundOn} onToggle={onToggleSound} />
+        {onBoardStyleChange && (
+          <span className="pk-style">
+            <button
+              type="button"
+              className={`deck-btn quiet${boardStyle === 'dial' ? ' pk-on' : ''}`}
+              aria-pressed={boardStyle === 'dial'}
+              title="Show every unlocked pedal's controls as dials"
+              aria-label="Dials on every pedal"
+              onClick={() => onBoardStyleChange('dial')}
+            >
+              <DialIcon />
+            </button>
+            <button
+              type="button"
+              className={`deck-btn quiet${boardStyle === 'bar' ? ' pk-on' : ''}`}
+              aria-pressed={boardStyle === 'bar'}
+              title="Show every unlocked pedal's controls as bars"
+              aria-label="Bars on every pedal"
+              onClick={() => onBoardStyleChange('bar')}
+            >
+              <BarsIcon />
+            </button>
+          </span>
+        )}
       </div>
 
       <div className="board-topbar-status">

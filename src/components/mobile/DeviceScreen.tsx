@@ -12,6 +12,8 @@ import { FocusRail } from './FocusRail';
 import { MobileRack } from './MobileRack';
 
 interface DeviceScreenProps {
+  /** ITZA skin (fork): the patch knobs wear the board's value arc. */
+  skinned?: boolean;
   connected: boolean;
   firmware: string | null;
   currentSlot: number | null;
@@ -57,6 +59,7 @@ const LEVELS = [
  * reused whole and mounted in racks rather than restyled.
  */
 export function DeviceScreen({
+  skinned = false,
   connected,
   firmware,
   currentSlot,
@@ -146,6 +149,7 @@ export function DeviceScreen({
               param={param}
               value={values[i]}
               onChange={setters[i]}
+              arc={skinned}
               knobStyle="cream"
               ink="var(--chrome-text)"
               pedalName="Patch"

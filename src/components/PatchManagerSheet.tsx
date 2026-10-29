@@ -91,6 +91,10 @@ export interface PatchManagerSheetProps {
   onRefreshNames: () => void;
   /** SAVE LOG: write what the editor has been doing to a file. */
   onSaveLog?: () => void;
+  /** SAVE SETTINGS: this browser's own settings, as a file to carry away. */
+  onSaveSettings?: () => void;
+  /** LOAD SETTINGS: apply a settings file written by SAVE SETTINGS. */
+  onLoadSettings?: (file: File) => void;
   /** Load a .prst into the editor buffer (pushes + saves when connected). */
   onImportFile: (bytes: Uint8Array) => void;
   /** Open the editor's export-preset dialog for the current patch. */
@@ -183,6 +187,8 @@ export function PatchManagerSheet({
   onRenameSlot,
   onRefreshNames,
   onSaveLog,
+  onSaveSettings,
+  onLoadSettings,
   onImportFile,
   onExportRequest,
   userIrNames,
@@ -248,6 +254,7 @@ export function PatchManagerSheet({
   const [confirmingSave, setConfirmingSave] = useState(false);
   const [choosingRestore, setChoosingRestore] = useState(false);
   const restoreFileRef = useRef<HTMLInputElement>(null);
+  const settingsInput = useRef<HTMLInputElement>(null);
 
   function handleSelect(slot: number, modifiers?: { shift: boolean; toggle: boolean }) {
     setRenaming(false);
@@ -932,6 +939,40 @@ export function PatchManagerSheet({
               SAVE LOG
             </Button>
           )}
+          {onSaveSettings && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={onSaveSettings}
+              title="Save this browser's own settings to a file: board colours, control styles, locks, label brightness, your default patch and the knobs this pedal refuses. None of this lives in a patch — the GP-200 format has nowhere to put it — so this file is the only way to carry it to another browser or get it back after clearing site data. No patch data, nothing sent anywhere."
+            >
+              SAVE SETTINGS
+            </Button>
+          )}
+          {onLoadSettings && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => settingsInput.current?.click()}
+              title="Load a settings file written by SAVE SETTINGS. Settings in the file replace yours; anything the file does not mention is left alone. Nothing on the pedal changes."
+            >
+              LOAD SETTINGS
+            </Button>
+          )}
+          <input
+            ref={settingsInput}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              // Clear the input first: picking the same file twice in a row
+              // fires no change event otherwise, and a failed import is
+              // exactly the case you retry.
+              e.target.value = '';
+              if (file && onLoadSettings) onLoadSettings(file);
+            }}
+          />
           {refusedCount > 0 && (
             <Button
               size="sm"

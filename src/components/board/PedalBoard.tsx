@@ -1,7 +1,24 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type DragEvent,
+} from 'react';
 import type { GP200Preset, EffectSlot } from '@/core/types';
 import type { PushProgress } from '@/core/devicePush';
 import { getSlotModule } from '@/core/effectNames';
+import {
+  blockSkin,
+  keyColorFor,
+  LABEL_LUM_DEFAULT,
+  styleFor,
+  type BlockSkin,
+  type BoardSkin,
+  type ControlStyle,
+} from '@/core/boardSkin';
 import { isWideSlot } from './boardLayout';
 import { useFlipReorder } from './useFlipReorder';
 import { useBoardFit } from './useBoardFit';
@@ -43,6 +60,7 @@ import { Tabs } from '@/components/ui/Tabs';
 import { useCoarsePointer, useSingleRowBoard } from '@/hooks/useMediaQuery';
 import { prefersReducedMotion } from '@/lib/motion';
 import './board.css';
+import './skin-itza.css';
 
 type PatchSettingsTab = 'details' | 'exp' | 'ctrl' | 'bulk';
 
@@ -83,6 +101,14 @@ export interface PedalBoardProps {
   onFxReturnChange: (pos: number) => void;
   /** Applies an FX-loop scenario by id (see core/fxScenarios). */
   onApplyFxScenario: (scenarioId: string) => void;
+  /** ITZA skin (fork): per-block preferences and the board-wide style. */
+  boardSkin?: BoardSkin;
+  boardStyle?: ControlStyle;
+  onBlockSkinChange?: (slotIndex: number, change: BlockSkin) => void;
+  onBoardStyleChange?: (style: ControlStyle) => void;
+  /** Board-wide label grey, as a lightness percentage. */
+  labelLum?: number;
+  onLabelLumChange?: (lum: number) => void;
   /** FX-loop routing mode: 0 = parallel, 1 = serial. */
   onFxModeChange: (mode: number) => void;
   /** Per-patch style tag (index into PATCH_STYLES). */
@@ -230,6 +256,12 @@ export function PedalBoard({
   onPushRequest,
   pushProgress,
   firmware,
+  boardSkin = {},
+  boardStyle = 'dial',
+  onBlockSkinChange,
+  onBoardStyleChange,
+  labelLum = LABEL_LUM_DEFAULT,
+  onLabelLumChange,
 }: PedalBoardProps) {
   const artIndex = usePedalManifest();
 
@@ -314,9 +346,33 @@ export function PedalBoard({
     window.clearTimeout(flickerTimer.current);
     flickerTimer.current = window.setTimeout(() => setFlickering(false), 720);
   }, [onToggleTheme]);
-  const handleReorderDrop = (index: number) => {
+  /**
+   * A bay is the drop target for two different drags: reordering the chain,
+   * and moving an FX loop marker. They are told apart by the payload the drag
+   * set — a marker writes "fx:send" / "fx:return", a pedal writes its index —
+   * because the bay cannot otherwise know what was picked up, and guessing
+   * would reorder the chain every time the loop moved.
+   */
+  const handleBayDrop = (e: DragEvent, index: number) => {
+    const payload = e.dataTransfer.getData('text/plain');
+    if (payload === 'fx:send') {
+      onFxSendChange(index + 1);
+      return;
+    }
+    if (payload === 'fx:return') {
+      onFxReturnChange(index + 1);
+      return;
+    }
     capture();
     onDrop(index);
+  };
+
+  /** Arrow keys on a focused marker, clamped by the parent's push rule. */
+  const handleFxMove = (kind: 'send' | 'return', delta: number) => {
+    const from = kind === 'send' ? preset.fxLoopSend : preset.fxLoopReturn;
+    const next = Math.max(1, Math.min(preset.effects.length, from + delta));
+    if (next === from) return;
+    (kind === 'send' ? onFxSendChange : onFxReturnChange)(next);
   };
   const handleReorderMove = (from: number, to: number) => {
     capture();
@@ -355,7 +411,7 @@ export function PedalBoard({
         key={`slot-${slot.slotIndex}`}
         className={bayClasses.join(' ')}
         onDragOver={(e) => onDragOver(e, index)}
-        onDrop={() => handleReorderDrop(index)}
+        onDrop={(e) => handleBayDrop(e, index)}
       >
         <Pedal
           slot={slot}
@@ -373,17 +429,38 @@ export function PedalBoard({
           isPinned={pinnedSlot === slot.slotIndex}
           showMoveButtons={touch}
           chainLength={preset.effects.length}
+          skinned={Boolean(onBlockSkinChange)}
+          blockSkin={blockSkin(boardSkin, slot.slotIndex)}
+          controlStyle={styleFor(boardSkin, slot.slotIndex, boardStyle)}
+          onSkinChange={
+            onBlockSkinChange && ((change) => onBlockSkinChange(slot.slotIndex, change))
+          }
+          labelLum={labelLum}
+          onLabelLumChange={onLabelLumChange}
+          // Loop positions are 1..11 chain positions, so position N is the
+          // Nth block in the CURRENT order — index, never slotIndex, or a
+          // reordered chain would mark the wrong card.
+          fxSend={preset.fxLoopSend === index + 1}
+          fxReturn={preset.fxLoopReturn === index + 1}
+          fxMove={handleFxMove}
         />
       </div>
     );
   };
 
+  // One custom property drives every grey on the board: the skin derives both
+  // the lit and the bypassed label colour from it, so the brightness slider
+  // needs no per-element plumbing.
   return (
     <div
       className={`board-view${flickering ? ' flickering' : ''}`}
+      data-skin={onBlockSkinChange ? 'itza' : undefined}
       data-chrome={chromeOpen ? 'open' : 'closed'}
+      style={{ '--pk-label-l': `${labelLum}%` } as CSSProperties}
     >
       <BoardTopBar
+        boardStyle={boardStyle}
+        onBoardStyleChange={onBoardStyleChange}
         chromeOpen={chromeOpen}
         onToggleChrome={() => setChromeOpen((prev) => !prev)}
         connected={connected}
@@ -651,6 +728,11 @@ export function PedalBoard({
           artIndex={artIndex}
           onSelect={(effectId) => onChangeEffect(pickerEffect.slotIndex, effectId)}
           onClose={() => setPickerSlot(null)}
+          accentOverride={
+            onBlockSkinChange
+              ? keyColorFor(boardSkin, pickerEffect.slotIndex, getSlotModule(pickerEffect.slotIndex))
+              : undefined
+          }
         />
       )}
     </div>

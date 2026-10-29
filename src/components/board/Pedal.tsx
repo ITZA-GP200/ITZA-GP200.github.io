@@ -1,16 +1,20 @@
-import { useState, type CSSProperties } from 'react';
+import {
+  useRef,
+  useState,
+  type CSSProperties,
+  type DragEvent,
+  type KeyboardEvent,
+} from 'react';
 import type { EffectSlot } from '@/core/types';
 import { getEffectName, getSlotModule } from '@/core/effectNames';
 import { EFFECT_DESCRIPTIONS } from '@/core/effectDescriptions';
-import { getEffectParams } from '@/core/effectParams';
-import { isKnobSynced } from '@/core/tempoSync';
 import { getBodySpec } from './boardPalette';
 import { pedalIsWide } from './boardLayout';
 import { type PedalArtEntry } from './pedalManifest';
 import { ModuleGlyph } from './ModuleGlyph';
-import { PedalKnob } from './PedalKnob';
-import { PedalFader } from './PedalFader';
-import { ComboSelect, MiniSwitch } from './MiniSwitch';
+import { PedalControls } from './PedalControls';
+import { PedalSkinTools } from './PedalSkinTools';
+import { DEFAULT_KEY, type BlockSkin, type ControlStyle } from '@/core/boardSkin';
 
 export interface PedalProps {
   slot: EffectSlot;
@@ -37,6 +41,25 @@ export interface PedalProps {
   showMoveButtons?: boolean;
   /** chain length, for the move bounds + the grip's announced position */
   chainLength: number;
+  /* ── ITZA skin (fork) ──────────────────────────────────────────────────
+     Absent on the stock board, so everything below is optional and the
+     component behaves exactly as upstream's without it. */
+  /** Draw as an ITZA card: header tools, key colour, dark field. */
+  skinned?: boolean;
+  /** This block's saved preferences (core/boardSkin.ts). */
+  blockSkin?: BlockSkin;
+  /** The style this block renders with, already resolved against the board. */
+  controlStyle?: ControlStyle;
+  onSkinChange?: (change: BlockSkin) => void;
+  /** Board-wide label grey, as a lightness percentage. */
+  labelLum?: number;
+  onLabelLumChange?: (lum: number) => void;
+  /** The FX loop leaves the chain at this block (fxLoopSend). */
+  fxSend?: boolean;
+  /** The FX loop comes back at this block (fxLoopReturn). */
+  fxReturn?: boolean;
+  /** Walk a loop marker along the chain (the keyboard path; drag is pointer). */
+  fxMove?: (kind: 'send' | 'return', delta: number) => void;
 }
 
 /** One effect slot rendered as a physical pedal (docs/board-design-system.md). */
@@ -54,6 +77,15 @@ export function Pedal({
   isPinned,
   showMoveButtons,
   chainLength,
+  skinned = false,
+  blockSkin = {},
+  controlStyle = 'dial',
+  onSkinChange,
+  labelLum,
+  onLabelLumChange,
+  fxSend = false,
+  fxReturn = false,
+  fxMove,
 }: PedalProps) {
   const [dragging, setDragging] = useState(false);
 
@@ -63,7 +95,6 @@ export function Pedal({
   const moduleName = getSlotModule(slot.slotIndex);
   // authentic per-effect colors from the artwork spec; module palette as fallback
   const spec = art?.colors ?? getBodySpec(moduleName);
-  const defs = getEffectParams(slot.effectId);
   // the pedal keeps its natural size, but never wider than its fixed bay, so
   // swapping an effect only changes the padding inside the bay, never a
   // neighbour's position (see pedalIsWide)
@@ -75,10 +106,45 @@ export function Pedal({
   const panelText = art?.colors?.panelText ?? spec.ink;
   let knobInk = spec.ink;
   if (panel) knobInk = panelText;
-  // graphic EQs get faders, not knobs
+  // Graphic EQs get faders on the stock board: a graphic EQ should look like
+  // one. The skin has no faders at all — every block is dials or bars, EQ
+  // included, so the whole board reads as one instrument.
   const isEq = moduleName === 'EQ';
+  const useFaders = !skinned && isEq;
+  const useBars = skinned && controlStyle === 'bar';
+  // A locked block's style and values are frozen; its position and its on/off
+  // switch deliberately are not.
+  const locked = skinned && blockSkin.locked === true;
+  /** whether the press that may become a drag started on the tool cluster */
+  const pressedInTools = useRef(false);
+
+  /**
+   * A marker is its own drag source sitting inside a draggable card, so the
+   * payload has to say which it is: the bay underneath is a drop target for
+   * BOTH the chain reorder and this, and without a marker in the data it
+   * would reorder the chain every time you moved the loop.
+   *
+   * stopPropagation keeps the card's own dragstart from firing as well and
+   * starting a reorder at the same moment.
+   */
+  function startFxDrag(e: DragEvent<HTMLSpanElement>, kind: 'send' | 'return') {
+    e.stopPropagation();
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', `fx:${kind}`);
+  }
+
+  /** Arrow keys walk a marker along the chain; drag is pointer-only. */
+  function fxKey(e: KeyboardEvent<HTMLSpanElement>, kind: 'send' | 'return') {
+    const delta = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+    if (delta === 0 || !fxMove) return;
+    e.preventDefault();
+    e.stopPropagation();
+    fxMove(kind, delta);
+  }
+  const keyColor = blockSkin.color ?? DEFAULT_KEY[moduleName] ?? spec.body;
 
   const bodyVars = {
+    '--key': keyColor,
     '--body': spec.body,
     '--body-deep': spec.bodyDeep,
     '--ink': spec.ink,
@@ -87,6 +153,8 @@ export function Pedal({
   } as CSSProperties;
 
   const classes = ['pedal'];
+  if (skinned) classes.push('pk');
+  if (locked) classes.push('pk-locked');
   if (wide) classes.push('wide');
   if (dragging) classes.push('dragging');
   if (!slot.enabled) classes.push('bypassed');
@@ -114,7 +182,22 @@ export function Pedal({
       data-chain={index}
       data-flip-id={`pedal-${slot.slotIndex}`}
       draggable
+      /* HTML5 drag fires `dragstart` on the DRAGGABLE element — this article —
+         not on whatever the pointer actually went down on. So a guard placed
+         on the inner control never runs, and press-and-slide on the brightness
+         slider reordered the pedal instead of moving the thumb. Record where
+         the press landed on the way down, and refuse the drag if it was inside
+         the tool cluster. */
+      onPointerDownCapture={(e) => {
+        pressedInTools.current = Boolean(
+          (e.target as HTMLElement).closest?.('.pk-tools'),
+        );
+      }}
       onDragStart={(e) => {
+        if (pressedInTools.current) {
+          e.preventDefault();
+          return;
+        }
         e.dataTransfer.effectAllowed = 'move';
         // Required: a dragstart that sets no data lets the browser abort the drag
         // outright, after this handler has already set dragIndex. Nothing then
@@ -131,6 +214,52 @@ export function Pedal({
       onFocusCapture={() => onInspect(true)}
       onBlurCapture={() => onInspect(false)}
     >
+      {/* ── the FX loop, in the strip above the card ──
+          The board is one wrapping flex row, and where it breaks is a layout
+          outcome rather than a JS split (see board.css). So these hang off the
+          card itself rather than off a row that does not exist: whichever line
+          a card lands on, its markers appear in the strip above that line, and
+          a wrapped board gets one strip per line for free.
+
+          At a third and two thirds of the card, not on its edges — this says
+          "the loop leaves and returns around this block", which is what the
+          positions mean, without pretending to a precision the eye cannot use
+          at this size. They keep full key colour even when the block is
+          bypassed: the loop's routing is a property of the chain, not of
+          whether this one pedal happens to be switched on. */}
+      {skinned && fxSend && (
+        <span
+          className="pk-fx out"
+          style={{ borderBottomColor: keyColor }}
+          draggable
+          onDragStart={(e) => startFxDrag(e, 'send')}
+          onKeyDown={(e) => fxKey(e, 'send')}
+          tabIndex={0}
+          role="slider"
+          aria-valuemin={1}
+          aria-valuemax={chainLength}
+          aria-valuenow={index + 1}
+          aria-label={`FX loop send, after block ${index + 1}. Drag it to another block, or use arrow keys.`}
+          title="FX loop SEND: the signal leaves the chain around this block. Drag it to another block."
+        />
+      )}
+      {skinned && fxReturn && (
+        <span
+          className="pk-fx in"
+          style={{ borderTopColor: keyColor }}
+          draggable
+          onDragStart={(e) => startFxDrag(e, 'return')}
+          onKeyDown={(e) => fxKey(e, 'return')}
+          tabIndex={0}
+          role="slider"
+          aria-valuemin={1}
+          aria-valuemax={chainLength}
+          aria-valuenow={index + 1}
+          aria-label={`FX loop return, after block ${index + 1}. Drag it to another block, or use arrow keys.`}
+          title="FX loop RETURN: the signal comes back around this block. Drag it to another block."
+        />
+      )}
+
       {/* knurled dot grip: signals the whole pedal is draggable */}
       <span className="pedal-grip" aria-hidden="true" />
       <span className="jack in" data-jack="in" />
@@ -138,6 +267,17 @@ export function Pedal({
       <span className="screw tl" /><span className="screw tr" />
       <span className="screw bl" /><span className="screw br" />
       <span className="module-chip">{moduleName}</span>
+      {skinned && onSkinChange && (
+        <PedalSkinTools
+          moduleName={moduleName}
+          skin={blockSkin}
+          style={controlStyle}
+          keyColor={keyColor}
+          onChange={onSkinChange}
+          labelLum={labelLum}
+          onLabelLumChange={onLabelLumChange}
+        />
+      )}
       <button
         type="button"
         className={`info-chip${isPinned ? ' pinned' : ''}`}
@@ -176,57 +316,17 @@ export function Pedal({
           e.stopPropagation();
         }}
       >
-        {defs.map((def) => {
-          const value = slot.params[def.idx] ?? def.default;
-          // Two defs can share an idx (generated table quirk: Slapback's
-          // Sync + Trail both map param 3), so the key needs the name too.
-          const defKey = `${def.idx}-${def.name}`;
-          if (def.type === 'knob') {
-            if (isEq) {
-              return (
-                <PedalFader
-                  key={defKey}
-                  param={def}
-                  value={value}
-                  onChange={(v) => onParamChange(def.idx, v)}
-                  pedalName={effectName}
-                />
-              );
-            }
-            return (
-              <PedalKnob
-                key={defKey}
-                param={def}
-                value={value}
-                onChange={(v) => onParamChange(def.idx, v)}
-                knobStyle={spec.knob}
-                ink={knobInk}
-                pedalName={effectName}
-                synced={isKnobSynced(slot.effectId, def, slot.params)}
-              />
-            );
-          }
-          if (def.type === 'switch') {
-            return (
-              <MiniSwitch
-                key={defKey}
-                param={def}
-                value={value}
-                onChange={(v) => onParamChange(def.idx, v)}
-                pedalName={effectName}
-              />
-            );
-          }
-          return (
-            <ComboSelect
-              key={defKey}
-              param={def}
-              value={value}
-              onChange={(v) => onParamChange(def.idx, v)}
-              pedalName={effectName}
-            />
-          );
-        })}
+        <PedalControls
+          slot={slot}
+          effectName={effectName}
+          spec={spec}
+          knobInk={knobInk}
+          onParamChange={onParamChange}
+          locked={locked}
+          arc={skinned}
+          bars={useBars}
+          faders={useFaders}
+        />
       </div>
 
       <span className={`p-led${slot.enabled ? ' on' : ''}`} />
