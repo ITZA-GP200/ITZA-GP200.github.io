@@ -3,6 +3,9 @@ import type { GP200Preset } from '@/core/types';
 import type { ManifestIndex } from '@/components/board/pedalManifest';
 import { lookupPedalArt } from '@/components/board/pedalManifest';
 import { displayPosition, useDragReorder } from '@/hooks/useDragReorder';
+import { useFxMarkerDrag, type FxMarkerKind } from '@/hooks/useFxMarkerDrag';
+import { FxMarker } from './FxMarker';
+import { FX_RETURN_COLOR, FX_SEND_COLOR } from '@/core/boardSkin';
 import { ChainRow } from './ChainRow';
 import { ChainCable } from './ChainCable';
 import { blockSkin, styleFor, type BlockSkin, type BoardSkin, type ControlStyle } from '@/core/boardSkin';
@@ -14,7 +17,6 @@ interface ChainScreenProps {
   scrollRef: RefObject<HTMLElement | null>;
   onToggle: (slotIndex: number, currentlyEnabled: boolean) => void;
   onMove: (from: number, to: number) => void;
-  onOpenSlot: (index: number) => void;
   onOpenFxLoop: () => void;
   /* ── ITZA skin (fork) ────────────────────────────────────────────────── */
   skinned?: boolean;
@@ -23,6 +25,8 @@ interface ChainScreenProps {
   onParamChange?: (slotIndex: number, effectId: number, paramIndex: number, value: number) => void;
   onOpenPicker?: (slotIndex: number) => void;
   onBlockSkinChange?: (slotIndex: number, change: BlockSkin) => void;
+  /** Move an FX loop marker to a chain position (1..11). */
+  onFxPositionChange?: (kind: FxMarkerKind, position: number) => void;
   /** Board-wide label grey, as a lightness percentage. */
   labelLum?: number;
   onLabelLumChange?: (lum: number) => void;
@@ -47,7 +51,6 @@ export function ChainScreen({
   scrollRef,
   onToggle,
   onMove,
-  onOpenSlot,
   onOpenFxLoop,
   skinned = false,
   boardSkin = {},
@@ -55,6 +58,7 @@ export function ChainScreen({
   onParamChange,
   onOpenPicker,
   onBlockSkinChange,
+  onFxPositionChange,
   labelLum,
   onLabelLumChange,
 }: ChainScreenProps) {
@@ -63,6 +67,16 @@ export function ChainScreen({
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
   const listRef = useRef<HTMLUListElement>(null);
   const chain = preset.effects;
+
+  // A marker insert is its own gesture: boundaries, not slots, and nothing
+  // else on the list moves. See useFxMarkerDrag for why it is not the hook
+  // above wearing a different hat.
+  const fxDrag = useFxMarkerDrag({
+    scrollRef,
+    listRef,
+    itemCount: chain.length,
+    onCommit: (kind, position) => onFxPositionChange?.(kind, position),
+  });
 
   const drag = useDragReorder({
     scrollRef,
@@ -91,7 +105,13 @@ export function ChainScreen({
         </li>
 
         {chain.map((slot, position) => (
-          <li key={slot.slotIndex} className="m-row-wrap">
+          <li
+            key={slot.slotIndex}
+            className="m-row-wrap"
+            // The boundary a dragged marker would land on. It is the bottom
+            // edge of this row, which is exactly what "after block N" means.
+            data-fx-drop={fxDrag.target === position + 1 ? fxDrag.kind : undefined}
+          >
             <ChainRow
               skinned={skinned}
               blockSkin={blockSkin(boardSkin, slot.slotIndex)}
@@ -118,7 +138,6 @@ export function ChainScreen({
               chainLength={chain.length}
               art={lookupPedalArt(artIndex, slot.effectId)}
               onToggle={() => onToggle(slot.slotIndex, slot.enabled)}
-              onOpen={() => onOpenSlot(position)}
               onMove={onMove}
               onDragHandleDown={drag.start}
               dragging={drag.from === position}
@@ -137,16 +156,28 @@ export function ChainScreen({
                 it , and keeping it in the flow is what makes the measured slot
                 geometry valid for the whole gesture. */}
             {preset.fxLoopSend === position + 1 && (
-              <button type="button" className="m-marker fx" onClick={onOpenFxLoop}>
-                <span>↗ FX SEND</span>
-                <span className="m-marker-edit">EDIT</span>
-              </button>
+              <FxMarker
+                kind="send"
+                label="↗ FX SEND"
+                color={FX_SEND_COLOR}
+                draggable={Boolean(onFxPositionChange)}
+                dragging={fxDrag.kind === 'send'}
+                offsetY={fxDrag.kind === 'send' ? fxDrag.offsetY : 0}
+                onGripDown={(e) => fxDrag.start('send', e)}
+                onEdit={onOpenFxLoop}
+              />
             )}
             {preset.fxLoopReturn === position + 1 && (
-              <button type="button" className="m-marker fx" onClick={onOpenFxLoop}>
-                <span>↘ FX RETURN</span>
-                <span className="m-marker-edit">EDIT</span>
-              </button>
+              <FxMarker
+                kind="return"
+                label="↘ FX RETURN"
+                color={FX_RETURN_COLOR}
+                draggable={Boolean(onFxPositionChange)}
+                dragging={fxDrag.kind === 'return'}
+                offsetY={fxDrag.kind === 'return' ? fxDrag.offsetY : 0}
+                onGripDown={(e) => fxDrag.start('return', e)}
+                onEdit={onOpenFxLoop}
+              />
             )}
           </li>
         ))}

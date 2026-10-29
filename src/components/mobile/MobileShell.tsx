@@ -5,7 +5,12 @@ import type { PedalBoardProps } from '@/components/board/PedalBoard';
 import '@/components/board/skin-itza.css';
 import { EffectPicker } from '@/components/board/EffectPicker';
 import { getSlotModule } from '@/core/effectNames';
-import { keyColorFor, LABEL_LUM_DEFAULT } from '@/core/boardSkin';
+import {
+  FX_RETURN_COLOR,
+  FX_SEND_COLOR,
+  keyColorFor,
+  LABEL_LUM_DEFAULT,
+} from '@/core/boardSkin';
 import { usePedalManifest } from '@/components/board/pedalManifest';
 import { LooperPanel } from '@/components/board/LooperPanel';
 import { DrumsPanel } from '@/components/board/DrumsPanel';
@@ -24,7 +29,6 @@ import { MobileSheet } from './MobileSheet';
 import { CableDefs } from './ChainCable';
 import { MobileRack } from './MobileRack';
 import { ChainScreen } from './ChainScreen';
-import { PedalEditorScreen } from './PedalEditorScreen';
 import { DeviceScreen } from './DeviceScreen';
 import { track } from '@/core/analytics';
 import './mobile.css';
@@ -144,7 +148,6 @@ export default function MobileShell({
     }
   }
   /** array position of the block being edited, or null for the chain list */
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const artIndex = usePedalManifest();
   /** the scrolling region, so a chain drag near the edge can auto-scroll it */
   const mainRef = useRef<HTMLElement>(null);
@@ -193,7 +196,6 @@ export default function MobileShell({
     if (tab === 'drums') onPanelOpen('drums');
   }, [tab, onPanelOpen]);
 
-  const editingSlot = editingIndex === null ? null : preset.effects[editingIndex];
 
   return (
     // The board's grey, published once on the shell so every card, chip and
@@ -201,7 +203,13 @@ export default function MobileShell({
     <div
       className="mobile-view"
       data-skin={onBlockSkinChange ? 'itza' : undefined}
-      style={{ '--pk-label-l': `${labelLum}%` } as CSSProperties}
+      style={{
+        '--pk-label-l': `${labelLum}%`,
+        // The drop line is drawn by a row's ::after, which cannot read a
+        // colour from the marker being dragged — so both live on the shell.
+        '--fx-send': FX_SEND_COLOR,
+        '--fx-return': FX_RETURN_COLOR,
+      } as CSSProperties}
     >
       {/* one copy of the cable gradients for every cable on the chain screen */}
       <CableDefs />
@@ -216,33 +224,13 @@ export default function MobileShell({
       />
 
       <main className="m-main" ref={mainRef}>
-        {tab === 'chain' && editingSlot && editingIndex !== null && (
-          <PedalEditorScreen
-            // Remount per block: the editor holds scroll-adjacent UI state (the
-            // focus rail's target, the picker) that means nothing once you are
-            // looking at a different pedal.
-            key={editingSlot.slotIndex}
-            slot={editingSlot}
-            index={editingIndex}
-            chainLength={preset.effects.length}
-            artIndex={artIndex}
-            onBack={() => setEditingIndex(null)}
-            onToggle={() => onToggle(editingSlot.slotIndex, editingSlot.enabled)}
-            onChangeEffect={(effectId) => onChangeEffect(editingSlot.slotIndex, effectId)}
-            onParamChange={(paramIdx, value) =>
-              onParamChange(editingSlot.slotIndex, editingSlot.effectId, paramIdx, value)
-            }
-          />
-        )}
-
-        {tab === 'chain' && !editingSlot && (
+        {tab === 'chain' && (
           <ChainScreen
             preset={preset}
             artIndex={artIndex}
             scrollRef={mainRef}
             onToggle={onToggle}
             onMove={onMove}
-            onOpenSlot={setEditingIndex}
             onOpenFxLoop={() => openSheet('fxloop')}
             skinned={Boolean(onBlockSkinChange)}
             boardSkin={boardSkin}
@@ -250,6 +238,11 @@ export default function MobileShell({
             onParamChange={onParamChange}
             onOpenPicker={setPickerSlot}
             onBlockSkinChange={onBlockSkinChange}
+            // The same two callbacks the loop panel uses, so the push that
+            // keeps send <= return applies to a drag exactly as it does there.
+            onFxPositionChange={(kind, position) =>
+              (kind === 'send' ? onFxSendChange : onFxReturnChange)(position)
+            }
             labelLum={labelLum}
             onLabelLumChange={onLabelLumChange}
           />

@@ -21,7 +21,6 @@ interface ChainRowProps {
   chainLength: number;
   art?: PedalArtEntry;
   onToggle: () => void;
-  onOpen: () => void;
   onMove: (from: number, to: number) => void;
   /** grip pointer-down starts a drag */
   onDragHandleDown: (index: number, e: PointerEvent) => void;
@@ -75,7 +74,6 @@ export function ChainRow({
   chainLength,
   art,
   onToggle,
-  onOpen,
   onMove,
   onDragHandleDown,
   dragging,
@@ -138,13 +136,15 @@ export function ChainRow({
         <span className="m-grip-dots" aria-hidden="true" />
       </button>
 
-      {/* Skinned, the body opens the controls in place rather than pushing a
-          second screen: the thing you tapped stays where it was. */}
+      {/* The body opens the effect browser. It used to push a second screen
+          to edit the block; the card opens its own controls in place now, so
+          a tap on the name can mean the one thing the board's name button
+          means. */}
       <button
         type="button"
         className="m-card-main"
         aria-label={skinned ? `Change ${moduleName} effect: ${effectName}` : undefined}
-        onClick={skinned && onOpenPicker ? onOpenPicker : onOpen}
+        onClick={onOpenPicker}
       >
         {/* Unskinned, the position sits beside the name. Skinned, it moves
             down to the chip line, as the board's "#3" sits beside the module

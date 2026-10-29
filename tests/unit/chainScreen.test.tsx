@@ -13,8 +13,8 @@ function renderChain(overrides: Partial<Parameters<typeof ChainScreen>[0]> = {})
     scrollRef: createRef<HTMLElement>(),
     onToggle: vi.fn(),
     onMove: vi.fn(),
-    onOpenSlot: vi.fn(),
     onOpenFxLoop: vi.fn(),
+    onOpenPicker: vi.fn(),
     ...overrides,
   };
   const utils = render(<ChainScreen {...props} />);
@@ -65,13 +65,15 @@ describe('ChainScreen', () => {
     expect(props.onMove).toHaveBeenLastCalledWith(1, 2);
   });
 
-  it('opens a block from its card body and toggles from its switch', () => {
+  it('opens the effect browser from its card body and toggles from its switch', () => {
     const { props, preset } = renderChain();
     const first = preset.effects[0];
     const name = getEffectName(first.effectId);
 
+    // The card body used to push a second screen to edit the block. The card
+    // opens its own controls in place now, so the body means one thing.
     fireEvent.click(screen.getByText(name));
-    expect(props.onOpenSlot).toHaveBeenCalledWith(0);
+    expect(props.onOpenPicker).toHaveBeenCalledWith(first.slotIndex);
 
     fireEvent.click(screen.getByLabelText(`${name} ${first.enabled ? 'on' : 'bypassed'}`));
     expect(props.onToggle).toHaveBeenCalledWith(first.slotIndex, first.enabled);
