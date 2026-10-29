@@ -158,7 +158,7 @@ export function ChainScreen({
             {preset.fxLoopSend === position + 1 && (
               <FxMarker
                 kind="send"
-                label="↗ FX SEND"
+                label="FX SEND"
                 color={FX_SEND_COLOR}
                 draggable={Boolean(onFxPositionChange)}
                 dragging={fxDrag.kind === 'send'}
@@ -170,7 +170,7 @@ export function ChainScreen({
             {preset.fxLoopReturn === position + 1 && (
               <FxMarker
                 kind="return"
-                label="↘ FX RETURN"
+                label="FX RETURN"
                 color={FX_RETURN_COLOR}
                 draggable={Boolean(onFxPositionChange)}
                 dragging={fxDrag.kind === 'return'}

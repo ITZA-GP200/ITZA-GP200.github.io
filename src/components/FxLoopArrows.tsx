@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { FX_RETURN_COLOR, FX_SEND_COLOR } from '@/core/boardSkin';
+import { FxTriangle } from './FxTriangle';
 
 interface FxLoopArrowsProps {
   /** Current SEND position (1..11); 11 = after the last block. */
@@ -41,30 +42,6 @@ const MARKER_H = 20;
  * both bands carry a trailing half column: equal widths and somewhere for it
  * to land, neither of them guessed.
  */
-
-/**
- * Up for the signal leaving, down for it coming back.
- *
- * Solid, like the flow chevrons between the cards: a filled triangle holds its
- * shape at this size where a stroked one starts to read as two thin lines, and
- * it is the same mark the chain already uses to mean "the signal goes this
- * way". Local to this component on purpose — the phone card's disclosure caret
- * says something else entirely, and tying the two together would mean neither
- * could change on its own.
- */
-function Chevron({ dir }: { dir: 'up' | 'down' }) {
-  return (
-    <svg
-      width="20"
-      height="13"
-      viewBox="0 0 24 16"
-      fill="currentColor"
-      aria-hidden="true"
-    >
-      <path d={dir === 'up' ? 'M12 2 23 15 1 15Z' : 'M1 1 23 1 12 14Z'} />
-    </svg>
-  );
-}
 
 export function FxLoopArrows({ send, ret, onSendChange, onReturnChange }: FxLoopArrowsProps) {
   const dragKindRef = useRef<'send' | 'return' | null>(null);
@@ -149,7 +126,7 @@ export function FxLoopArrows({ send, ret, onSendChange, onReturnChange }: FxLoop
                     minHeight: MARKER_H,
                   }}
                 >
-                  <Chevron dir="up" />
+                  <FxTriangle dir="up" size={20} />
                 </button>
               )}
               {ret === idx + 1 && (
@@ -174,7 +151,7 @@ export function FxLoopArrows({ send, ret, onSendChange, onReturnChange }: FxLoop
                     minHeight: MARKER_H,
                   }}
                 >
-                  <Chevron dir="down" />
+                  <FxTriangle dir="down" size={20} />
                 </button>
               )}
             </div>

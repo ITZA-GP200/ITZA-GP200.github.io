@@ -1,9 +1,10 @@
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { FxMarkerKind } from '@/hooks/useFxMarkerDrag';
+import { FxTriangle } from '@/components/FxTriangle';
 
 interface FxMarkerProps {
   kind: FxMarkerKind;
-  /** "↗ FX SEND" */
+  /** "FX SEND" — the mark beside it is drawn from `kind`. */
   label: string;
   /** the loop's own colour for this marker */
   color: string;
@@ -57,7 +58,10 @@ export function FxMarker({
           <span className="m-grip-dots" aria-hidden="true" />
         </button>
       )}
-      <span className="m-marker-label">{label}</span>
+      <span className="m-marker-label">
+        <FxTriangle dir={kind === 'send' ? 'up' : 'down'} />
+        {label}
+      </span>
       <button type="button" className="m-marker-edit" onClick={onEdit}>
         EDIT
       </button>

@@ -1300,7 +1300,26 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  /* Half the screen, centred. A loop end is a note on the run rather than a
+     block in it, so it should not take a block's full width — at this size
+     the difference is what stops the two reading as cards. */
+  width: 50vw;
+  align-self: center;
+  padding: 0;
   border-color: color-mix(in srgb, var(--fx-marker) 45%, #2f2f34);
+}
+.mobile-view .m-list.m-pk-chain .m-marker-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  /* 30% up from the stock 10px marker text: this is the only writing in the
+     row, and it was set for a full-width strip. */
+  font-size: 13px;
+}
+.mobile-view .m-list.m-pk-chain .m-marker-edit {
+  flex: none;
+  padding-right: 11px;
+  font-size: 11px;
 }
 .mobile-view .m-list.m-pk-chain .m-marker-grip {
   flex: none;
@@ -1323,6 +1342,7 @@
   flex: 1;
   min-width: 0;
   color: var(--fx-marker);
+  white-space: nowrap;
 }
 .mobile-view .m-list.m-pk-chain .m-marker.fx.dragging {
   position: relative;
