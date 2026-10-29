@@ -1251,8 +1251,19 @@
   border-left: 9px solid transparent;
   border-right: 9px solid transparent;
   transform: translateX(-50%);
-  pointer-events: none;
+  /* The marker is a drag handle, so it has to take the pointer. The triangle
+     is a bordered box with no content, and only the coloured wedge of it
+     actually reads as the marker — so the box stays small and sits in a strip
+     nothing else occupies. */
+  cursor: grab;
   z-index: 6;
+}
+.board-view[data-skin='itza'] .pedal.pk .pk-fx:active {
+  cursor: grabbing;
+}
+.board-view[data-skin='itza'] .pedal.pk .pk-fx:focus-visible {
+  outline: 2px solid var(--key);
+  outline-offset: 3px;
 }
 .board-view[data-skin='itza'] .pedal.pk .pk-fx.out {
   left: 33.333%;

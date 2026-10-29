@@ -1,4 +1,10 @@
-import { useRef, useState, type CSSProperties } from 'react';
+import {
+  useRef,
+  useState,
+  type CSSProperties,
+  type DragEvent,
+  type KeyboardEvent,
+} from 'react';
 import type { EffectSlot } from '@/core/types';
 import { getEffectName, getSlotModule } from '@/core/effectNames';
 import { EFFECT_DESCRIPTIONS } from '@/core/effectDescriptions';
@@ -52,6 +58,8 @@ export interface PedalProps {
   fxSend?: boolean;
   /** The FX loop comes back at this block (fxLoopReturn). */
   fxReturn?: boolean;
+  /** Walk a loop marker along the chain (the keyboard path; drag is pointer). */
+  fxMove?: (kind: 'send' | 'return', delta: number) => void;
 }
 
 /** One effect slot rendered as a physical pedal (docs/board-design-system.md). */
@@ -77,6 +85,7 @@ export function Pedal({
   onLabelLumChange,
   fxSend = false,
   fxReturn = false,
+  fxMove,
 }: PedalProps) {
   const [dragging, setDragging] = useState(false);
 
@@ -108,6 +117,30 @@ export function Pedal({
   const locked = skinned && blockSkin.locked === true;
   /** whether the press that may become a drag started on the tool cluster */
   const pressedInTools = useRef(false);
+
+  /**
+   * A marker is its own drag source sitting inside a draggable card, so the
+   * payload has to say which it is: the bay underneath is a drop target for
+   * BOTH the chain reorder and this, and without a marker in the data it
+   * would reorder the chain every time you moved the loop.
+   *
+   * stopPropagation keeps the card's own dragstart from firing as well and
+   * starting a reorder at the same moment.
+   */
+  function startFxDrag(e: DragEvent<HTMLSpanElement>, kind: 'send' | 'return') {
+    e.stopPropagation();
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', `fx:${kind}`);
+  }
+
+  /** Arrow keys walk a marker along the chain; drag is pointer-only. */
+  function fxKey(e: KeyboardEvent<HTMLSpanElement>, kind: 'send' | 'return') {
+    const delta = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+    if (delta === 0 || !fxMove) return;
+    e.preventDefault();
+    e.stopPropagation();
+    fxMove(kind, delta);
+  }
   const keyColor = blockSkin.color ?? DEFAULT_KEY[moduleName] ?? spec.body;
 
   const bodyVars = {
@@ -198,18 +231,32 @@ export function Pedal({
         <span
           className="pk-fx out"
           style={{ borderBottomColor: keyColor }}
-          role="img"
-          aria-label="FX loop send is here"
-          title="FX loop SEND: the signal leaves the chain around this block"
+          draggable
+          onDragStart={(e) => startFxDrag(e, 'send')}
+          onKeyDown={(e) => fxKey(e, 'send')}
+          tabIndex={0}
+          role="slider"
+          aria-valuemin={1}
+          aria-valuemax={chainLength}
+          aria-valuenow={index + 1}
+          aria-label={`FX loop send, after block ${index + 1}. Drag it to another block, or use arrow keys.`}
+          title="FX loop SEND: the signal leaves the chain around this block. Drag it to another block."
         />
       )}
       {skinned && fxReturn && (
         <span
           className="pk-fx in"
           style={{ borderTopColor: keyColor }}
-          role="img"
-          aria-label="FX loop return is here"
-          title="FX loop RETURN: the signal comes back around this block"
+          draggable
+          onDragStart={(e) => startFxDrag(e, 'return')}
+          onKeyDown={(e) => fxKey(e, 'return')}
+          tabIndex={0}
+          role="slider"
+          aria-valuemin={1}
+          aria-valuemax={chainLength}
+          aria-valuenow={index + 1}
+          aria-label={`FX loop return, after block ${index + 1}. Drag it to another block, or use arrow keys.`}
+          title="FX loop RETURN: the signal comes back around this block. Drag it to another block."
         />
       )}
 

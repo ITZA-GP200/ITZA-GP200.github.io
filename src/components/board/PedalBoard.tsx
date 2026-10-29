@@ -346,9 +346,33 @@ export function PedalBoard({
     window.clearTimeout(flickerTimer.current);
     flickerTimer.current = window.setTimeout(() => setFlickering(false), 720);
   }, [onToggleTheme]);
-  const handleReorderDrop = (index: number) => {
+  /**
+   * A bay is the drop target for two different drags: reordering the chain,
+   * and moving an FX loop marker. They are told apart by the payload the drag
+   * set — a marker writes "fx:send" / "fx:return", a pedal writes its index —
+   * because the bay cannot otherwise know what was picked up, and guessing
+   * would reorder the chain every time the loop moved.
+   */
+  const handleBayDrop = (e: DragEvent, index: number) => {
+    const payload = e.dataTransfer.getData('text/plain');
+    if (payload === 'fx:send') {
+      onFxSendChange(index + 1);
+      return;
+    }
+    if (payload === 'fx:return') {
+      onFxReturnChange(index + 1);
+      return;
+    }
     capture();
     onDrop(index);
+  };
+
+  /** Arrow keys on a focused marker, clamped by the parent's push rule. */
+  const handleFxMove = (kind: 'send' | 'return', delta: number) => {
+    const from = kind === 'send' ? preset.fxLoopSend : preset.fxLoopReturn;
+    const next = Math.max(1, Math.min(preset.effects.length, from + delta));
+    if (next === from) return;
+    (kind === 'send' ? onFxSendChange : onFxReturnChange)(next);
   };
   const handleReorderMove = (from: number, to: number) => {
     capture();
@@ -387,7 +411,7 @@ export function PedalBoard({
         key={`slot-${slot.slotIndex}`}
         className={bayClasses.join(' ')}
         onDragOver={(e) => onDragOver(e, index)}
-        onDrop={() => handleReorderDrop(index)}
+        onDrop={(e) => handleBayDrop(e, index)}
       >
         <Pedal
           slot={slot}
@@ -418,6 +442,7 @@ export function PedalBoard({
           // reordered chain would mark the wrong card.
           fxSend={preset.fxLoopSend === index + 1}
           fxReturn={preset.fxLoopReturn === index + 1}
+          fxMove={handleFxMove}
         />
       </div>
     );
