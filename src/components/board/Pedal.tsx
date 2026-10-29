@@ -8,13 +8,7 @@ import { type PedalArtEntry } from './pedalManifest';
 import { ModuleGlyph } from './ModuleGlyph';
 import { PedalControls } from './PedalControls';
 import { PedalSkinTools } from './PedalSkinTools';
-import {
-  DEFAULT_KEY,
-  FX_RETURN_COLOR,
-  FX_SEND_COLOR,
-  type BlockSkin,
-  type ControlStyle,
-} from '@/core/boardSkin';
+import { DEFAULT_KEY, type BlockSkin, type ControlStyle } from '@/core/boardSkin';
 
 export interface PedalProps {
   slot: EffectSlot;
@@ -203,7 +197,7 @@ export function Pedal({
       {skinned && fxSend && (
         <span
           className="pk-fx out"
-          style={{ borderBottomColor: FX_SEND_COLOR }}
+          style={{ borderBottomColor: keyColor }}
           role="img"
           aria-label="FX loop send is here"
           title="FX loop SEND: the signal leaves the chain around this block"
@@ -212,7 +206,7 @@ export function Pedal({
       {skinned && fxReturn && (
         <span
           className="pk-fx in"
-          style={{ borderTopColor: FX_RETURN_COLOR }}
+          style={{ borderTopColor: keyColor }}
           role="img"
           aria-label="FX loop return is here"
           title="FX loop RETURN: the signal comes back around this block"
