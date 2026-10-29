@@ -21,6 +21,9 @@ const BLOCKS = ['PRE', 'WAH', 'BST', 'AMP', 'NR', 'CAB', 'EQ', 'MOD', 'DLY', 'RV
  */
 const BLOCK_LABEL = 'hsl(240 4% 75%)';
 
+/** Marker height: the touch target, comfortably larger than the 13px glyph. */
+const MARKER_H = 20;
+
 /**
  * Two bands, not one row.
  *
@@ -101,31 +104,16 @@ export function FxLoopArrows({ send, ret, onSendChange, onReturnChange }: FxLoop
         background: 'rgba(0,0,0,0.03)',
         border: '1px solid rgba(0,0,0,0.10)',
         borderRadius: 8,
-        padding: '6px 4px',
+        padding: '4px 4px',
       }}
     >
-      {/* band one: the blocks you are aiming between */}
-      <div className="flex text-label uppercase tracking-wider">
-        {BLOCKS.map((name) => (
-          <div
-            key={name}
-            className="text-center"
-            style={{ flex: '1 1 0', minWidth: 0, color: BLOCK_LABEL }}
-          >
-            {name}
-          </div>
-        ))}
-        {/* Half a column, in both bands, so they keep identical column widths
-            AND the boundary after the last block has somewhere to sit. A
-            guessed right padding cannot do both; this is exact by
-            construction. */}
-        <div aria-hidden="true" style={{ flex: '0.5 1 0' }} />
-      </div>
-
-      {/* band two: one drop target per boundary, each a full column wide and
+      {/* band one: one drop target per boundary, each a full column wide and
           centred on the edge it belongs to. A gap holding both markers stacks
           send over return; a gap holding one centres it in the band. */}
-      <div className="flex" style={{ minHeight: 44 }}>
+      {/* Exactly two markers tall and not a pixel more. The band only exists
+          so a gap holding both can stack them; any slack beyond that reads as
+          a gap between the chevrons and the labels they point between. */}
+      <div className="flex" style={{ minHeight: MARKER_H * 2 }}>
         {BLOCKS.map((name, idx) => (
           <div key={name} className="relative" style={{ flex: '1 1 0', minWidth: 0 }}>
             {/* One drop gap after every block, VOL included: position 11 puts
@@ -158,7 +146,7 @@ export function FxLoopArrows({ send, ret, onSendChange, onReturnChange }: FxLoop
                     color: FX_SEND_COLOR,
                     opacity: bypass ? 0.5 : 1,
                     alignSelf: 'stretch',
-                    minHeight: 20,
+                    minHeight: MARKER_H,
                   }}
                 >
                   <Chevron dir="up" />
@@ -183,7 +171,7 @@ export function FxLoopArrows({ send, ret, onSendChange, onReturnChange }: FxLoop
                     color: FX_RETURN_COLOR,
                     opacity: bypass ? 0.5 : 1,
                     alignSelf: 'stretch',
-                    minHeight: 20,
+                    minHeight: MARKER_H,
                   }}
                 >
                   <Chevron dir="down" />
@@ -194,6 +182,24 @@ export function FxLoopArrows({ send, ret, onSendChange, onReturnChange }: FxLoop
         ))}
         <div aria-hidden="true" style={{ flex: '0.5 1 0' }} />
       </div>
+      {/* band two: the blocks the markers above are sitting between */}
+      <div className="flex text-label uppercase tracking-wider">
+        {BLOCKS.map((name) => (
+          <div
+            key={name}
+            className="text-center"
+            style={{ flex: '1 1 0', minWidth: 0, color: BLOCK_LABEL }}
+          >
+            {name}
+          </div>
+        ))}
+        {/* Half a column, in both bands, so they keep identical column widths
+            AND the boundary after the last block has somewhere to sit. A
+            guessed right padding cannot do both; this is exact by
+            construction. */}
+        <div aria-hidden="true" style={{ flex: '0.5 1 0' }} />
+      </div>
+
     </div>
   );
 }
