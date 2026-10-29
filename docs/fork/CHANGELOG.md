@@ -47,6 +47,16 @@ no warning. Two buttons beside SAVE LOG are the way out. Import merges rather
 than replaces, refuses anything outside the editor's own storage, and refuses
 a profile from a newer build whole rather than half-applying it.
 
+**The front door wears it too.** The start screen is rebuilt in the same
+language: a strip of the eleven blocks across the top in their key colours
+with the board's flow triangles between them, the fork's own bolt in place of
+upstream's GP-200 unit, cards instead of a panel, and CONNECT sitting in a lit
+card so the thing to do carries an ACTIVE block's glow. The strip is always
+one row — initials stand in below 700px, where eleven three-letter blocks and
+ten arrows stop fitting, because a strip that wraps stops reading as a signal
+chain. kabir0st's pages move to the footer as GP200 Studio | Original by
+Kabir Tamari | Read the guide, in the same grey as everything else.
+
 **Gone:** the phone's old tap-through editor screen. The card opens its
 controls in place, so nothing routed to it any more.
 

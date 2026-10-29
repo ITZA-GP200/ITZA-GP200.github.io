@@ -155,8 +155,12 @@ describe('prerender safety', () => {
     expect(body).toContain('<details class="start-why">');
     expect(body).toContain('Why ITZA GP-200');
     expect(body).toContain('ongoing user interface expansion');
-    // His support link belongs on his site; his credit stays on ours.
-    expect(body).toContain('Originally built by Kabir Tamari');
+    // His support link belongs on his site; his credit stays on ours — now as
+    // a link to his own repo, and with the licence the credit is a condition
+    // of. Both asserted, so losing either fails rather than only the wording.
+    expect(body).toContain('Original by Kabir Tamari');
+    expect(body).toContain('href="https://github.com/kabir0st/gp200-studio"');
+    expect(body).toContain('GPL-3.0');
     expect(body).not.toContain('buymeacoffee');
   });
 
