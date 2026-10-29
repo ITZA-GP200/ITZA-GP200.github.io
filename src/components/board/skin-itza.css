@@ -1226,3 +1226,56 @@
   font-size: 13px;
   color: var(--pk-label);
 }
+
+/* ── the FX loop in the strip above each line of cards ──
+   Solid triangles, the same marks and the same two colours as the loop panel:
+   up for the signal leaving, down for it coming back. They hang off the card
+   rather than off a row element, because the board is one wrapping flex row
+   and where it breaks is a layout outcome — so a card carries its markers to
+   whichever line it lands on, and a wrapped board gets a strip per line with
+   nothing measuring anything.
+
+   The colours come in inline from core/boardSkin, so the palette stays in one
+   place and this file holds no hex for them. */
+.board-view[data-skin='itza'] .board-rows {
+  /* How far a marker reaches above its card. Every bit of clearance below is
+     derived from this, so the strip and the space it needs cannot drift
+     apart the way a pair of hand-tuned numbers would. */
+  --pk-fx-lift: 21px;
+}
+.board-view[data-skin='itza'] .pedal.pk .pk-fx {
+  position: absolute;
+  top: calc(var(--pk-fx-lift) * -1);
+  width: 0;
+  height: 0;
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 6;
+}
+.board-view[data-skin='itza'] .pedal.pk .pk-fx.out {
+  left: 33.333%;
+  border-bottom: 13px solid transparent; /* colour arrives inline */
+}
+.board-view[data-skin='itza'] .pedal.pk .pk-fx.in {
+  left: 66.666%;
+  border-top: 13px solid transparent;
+}
+/* Full strength on a bypassed card too: where the loop breaks the chain is a
+   property of the routing, not of whether this one pedal is switched on. */
+.board-view[data-skin='itza'] .pedal.pk.bypassed .pk-fx {
+  opacity: 1;
+  filter: none;
+}
+
+/* Room for the strip: above the first line, and between every pair after it.
+   The stock row gap is 30px, but a media query takes it to 22px on narrower
+   desktops — one pixel more than a marker needs, which would have put a
+   triangle on the card above it. Setting both here, from the same lift, means
+   the strip has its space at every width. The selector carries the skin
+   attribute, so it outranks that media query wherever it applies. */
+.board-view[data-skin='itza'] .board-row {
+  padding-top: calc(var(--pk-fx-lift) + 3px);
+  row-gap: calc(var(--pk-fx-lift) + 19px);
+}

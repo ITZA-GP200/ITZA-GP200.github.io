@@ -413,6 +413,11 @@ export function PedalBoard({
           }
           labelLum={labelLum}
           onLabelLumChange={onLabelLumChange}
+          // Loop positions are 1..11 chain positions, so position N is the
+          // Nth block in the CURRENT order — index, never slotIndex, or a
+          // reordered chain would mark the wrong card.
+          fxSend={preset.fxLoopSend === index + 1}
+          fxReturn={preset.fxLoopReturn === index + 1}
         />
       </div>
     );

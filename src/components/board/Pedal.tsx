@@ -8,7 +8,13 @@ import { type PedalArtEntry } from './pedalManifest';
 import { ModuleGlyph } from './ModuleGlyph';
 import { PedalControls } from './PedalControls';
 import { PedalSkinTools } from './PedalSkinTools';
-import { DEFAULT_KEY, type BlockSkin, type ControlStyle } from '@/core/boardSkin';
+import {
+  DEFAULT_KEY,
+  FX_RETURN_COLOR,
+  FX_SEND_COLOR,
+  type BlockSkin,
+  type ControlStyle,
+} from '@/core/boardSkin';
 
 export interface PedalProps {
   slot: EffectSlot;
@@ -48,6 +54,10 @@ export interface PedalProps {
   /** Board-wide label grey, as a lightness percentage. */
   labelLum?: number;
   onLabelLumChange?: (lum: number) => void;
+  /** The FX loop leaves the chain at this block (fxLoopSend). */
+  fxSend?: boolean;
+  /** The FX loop comes back at this block (fxLoopReturn). */
+  fxReturn?: boolean;
 }
 
 /** One effect slot rendered as a physical pedal (docs/board-design-system.md). */
@@ -71,6 +81,8 @@ export function Pedal({
   onSkinChange,
   labelLum,
   onLabelLumChange,
+  fxSend = false,
+  fxReturn = false,
 }: PedalProps) {
   const [dragging, setDragging] = useState(false);
 
@@ -175,6 +187,38 @@ export function Pedal({
       onFocusCapture={() => onInspect(true)}
       onBlurCapture={() => onInspect(false)}
     >
+      {/* ── the FX loop, in the strip above the card ──
+          The board is one wrapping flex row, and where it breaks is a layout
+          outcome rather than a JS split (see board.css). So these hang off the
+          card itself rather than off a row that does not exist: whichever line
+          a card lands on, its markers appear in the strip above that line, and
+          a wrapped board gets one strip per line for free.
+
+          At a third and two thirds of the card, not on its edges — this says
+          "the loop leaves and returns around this block", which is what the
+          positions mean, without pretending to a precision the eye cannot use
+          at this size. They keep full key colour even when the block is
+          bypassed: the loop's routing is a property of the chain, not of
+          whether this one pedal happens to be switched on. */}
+      {skinned && fxSend && (
+        <span
+          className="pk-fx out"
+          style={{ borderBottomColor: FX_SEND_COLOR }}
+          role="img"
+          aria-label="FX loop send is here"
+          title="FX loop SEND: the signal leaves the chain around this block"
+        />
+      )}
+      {skinned && fxReturn && (
+        <span
+          className="pk-fx in"
+          style={{ borderTopColor: FX_RETURN_COLOR }}
+          role="img"
+          aria-label="FX loop return is here"
+          title="FX loop RETURN: the signal comes back around this block"
+        />
+      )}
+
       {/* knurled dot grip: signals the whole pedal is draggable */}
       <span className="pedal-grip" aria-hidden="true" />
       <span className="jack in" data-jack="in" />
