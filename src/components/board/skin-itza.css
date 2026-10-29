@@ -1,0 +1,1375 @@
+/* ════════════════════════════════════════════════════════════════════════
+   ITZA skin — the fork's board.
+
+   Everything here is scoped to [data-skin="itza"], so kabir0st's board is
+   untouched and this file is the whole visual diff. The component changes it
+   needs are small and marked in Pedal.tsx / PedalBoard.tsx / BoardTopBar.tsx.
+
+   The idea: effects are digital, so draw them as cards rather than as
+   enclosures. One key colour per block (--key, set inline from the saved
+   preference or the artwork), carried by the border, the name and the
+   controls. Bypassed cards go dark and grayscale, keeping colour only in the
+   name and the border.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── the field ──
+   No stage surface, no gloss, no cables: a plain dark field the cards sit on. */
+.board-view[data-skin='itza'] .stage {
+  background: #1a1a1c;
+}
+.board-view[data-skin='itza'] .cables-svg,
+.board-view[data-skin='itza'] .stage-flicker {
+  display: none;
+}
+
+/* ── one grey, one slider ──
+   Labels, module chips, chain numbers, value names, info chips and tool icons
+   were drawn in four different greys that were all trying to be the same
+   thing. They are now one colour at one lightness, and --pk-label-l — set on
+   .board-view and .mobile-view from the colour popover's Label Brightness
+   slider — is the only thing that moves.
+
+   A bypassed card uses the same hue a step down rather than a second hard
+   coded grey, so it tracks the slider too and can never cross the lit value.
+   The floor keeps it legible at the bottom of the slider's range.
+
+   Hairlines and surfaces are deliberately NOT in here: they are structure,
+   not ink, and a 1px divider at label brightness reads as a drawn box rather
+   than an edge. */
+.board-view[data-skin='itza'],
+.mobile-view {
+  --pk-label: hsl(240 4% var(--pk-label-l, 57%));
+  --pk-label-dim: hsl(240 4% max(20%, calc(var(--pk-label-l, 57%) - 13%)));
+}
+
+/* ── the card ──
+   Uniform width, flat surface, key colour on the border. The glow is a tight
+   ring plus a short shadow: eleven soft halos at once read as fog. */
+.board-view[data-skin='itza'] .pedal.pk {
+  background: #232326;
+  border: 1px solid var(--key);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--key) 20%, transparent),
+              0 0 22px -7px var(--key);
+  color: #f0f0f3;
+  padding: 13px 14px 14px;
+  display: flex;
+  flex-direction: column;
+}
+.board-view[data-skin='itza'] .pedal.pk::before,
+.board-view[data-skin='itza'] .pedal.pk::after {
+  display: none; /* gloss sweep and its partner */
+}
+
+/* Bypassed: the whole card goes dark and the controls lose their colour.
+   Only the name and the border stay keyed. */
+.board-view[data-skin='itza'] .pedal.pk.bypassed {
+  background: #141416;
+  /* No border-color here: it is set from --edge further down, so the border
+     and the chevron can never drift apart. This rule used to win on
+     specificity and leave a tinted border beside a grey chevron. */
+  box-shadow: none;
+}
+.board-view[data-skin='itza'] .pedal.pk.bypassed .controls {
+  opacity: 0.5;
+  filter: grayscale(1);
+}
+
+/* ── the enclosure's furniture, gone ── */
+.board-view[data-skin='itza'] .pedal.pk .screw,
+.board-view[data-skin='itza'] .pedal.pk .jack,
+.board-view[data-skin='itza'] .pedal.pk .pedal-grip,
+.board-view[data-skin='itza'] .pedal.pk .brand-strip,
+.board-view[data-skin='itza'] .pedal.pk .p-led {
+  display: none;
+}
+
+/* ── header: module type and chain position, then the three tools ── */
+.board-view[data-skin='itza'] .pedal.pk .module-chip {
+  position: static;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--key);
+}
+.board-view[data-skin='itza'] .pedal.pk.bypassed .module-chip {
+  color: var(--pk-label-dim);
+}
+.board-view[data-skin='itza'] .pedal.pk .chain-num {
+  position: static;
+  order: -1;
+  background: none;
+  border: none;
+  padding: 0;
+  margin-right: 7px;
+  font-size: 16px;
+  letter-spacing: 0.14em;
+  color: var(--pk-label);
+}
+.board-view[data-skin='itza'] .pedal.pk .info-chip {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 3;
+}
+
+/* ── the name: the loudest thing on the card, and keyed even when bypassed ── */
+.board-view[data-skin='itza'] .pedal.pk .p-name {
+  position: static;
+  margin: 8px 0 12px;
+}
+.board-view[data-skin='itza'] .pedal.pk .p-name-btn {
+  padding: 0;
+  background: none;
+  border: none;
+  text-align: left;
+}
+.board-view[data-skin='itza'] .pedal.pk .p-name-icon {
+  display: none;
+}
+.board-view[data-skin='itza'] .pedal.pk .p-name-text {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--key);
+  white-space: normal;
+  line-height: 1.1;
+}
+.board-view[data-skin='itza'] .pedal.pk .p-desc {
+  display: none;
+}
+
+/* ── controls ──
+   Centred, with room to wrap; the labels are HTML so a long one wraps rather
+   than being clipped the way SVG text is. */
+.board-view[data-skin='itza'] .pedal.pk .controls {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 6px;
+  justify-content: center;
+  align-content: center;
+  min-height: 150px;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+/* ── the footswitch becomes the card's ON / BYPASSED bar ── */
+.board-view[data-skin='itza'] .pedal.pk .treadle,
+.board-view[data-skin='itza'] .pedal.pk .stomp-round,
+.board-view[data-skin='itza'] .pedal.pk .fs-row {
+  all: unset;
+}
+.board-view[data-skin='itza'] .pedal.pk .treadle,
+.board-view[data-skin='itza'] .pedal.pk .stomp-round {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  box-sizing: border-box;
+  border-radius: 5px;
+  padding: 11px 0;
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-align: center;
+  cursor: pointer;
+  background: var(--key);
+  border: 1px solid var(--key);
+  color: #0c0c0e;
+}
+.board-view[data-skin='itza'] .pedal.pk .treadle::after,
+.board-view[data-skin='itza'] .pedal.pk .stomp-round::after {
+  content: 'ACTIVE';
+}
+.board-view[data-skin='itza'] .pedal.pk.bypassed .treadle,
+.board-view[data-skin='itza'] .pedal.pk.bypassed .stomp-round {
+  background: #19191b;
+  border-color: #2f2f34;
+  color: var(--pk-label-dim);
+}
+.board-view[data-skin='itza'] .pedal.pk.bypassed .treadle::after,
+.board-view[data-skin='itza'] .pedal.pk.bypassed .stomp-round::after {
+  content: 'BYPASSED';
+}
+.board-view[data-skin='itza'] .pedal.pk .p-off-tag {
+  display: none; /* the bar says it */
+}
+
+/* ── the three header tools ── */
+.board-view[data-skin='itza'] .pk-tools {
+  position: absolute;
+  top: 13px;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  z-index: 4;
+}
+.board-view[data-skin='itza'] .pk-swatch {
+  width: 14px;
+  height: 14px;
+  margin: 0 2px;
+  padding: 0;
+  border-radius: 3px;
+  background: none;
+  border: 1.5px solid currentColor;
+  cursor: pointer;
+}
+.board-view[data-skin='itza'] .pk-tool {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--pk-label);
+  cursor: pointer;
+}
+.board-view[data-skin='itza'] .pk-tool svg {
+  width: 17px;
+  height: 17px;
+}
+.board-view[data-skin='itza'] .pk-swatch:disabled,
+.board-view[data-skin='itza'] .pk-tool:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.board-view[data-skin='itza'] .pedal.pk.bypassed .pk-swatch,
+.board-view[data-skin='itza'] .pedal.pk.bypassed .pk-tool {
+  color: var(--pk-label-dim) !important;
+}
+
+/* ── the key-colour palette ── */
+.board-view[data-skin='itza'] .pk-palette {
+  position: absolute;
+  top: 24px;
+  right: 0;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 7px;
+  padding: 9px;
+  border-radius: 8px;
+  background: #0c0c0e;
+  border: 1px solid #2f2f34;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+.board-view[data-skin='itza'] .pk-chip {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+}
+.board-view[data-skin='itza'] .pk-chip.picked {
+  box-shadow: 0 0 0 2px #0c0c0e, 0 0 0 3px #f0f0f3;
+}
+
+/* ── the top bar's board-wide style buttons ── */
+.pk-style {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.pk-style .deck-btn.pk-on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── Label Brightness ──
+   Sits under the sixteen chips, spanning the palette's full width. A native
+   range, so it drags, takes arrow keys and works under a thumb on the phone
+   without a line of pointer handling; accent-color (set inline to the block's
+   key colour) paints the track and the thumb in every current browser. */
+.pk-lum {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 9px;
+  border-top: 1px solid #2f2f34;
+}
+.pk-lum-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--pk-label);
+}
+.pk-lum input[type='range'] {
+  width: 100%;
+  height: 18px;
+  margin: 0;
+  cursor: pointer;
+}
+.pk-chip:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* ── card layout ──
+   The card is a flex column, but the markup's order is the enclosure's, not a
+   card's: controls come before the name. Flex `order` rearranges it without
+   touching the DOM, which keeps the diff to upstream's component small and
+   leaves the stock board's markup untouched. */
+.board-view[data-skin='itza'] .pedal.pk .chain-num {
+  position: absolute;
+  top: 13px;
+  left: 14px;
+  margin: 0;
+}
+.board-view[data-skin='itza'] .pedal.pk .module-chip {
+  order: 1;
+  margin-left: 38px; /* clear of the chain number beside it */
+}
+.board-view[data-skin='itza'] .pedal.pk .p-name { order: 2; }
+.board-view[data-skin='itza'] .pedal.pk .controls { order: 3; }
+.board-view[data-skin='itza'] .pedal.pk .treadle,
+.board-view[data-skin='itza'] .pedal.pk .stomp-round,
+.board-view[data-skin='itza'] .pedal.pk .fs-row { order: 4; }
+
+/* A card needs more width than an enclosure bay: 22px names, three header
+   tools and wrapped control labels do not fit 172px. */
+.board-view[data-skin='itza'] .pedal-bay { width: 216px; }
+.board-view[data-skin='itza'] .pedal-bay.wide { width: 330px; }
+.board-view[data-skin='itza'] .pedal.pk { width: 100%; }
+
+/* ── the gauge ──
+   The knob keeps all its behaviour and swaps its SVG for a value arc
+   (PedalKnob `arc`). `currentColor` is what the arc fills with, so the key
+   colour reaches it without the component knowing about the skin. */
+.board-view[data-skin='itza'] .pedal.pk .knob {
+  width: 64px;
+  color: var(--key);
+}
+.board-view[data-skin='itza'] .pedal.pk .knob svg {
+  width: 62px;
+  height: 62px;
+}
+.board-view[data-skin='itza'] .pedal.pk .k-label {
+  font-size: 14px;
+  color: var(--pk-label);
+  white-space: normal;
+  line-height: 1.15;
+  text-align: center;
+  max-width: 64px;
+}
+/* On a dial the reading lives inside the arc, so the one underneath would say
+   it twice. Bars carry their own and are not touched by this. */
+.board-view[data-skin='itza'] .pedal.pk .knob .k-value {
+  display: none;
+}
+
+/* ── the deck surface ──
+   The plank lines and bezel come from .board-deck, not .stage: a card board
+   has no surface to sit on, so it goes entirely. */
+.board-view[data-skin='itza'] .board-deck {
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 10px 14px;
+}
+
+/* ── the name reads left, like a heading ──
+   Upstream centres it and clips it to one line with an ellipsis; a 22px card
+   title wants the full name, wrapped if it must. */
+.board-view[data-skin='itza'] .pedal.pk .p-name {
+  text-align: left;
+  margin-top: 0;
+}
+.board-view[data-skin='itza'] .pedal.pk .p-name-btn {
+  display: block;
+  width: 100%;
+}
+.board-view[data-skin='itza'] .pedal.pk .p-name-text {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+/* The amp's control-panel colours must not win over the key colour. */
+.board-view[data-skin='itza'] .pedal.pk .p-name-text,
+.board-view[data-skin='itza'] .pedal.pk.wide .p-name-btn,
+.board-view[data-skin='itza'] .pedal.pk .controls.amp-panel .p-name-text {
+  color: var(--key);
+  font-size: 22px;
+  font-weight: 800;
+}
+
+/* ── faders (EQ, and any block set to bars) ──
+   Their labels collided once the type grew: the band names need room and a
+   line to wrap onto, like the knob labels. */
+.board-view[data-skin='itza'] .pedal.pk .controls {
+  gap: 12px 10px;
+}
+.board-view[data-skin='itza'] .pedal.pk .k-label {
+  font-size: 13px;
+  white-space: normal;
+  line-height: 1.15;
+  text-align: center;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+/* ── the amp panel is a card like any other ── */
+.board-view[data-skin='itza'] .pedal.pk .controls.amp-panel {
+  background: none;
+  border: none;
+  box-shadow: none;
+}
+
+/* ── one height for every card ──
+   Bays stretch so a row of cards lines up; the control area takes the slack,
+   so a one-knob block has air rather than a short card. */
+.board-view[data-skin='itza'] .board-row,
+.board-view[data-skin='itza'] .pedal-row {
+  align-items: stretch;
+}
+.board-view[data-skin='itza'] .pedal-bay {
+  align-items: stretch;
+}
+.board-view[data-skin='itza'] .pedal.pk {
+  height: 100%;
+}
+
+
+/* ── the treadle's hinge ──
+   `all: unset` resets an element but never its pseudo-elements, so upstream's
+   hinge (absolute, top: -3px, 299px wide) kept drawing — the grey bar above
+   every non-wide card. The wide pedals were exempt because they use
+   .stomp-round, which has no hinge. */
+.board-view[data-skin='itza'] .pedal.pk .treadle::before,
+.board-view[data-skin='itza'] .pedal.pk .stomp-round::before {
+  display: none;
+}
+
+/* ── signal flow ──
+   The chain is series, so each card points at the next. The chevron is a
+   square rotated 45° with two edges drawn: its own background masks the
+   straight border behind it, so the card's edge reads as bending to a point
+   rather than having a badge stuck on it.
+
+   --edge carries the border colour so the chevron tracks it, including the
+   dimmer border a bypassed card gets. */
+.board-view[data-skin='itza'] .pedal.pk {
+  --edge: var(--key);
+}
+.board-view[data-skin='itza'] .pedal.pk.bypassed {
+  --edge: color-mix(in srgb, var(--key) 48%, transparent);
+}
+.board-view[data-skin='itza'] .pedal.pk {
+  border-color: var(--edge);
+}
+.board-view[data-skin='itza'] .pedal.pk::after {
+  content: '';
+  display: block;
+  position: absolute;
+  top: 50%;
+  right: -8px;
+  width: 15px;
+  height: 15px;
+  margin-top: -8px;
+  background: inherit;
+  border-top: 1px solid var(--edge);
+  border-right: 1px solid var(--edge);
+  transform: rotate(45deg);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* ── upstream's flow badge ──
+   The little arc to the left of every pedal. The card's own chevron says the
+   same thing on the side the signal is going, so this would be saying it
+   twice, in the wrong place. */
+.board-view[data-skin='itza'] .flow-badge {
+  display: none;
+}
+
+/* ── bypassed: the name is the only thing left lit ──
+   The border goes grey with everything else, and the chevron follows it
+   because both read --edge. */
+.board-view[data-skin='itza'] .pedal.pk.bypassed {
+  --edge: #34343a;
+}
+
+/* ── the hover glow takes the card's key colour ──
+   Upstream's --knob-glow is one cyan for the whole board; here every block has
+   its own colour, and a cyan halo on an orange gauge reads as a mistake.
+   color-mix carries the key colour at the same two strengths. */
+.board-view[data-skin='itza'] .pedal.pk .knob {
+  --knob-glow: color-mix(in srgb, var(--key) 62%, transparent);
+  --knob-glow-soft: color-mix(in srgb, var(--key) 30%, transparent);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Corrections
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* IN › and › OUT are .flow-badge, and only those two — hiding the class took
+   the ends of the signal chain with it. They stay. */
+.board-view[data-skin='itza'] .flow-badge {
+  display: inline-flex;
+}
+
+/* ── signal flow, properly this time ──
+   The first attempt inherited upstream's `inset: 0` and `border-radius: 12px`
+   from .pedal::after. `left: 0` beat the `right` I set, so the mark sat on the
+   LEFT edge, and a 15px box with a 12px radius is a circle — the "arc" on
+   every card. Both symptoms, one cause.
+
+   Now a plain solid triangle: no radius, no inherited inset, nothing to
+   misread. */
+/* On ::before, NOT ::after. Upstream's .pedal::after is the bypass scrim —
+   inset: 0, opacity 0, going to opacity 1 on .bypassed — so a chevron built on
+   it is invisible while the pedal is on and grey while it is off. That was the
+   whole fault: the mark was never missing, it was wearing the scrim's opacity.
+   ::before is upstream's gloss sweep, which this skin switches off anyway. */
+.board-view[data-skin='itza'] .pedal.pk::before {
+  content: '';
+  display: block;
+  position: absolute;
+  inset: auto;
+  left: auto;
+  right: -10px;
+  top: 50%;
+  margin-top: -9px;
+  width: 0;
+  height: 0;
+  border-radius: 0;
+  background: none;
+  border-top: 9px solid transparent;
+  border-bottom: 9px solid transparent;
+  border-left: 10px solid var(--edge);
+  border-right: 0;
+  transform: none;
+  box-shadow: none;
+  opacity: 1;
+  pointer-events: none;
+  z-index: 2;
+}
+/* The scrim stays off: this skin dims a bypassed card its own way. */
+.board-view[data-skin='itza'] .pedal.pk::after {
+  display: none;
+}
+
+/* ── the ⓘ joins the tool row ──
+   It pins this effect's description in the bar at the top of the board. It was
+   floating over the lock; now it sits with the other three. The offset is the
+   tools' own width: swatch 18 + gap 9 + icon 18 + gap 9 + icon 18 = 72. */
+.board-view[data-skin='itza'] .pedal.pk .info-chip {
+  position: absolute;
+  top: 13px;
+  right: 95px;
+  bottom: auto;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 0;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--pk-label);
+  box-shadow: none;
+}
+.board-view[data-skin='itza'] .pedal.pk .info-chip.pinned {
+  color: var(--key);
+}
+
+
+/* ── dials above, switches below ──
+   Mixed in one wrapping row, a switch could land beside a dial and get
+   stretched to the dial's height — ROOM's TRAIL read as a bare word with its
+   toggle lost in the space. The zero-height ::after is a flex line break:
+   everything at order 0 (the dials) fills the first rows, the break forces a
+   new line, and the switches and selectors follow at order 2. */
+.board-view[data-skin='itza'] .pedal.pk .controls::after {
+  content: '';
+  order: 1;
+  flex: 0 0 100%;
+  height: 0;
+}
+.board-view[data-skin='itza'] .pedal.pk .mini-switch,
+.board-view[data-skin='itza'] .pedal.pk .combo-select {
+  order: 2;
+  align-self: flex-start;
+}
+
+/* ── the state button reacts to the hand ──
+   Up a touch under the pointer, past its own size on the press, back on the
+   way out. transform only, so nothing reflows. */
+.board-view[data-skin='itza'] .pedal.pk .treadle,
+.board-view[data-skin='itza'] .pedal.pk .stomp-round {
+  transition: transform 0.14s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.1s ease;
+  transform-origin: center;
+}
+.board-view[data-skin='itza'] .pedal.pk .treadle:hover,
+.board-view[data-skin='itza'] .pedal.pk .stomp-round:hover {
+  transform: scale(1.03);
+}
+.board-view[data-skin='itza'] .pedal.pk .treadle:active,
+.board-view[data-skin='itza'] .pedal.pk .stomp-round:active {
+  transform: scale(0.965);
+  transition-duration: 0.06s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .board-view[data-skin='itza'] .pedal.pk .treadle,
+  .board-view[data-skin='itza'] .pedal.pk .stomp-round {
+    transition: none;
+  }
+  .board-view[data-skin='itza'] .pedal.pk .treadle:hover,
+  .board-view[data-skin='itza'] .pedal.pk .stomp-round:hover,
+  .board-view[data-skin='itza'] .pedal.pk .treadle:active,
+  .board-view[data-skin='itza'] .pedal.pk .stomp-round:active {
+    transform: none;
+  }
+}
+
+/* ── bars ──
+   The track is the parameter's whole range, the lit part is the value in it.
+   A readout you can grab, not a slider: no cap, nothing to aim at. Full width
+   of the card so a row of them reads as a list.
+
+   Unprefixed on purpose: PedalBar is only ever rendered with `bars`, which
+   only this skin turns on, and the board and the phone card must show the
+   same bar. Scoping it to .board-view is what left the phone with three
+   unstyled lines of text where the bars should have been. */
+.pbar {
+  flex: 0 0 100%;
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+  padding: 1px 0;
+}
+.pbar:focus-visible {
+  outline: 2px solid var(--key);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+.pb-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 15px;
+}
+.pb-name {
+  color: var(--pk-label);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pb-value {
+  color: #f0f0f3;
+  font-weight: 500;
+  flex: none;
+}
+.pb-track {
+  display: block;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 2px;
+  background: #2f2f34;
+  overflow: hidden;
+}
+.pb-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--key);
+  transition: width 0.06s linear;
+}
+.pbar.dragging .pb-fill {
+  transition: none;
+}
+/* Bars fill the card, so they stack rather than wrap into columns. */
+.board-view[data-skin='itza'] .pedal.pk .controls:has(.pbar) {
+  gap: 9px 0;
+  align-content: flex-start;
+}
+
+/* ── the whole card drags, wherever the hand shows ──
+   The skin gives .controls flex: 1, so most of a card's empty space is inside
+   it — and .controls carries upstream's dragstart guard (it must, or turning a
+   knob would drag the pedal). The cursor said "grab" over space that refused
+   to be grabbed.
+
+   pointer-events: none lets that empty space fall through to the article,
+   which is the draggable element; the controls themselves take their events
+   back, so knobs, switches and selectors are untouched. */
+.board-view[data-skin='itza'] .pedal.pk .controls {
+  pointer-events: none;
+}
+.board-view[data-skin='itza'] .pedal.pk .controls > * {
+  pointer-events: auto;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   The phone shell wears the same skin.
+
+   Tapping a card opens its controls in place rather than pushing a second
+   screen, so the thing you tapped stays where it was and the chain stays on
+   screen around it.
+   ════════════════════════════════════════════════════════════════════════ */
+.mobile-view .m-pedal-card.m-pk {
+  /* The chevron hangs below the card, and the enclosure clipped it. */
+  overflow: visible;
+  background: #232326;
+  border: 1px solid var(--key);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--key) 20%, transparent),
+              0 0 20px -8px var(--key);
+  flex-wrap: wrap;
+}
+.mobile-view .m-pedal-card.m-pk.bypassed {
+  background: #141416;
+  border-color: #34343a;
+  box-shadow: none;
+}
+.mobile-view .m-pedal-card.m-pk::before {
+  display: none; /* gloss: the card says it its own way */
+}
+
+/* ── signal flow down the list ──
+   The board points right at the next card; a vertical chain points down. Same
+   solid triangle in the same key colour, turned a quarter. It replaces the
+   patch cable, which belongs to the enclosures this skin does away with. */
+.m-list .m-pedal-card.m-pk::after {
+  content: '';
+  display: block;
+  position: absolute;
+  inset: auto;
+  left: 50%;
+  margin-left: -9px;
+  bottom: -10px;
+  width: 0;
+  height: 0;
+  border-radius: 0;
+  background: none;
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+  border-top: 10px solid var(--key);
+  border-bottom: 0;
+  opacity: 1;
+  transform: none;
+  box-shadow: none;
+  pointer-events: none;
+  z-index: 2;
+}
+.m-list .m-pedal-card.m-pk.bypassed::after {
+  border-top-color: #34343a;
+}
+.mobile-view .m-pedal-card.m-pk .m-card-thumb,
+.mobile-view .m-pedal-card.m-pk .m-card-led {
+  display: none;
+}
+.mobile-view .m-pedal-card.m-pk .m-card-name {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+/* The chain position reads as part of the chip line, not as a second label:
+   same size and tracking as the module beside it, one grey. */
+.mobile-view .m-pedal-card.m-pk .m-card-pos {
+  flex: none;
+  align-self: auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  opacity: 1;
+  color: var(--pk-label);
+}
+.mobile-view .m-pedal-card.m-pk.bypassed .m-card-pos {
+  color: var(--pk-label-dim);
+}
+.mobile-view .m-pedal-card.m-pk .m-card-module {
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  color: var(--pk-label);
+  background: none;
+  border: none;
+  padding: 0;
+}
+.mobile-view .m-pedal-card.m-pk .m-card-summary {
+  font-size: 13px;
+  color: var(--pk-label);
+}
+.mobile-view .m-pedal-card.m-pk.bypassed .m-card-module,
+.mobile-view .m-pedal-card.m-pk.bypassed .m-card-summary {
+  color: var(--pk-label-dim);
+}
+
+/* ── the two handles ──
+   The grip at one end drags the block, the caret at the other opens its
+   controls. Neither is the card, so a tap on the card still means "change
+   this effect" — the same thing the board's name button does. */
+.mobile-view .m-pedal-card.m-pk .m-expand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 34px;
+  align-self: stretch;
+  padding: 0;
+  background: none;
+  border: none;
+  border-left: 1px solid #2f2f34;
+  color: var(--pk-label);
+  cursor: pointer;
+}
+.mobile-view .m-pedal-card.m-pk .m-expand svg {
+  width: 22px;
+  height: 22px;
+  transition: transform 0.16s ease;
+}
+/* Lit with the block, not with the panel: the caret follows the pedal's
+   on/off state, and still opens the controls either way. */
+.mobile-view .m-pedal-card.m-pk .m-expand {
+  color: var(--key);
+}
+.mobile-view .m-pedal-card.m-pk.bypassed .m-expand {
+  color: var(--pk-label-dim);
+}
+.mobile-view .m-pedal-card.m-pk.expanded .m-expand svg {
+  transform: rotate(180deg);
+}
+
+/* The grip reads the same on every card: the enclosure ink it used to borrow
+   varies per effect, so some were nearly invisible on a dark card. */
+.mobile-view .m-pedal-card.m-pk .m-grip-dots {
+  color: var(--pk-label);
+  opacity: 1;
+}
+
+/* On means this block's colour, not one green for the whole chain. */
+.mobile-view .m-pedal-card.m-pk .m-switch.on {
+  background: var(--key);
+  border-color: var(--key);
+}
+
+/* ── the per-block tools on a phone card ──
+   The same three controls as the board's header, but in the flow of the card's
+   head rather than absolutely placed in a corner: a phone card has one row to
+   work with, and the swatch/style/lock cluster shares it with the switch. */
+.mobile-view .m-pedal-card.m-pk .pk-tools {
+  position: relative;
+  /* Above the card's own flow chevron, which is a z-index: 2 ::after painted
+     after this cluster. The palette's own z-index cannot help: it is a child
+     of this stacking context and can never paint outside it, so the lift has
+     to happen here. The grip and the switch stay at 2 — they only need to
+     clear the bypass scrim. */
+  z-index: 5;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-right: 9px;
+}
+.mobile-view .m-pedal-card.m-pk .pk-swatch {
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  border-radius: 3px;
+  background: none;
+  border: 1.5px solid currentColor;
+  cursor: pointer;
+}
+.mobile-view .m-pedal-card.m-pk .pk-tool {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--pk-label);
+  cursor: pointer;
+}
+.mobile-view .m-pedal-card.m-pk .pk-tool svg {
+  width: 19px;
+  height: 19px;
+}
+.mobile-view .m-pedal-card.m-pk .pk-swatch:disabled,
+.mobile-view .m-pedal-card.m-pk .pk-tool:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.mobile-view .m-pedal-card.m-pk.bypassed .pk-swatch,
+.mobile-view .m-pedal-card.m-pk.bypassed .pk-tool {
+  color: var(--pk-label-dim) !important;
+}
+/* The palette hangs off the cluster rather than the card, so it opens under
+   the swatch that summoned it and never over the card's own name.
+
+   Half the viewport, all sixteen colours: the board's 26px chips are sized by
+   a .board-view rule that never reaches the phone, which left these as bare
+   unsized buttons in a column a few pixels wide. Here the grid sets the size
+   and the chips simply fill their cells, so the palette scales with the
+   screen instead of being measured twice. */
+.mobile-view .m-pedal-card.m-pk .pk-palette {
+  position: absolute;
+  top: 26px;
+  right: -6px;
+  z-index: 30;
+  width: 40vw;
+  max-width: 40vw;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 7px;
+  padding: 9px;
+  border-radius: 10px;
+  background: #1b1b1e;
+  border: 1px solid #3a3a42;
+  box-shadow: 0 10px 28px -8px rgba(0, 0, 0, 0.8);
+}
+.mobile-view .m-pedal-card.m-pk .pk-chip {
+  width: 100%;
+  aspect-ratio: 1;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  cursor: pointer;
+}
+.mobile-view .m-pedal-card.m-pk .pk-chip.picked {
+  box-shadow: 0 0 0 2px #1b1b1e, 0 0 0 3px #f0f0f3;
+}
+
+/* ── the open palette wins the stack ──
+   Each card's flow chevron is its own ::after hanging below it, and a card
+   later in the list paints over one earlier in it. The palette lives inside
+   the card it belongs to, so the next two cards' chevrons were landing on top
+   of the colours. Lift the whole row while it is open — the chevrons still
+   paint normally everywhere else. */
+.mobile-view .m-row-wrap:has(.pk-palette),
+.mobile-view .m-pedal-card.m-pk:has(.pk-palette) {
+  position: relative;
+  z-index: 40;
+}
+
+/* ── one visual row ──
+   The head's right-hand cluster lines up with the NAME, not with the card's
+   full height: the module chip and the value summary sit on a second line, and
+   centring the switch over both left it floating between the two. The name
+   gets a fixed line box so the offsets below are arithmetic, not a guess
+   (.m-card-main's 8px top padding + half of 24px). */
+.mobile-view .m-pedal-card.m-pk .m-card-name {
+  line-height: 24px;
+}
+.mobile-view .m-pedal-card.m-pk .pk-tools,
+.mobile-view .m-pedal-card.m-pk .m-switch {
+  align-self: flex-start;
+  margin-top: 10px;
+}
+
+/* 30% off the stock paddle. The phone card carries a name, a chain number, a
+   grip and a caret in one row, and at 48px the switch was the loudest thing
+   on it; the thumb target is still comfortably over the 24px minimum. */
+.mobile-view .m-pedal-card.m-pk .m-switch {
+  width: 34px;
+  height: 20px;
+  margin-right: 8px;
+}
+.mobile-view .m-pedal-card.m-pk .m-switch-knob {
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+}
+.mobile-view .m-pedal-card.m-pk .m-switch.on .m-switch-knob {
+  transform: translateX(14px);
+}
+
+/* The controls take the full width of the card, under its head. */
+.mobile-view .m-pedal-card.m-pk .m-card-controls {
+  flex: 0 0 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 10px;
+  justify-content: center;
+  align-content: flex-start;
+  margin-top: 12px;
+  padding-top: 14px;
+  padding-bottom: 30px;
+  border-top: 1px solid #2f2f34;
+}
+.mobile-view .m-pedal-card.m-pk .m-card-controls .knob {
+  width: 72px;
+  color: var(--key);
+  --knob-glow: color-mix(in srgb, var(--key) 62%, transparent);
+  --knob-glow-soft: color-mix(in srgb, var(--key) 30%, transparent);
+}
+.mobile-view .m-pedal-card.m-pk .m-card-controls .knob svg {
+  width: 70px;
+  height: 70px;
+}
+.mobile-view .m-pedal-card.m-pk .m-card-controls .knob .k-value {
+  display: none;
+}
+.mobile-view .m-pedal-card.m-pk .m-card-controls .k-label {
+  font-size: 14px;
+  color: var(--pk-label);
+  white-space: normal;
+  line-height: 1.15;
+  text-align: center;
+  max-width: 72px;
+}
+.mobile-view .m-pedal-card.m-pk .m-card-controls .pbar {
+  flex: 0 0 100%;
+  font-size: 15px;
+}
+/* Bars fill the card, so they stack rather than wrap into columns — and
+   because they run the full width of what contains them, the inset has to
+   come from here. Even on all four sides: a bar that reaches the card's
+   border reads as part of the border. */
+.mobile-view .m-pedal-card.m-pk .m-card-controls:has(.pbar) {
+  gap: 12px 0;
+  align-content: flex-start;
+  padding: 16px;
+}
+.mobile-view .m-pedal-card.m-pk.bypassed .m-card-controls {
+  opacity: 0.5;
+  filter: grayscale(1);
+}
+
+/* ── the tab bar's sixth button ──
+   The board-wide style switch has no home on a phone: there is no app bar.
+   It rides at the end of the tab bar, which means six columns, not five. */
+.mobile-view .m-tabbar.m-pk-bar {
+  grid-template-columns: repeat(6, 1fr);
+}
+.mobile-view .m-tabbar .m-tab-all {
+  color: var(--pk-label);
+}
+
+/* ── IN and OUT ──
+   They label the ends of the run; a full-width dashed box across the column
+   read as a container the chain sat inside. Shrink to the text and centre, so
+   they sit on the signal path the chevrons draw. */
+.m-list.m-pk-chain .m-marker:not(.fx) {
+  width: auto;
+  align-self: center;
+  padding: 0 18px;
+}
+
+/* The cable goes with the enclosures; the chevron says the same thing. */
+.m-list.m-pk-chain .m-cable {
+  display: none;
+}
+.m-list.m-pk-chain .m-row-wrap {
+  margin-bottom: 22px;
+}
+
+/* An FX marker lives inside the row-wrap of the block before it, so the gap
+   above it was the wrap's own 6px while the gap below the last marker was that
+   plus the wrap's 22px margin — the send looked stuck to the card above it.
+   Pay the 22px here too so the pair sits evenly in the run, with room for the
+   card's chevron to hang into. */
+.m-list.m-pk-chain .m-pedal-card + .m-marker.fx,
+.m-list.m-pk-chain .m-cable + .m-marker.fx {
+  margin-top: 22px;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   The other four screens.
+
+   PATCHES, LOOP, DRUMS and DEVICE mount the desktop's own panels in rack
+   units, and they arrived wearing the stock stage: cream ink, brushed rack
+   ears with screws, filled beige buttons, native cyan range tracks. Next to a
+   skinned chain they read as a different application.
+
+   Almost none of that needs rewriting. The phone chrome is already drawn from
+   a handful of custom properties, so the skin redefines those — neutral and
+   cool instead of warm, one hairline weight, one ink — and only the few
+   genuinely skeuomorphic pieces get a rule of their own. That keeps this
+   section short enough to stay true as upstream's panels change.
+   ════════════════════════════════════════════════════════════════════════ */
+.mobile-view[data-skin='itza'] {
+  --chrome-bg: #1b1b1e;
+  --chrome-border: #2f2f34;
+  --chrome-text: #f0f0f3;
+  --chrome-muted: var(--pk-label);
+  --strip-bg: #232326;
+  --bg-deep: #141416;
+  --bg-input: #19191b;
+  --knob-track: #2f2f34;
+  /* The cream fill was the loudest thing on the DEVICE screen — a beige slab
+     where the board has a dark card with a lit edge. */
+  --stub-ink: #2f2f34;
+  --stub-ink-on: #f0f0f3;
+}
+
+/* ── racks become cards ──
+   The ears and their screws are the rack metaphor; this skin does not have
+   one. What is left is a titled card, which is what the chain cards are. */
+.mobile-view[data-skin='itza'] .m-rack {
+  border-color: #2f2f34;
+  border-radius: 12px;
+  background: #1b1b1e;
+}
+.mobile-view[data-skin='itza'] .m-rack-ear {
+  display: none;
+}
+.mobile-view[data-skin='itza'] .m-rack-plate {
+  padding: 11px 14px;
+  background: none;
+  border-bottom: 1px solid #2f2f34;
+}
+.mobile-view[data-skin='itza'] .m-rack-title,
+.mobile-view[data-skin='itza'] .m-chassis-title,
+.mobile-view[data-skin='itza'] .m-screen-title,
+.mobile-view[data-skin='itza'] .m-section-title,
+.mobile-view[data-skin='itza'] .m-sheet-title {
+  /* The weight the card names carry, so a panel heading and a pedal name
+     belong to one typeface decision rather than two. */
+  text-align: left;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--pk-label);
+}
+.mobile-view[data-skin='itza'] .m-chassis,
+.mobile-view[data-skin='itza'] .m-panel,
+.mobile-view[data-skin='itza'] .m-section {
+  border-radius: 12px;
+  background: #1b1b1e;
+}
+.mobile-view[data-skin='itza'] .m-panel {
+  border-color: #2f2f34;
+}
+
+/* The knob strip loses the moulded enclosure it was set into: the board's
+   cards are flat, and so is this. */
+.mobile-view[data-skin='itza'] .m-face {
+  background: #19191b;
+  border: 1px solid #2f2f34;
+  box-shadow: none;
+}
+.mobile-view[data-skin='itza'] .m-face.amp-panel {
+  background: #19191b;
+}
+.mobile-view[data-skin='itza'] .m-panel-jack {
+  background: #19191b;
+  box-shadow: inset 0 0 0 1.5px #3a3a42;
+}
+
+/* ── buttons ──
+   One resting face, and a lit one that borrows the board bar's idiom: a
+   tinted wash inside the accent rather than a solid fill. */
+.mobile-view[data-skin='itza'] .m-btn {
+  border-radius: 10px;
+  border-color: #2f2f34;
+  background: #232326;
+  color: #f0f0f3;
+}
+.mobile-view[data-skin='itza'] .m-btn.ghost {
+  background: transparent;
+  color: var(--pk-label);
+}
+.mobile-view[data-skin='itza'] .m-btn.primary,
+.mobile-view[data-skin='itza'] .m-btn.active {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.mobile-view[data-skin='itza'] .m-select,
+.mobile-view[data-skin='itza'] .m-input {
+  border-color: #2f2f34;
+  border-radius: 8px;
+  background: #19191b;
+  color: #f0f0f3;
+}
+
+/* ── native ranges ──
+   The drum machine's BPM, swing and volume are plain <input type=range>. The
+   stock thumb is a 28px cream disc; here the track is the skin's hairline and
+   the thumb is the accent, which is the bars' reading of a value in a range. */
+.mobile-view[data-skin='itza'] .m-slider::-webkit-slider-runnable-track,
+.mobile-view[data-skin='itza'] .m-slider::-moz-range-track {
+  height: 8px;
+  border-radius: 4px;
+  background: #2f2f34;
+}
+.mobile-view[data-skin='itza'] .m-slider::-webkit-slider-thumb {
+  width: 22px;
+  height: 22px;
+  margin-top: -7px;
+  background: var(--accent);
+  border: 2px solid #19191b;
+  box-shadow: none;
+}
+.mobile-view[data-skin='itza'] .m-slider::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  background: var(--accent);
+  border: 2px solid #19191b;
+}
+
+/* The DEVICE screen's three patch knobs wear the board's gauge, so the arc
+   needs the same room and the same ink the chain cards give it. */
+.mobile-view[data-skin='itza'] .m-face .m-knob {
+  color: var(--accent);
+  --knob-glow: color-mix(in srgb, var(--accent) 62%, transparent);
+  --knob-glow-soft: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.mobile-view[data-skin='itza'] .m-face .m-knob-label {
+  font-size: 13px;
+  color: var(--pk-label);
+}
+
+/* ── the FX loop in the strip above each line of cards ──
+   Solid triangles, the same marks and the same two colours as the loop panel:
+   up for the signal leaving, down for it coming back. They hang off the card
+   rather than off a row element, because the board is one wrapping flex row
+   and where it breaks is a layout outcome — so a card carries its markers to
+   whichever line it lands on, and a wrapped board gets a strip per line with
+   nothing measuring anything.
+
+   The colours come in inline from core/boardSkin, so the palette stays in one
+   place and this file holds no hex for them. */
+.board-view[data-skin='itza'] .board-rows {
+  /* How far a marker reaches above its card. Every bit of clearance below is
+     derived from this, so the strip and the space it needs cannot drift
+     apart the way a pair of hand-tuned numbers would. */
+  --pk-fx-lift: 21px;
+}
+.board-view[data-skin='itza'] .pedal.pk .pk-fx {
+  position: absolute;
+  top: calc(var(--pk-fx-lift) * -1);
+  width: 0;
+  height: 0;
+  border-left: 9px solid transparent;
+  border-right: 9px solid transparent;
+  transform: translateX(-50%);
+  /* The marker is a drag handle, so it has to take the pointer. The triangle
+     is a bordered box with no content, and only the coloured wedge of it
+     actually reads as the marker — so the box stays small and sits in a strip
+     nothing else occupies. */
+  cursor: grab;
+  z-index: 6;
+}
+.board-view[data-skin='itza'] .pedal.pk .pk-fx:active {
+  cursor: grabbing;
+}
+.board-view[data-skin='itza'] .pedal.pk .pk-fx:focus-visible {
+  outline: 2px solid var(--key);
+  outline-offset: 3px;
+}
+.board-view[data-skin='itza'] .pedal.pk .pk-fx.out {
+  left: 33.333%;
+  border-bottom: 13px solid transparent; /* colour arrives inline */
+}
+.board-view[data-skin='itza'] .pedal.pk .pk-fx.in {
+  left: 66.666%;
+  border-top: 13px solid transparent;
+}
+/* Full strength on a bypassed card too: where the loop breaks the chain is a
+   property of the routing, not of whether this one pedal is switched on. */
+.board-view[data-skin='itza'] .pedal.pk.bypassed .pk-fx {
+  opacity: 1;
+  filter: none;
+}
+
+/* Room for the strip: above the first line, and between every pair after it.
+   The stock row gap is 30px, but a media query takes it to 22px on narrower
+   desktops — one pixel more than a marker needs, which would have put a
+   triangle on the card above it. Setting both here, from the same lift, means
+   the strip has its space at every width. The selector carries the skin
+   attribute, so it outranks that media query wherever it applies. */
+.board-view[data-skin='itza'] .board-row {
+  padding-top: calc(var(--pk-fx-lift) + 3px);
+  row-gap: calc(var(--pk-fx-lift) + 19px);
+}
+
+/* ── the loop markers are draggable in the chain ──
+   Two handles and no modes, the same shape the cards use: grip at one end
+   moves it, EDIT at the other opens the panel. The grip is the only thing
+   here that takes touch-action: none, which is what lets a drag start with no
+   long-press delay while a press anywhere else still scrolls the list. */
+.mobile-view .m-list.m-pk-chain .m-marker.fx {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Half the screen, centred. A loop end is a note on the run rather than a
+     block in it, so it should not take a block's full width — at this size
+     the difference is what stops the two reading as cards. */
+  width: 50vw;
+  align-self: center;
+  padding: 0;
+  border-color: color-mix(in srgb, var(--fx-marker) 45%, #2f2f34);
+}
+.mobile-view .m-list.m-pk-chain .m-marker-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  /* 30% up from the stock 10px marker text: this is the only writing in the
+     row, and it was set for a full-width strip. */
+  font-size: 13px;
+}
+.mobile-view .m-list.m-pk-chain .m-marker-edit {
+  flex: none;
+  padding-right: 11px;
+  font-size: 11px;
+}
+.mobile-view .m-list.m-pk-chain .m-marker-grip {
+  flex: none;
+  width: 34px;
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: none;
+  border: none;
+  border-right: 1px solid #2f2f34;
+  touch-action: none;
+  cursor: grab;
+}
+.mobile-view .m-list.m-pk-chain .m-marker-grip:active {
+  cursor: grabbing;
+}
+.mobile-view .m-list.m-pk-chain .m-marker-label {
+  flex: 1;
+  min-width: 0;
+  color: var(--fx-marker);
+  white-space: nowrap;
+}
+.mobile-view .m-list.m-pk-chain .m-marker.fx.dragging {
+  position: relative;
+  z-index: 30;
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.45);
+  border-color: var(--fx-marker);
+}
+
+/* Where it would land: the bottom edge of a row IS "after this block", so the
+   line is drawn there rather than on some separate indicator that would have
+   to be kept in step with the geometry the drag measured. */
+.mobile-view .m-list.m-pk-chain .m-row-wrap[data-fx-drop] {
+  position: relative;
+}
+.mobile-view .m-list.m-pk-chain .m-row-wrap[data-fx-drop]::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 3px;
+  border-radius: 2px;
+  pointer-events: none;
+}
+.mobile-view .m-list.m-pk-chain .m-row-wrap[data-fx-drop='send']::after {
+  background: var(--fx-send);
+}
+.mobile-view .m-list.m-pk-chain .m-row-wrap[data-fx-drop='return']::after {
+  background: var(--fx-return);
+}

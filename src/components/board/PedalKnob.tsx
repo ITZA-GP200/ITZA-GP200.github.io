@@ -9,6 +9,8 @@ import type { KnobParam } from '@/core/effectParams';
 import { KNOB_STYLES, type BodySpec } from './boardPalette';
 import { entryText, formatValue, snapValue, stepValue } from './paramValue';
 import { KNOB_VIEWBOX, knobAngle, tickPaths } from './knobGeometry';
+import { KnobArc } from './KnobArc';
+
 import { ValueEntry } from './ValueEntry';
 
 interface PedalKnobProps {
@@ -21,6 +23,13 @@ interface PedalKnobProps {
   pedalName: string;
   /** its Sync switch is on: the knob picks a note value (core/tempoSync.ts) */
   synced?: boolean;
+  /**
+   * ITZA skin (fork): draw a value arc with the reading in the middle instead
+   * of a capped knob with a pointer. Only the SVG changes — the drag, wheel,
+   * Shift-fine, keyboard and type-in behaviour is shared, which is the whole
+   * point of doing it here rather than in a second component.
+   */
+  arc?: boolean;
 }
 
 /** pixels of vertical drag for a full min→max sweep (mockup-tested) */
@@ -77,6 +86,7 @@ export function PedalKnob({
   ink,
   pedalName,
   synced = false,
+  arc = false,
 }: PedalKnobProps) {
   const style = KNOB_STYLES[knobStyle];
   const [dragging, setDragging] = useState(false);
@@ -229,29 +239,35 @@ export function PedalKnob({
         aria-valuetext={readout}
         onKeyDown={onKeyDown}
       >
-        {ticks.map((tick) => (
-          <path
-            key={tick}
-            d={tick}
-            stroke={ink}
-            strokeOpacity={0.35}
-            strokeWidth={2.5}
-            strokeLinecap="round"
-          />
-        ))}
-        <circle cx={50} cy={50} r={34} fill={style.cap1} />
-        <circle cx={46} cy={44} r={30} fill={style.cap0} />
-        <circle cx={50} cy={50} r={34} fill="none" stroke="rgba(0,0,0,.45)" strokeWidth={2} />
-        <line
-          x1={50}
-          y1={48}
-          x2={50}
-          y2={20}
-          stroke={style.pointer}
-          strokeWidth={6}
-          strokeLinecap="round"
-          transform={`rotate(${angle} 50 50)`}
-        />
+        {arc ? (
+          <KnobArc value={value} param={param} readout={readout} />
+        ) : (
+          <>
+            {ticks.map((tick) => (
+              <path
+                key={tick}
+                d={tick}
+                stroke={ink}
+                strokeOpacity={0.35}
+                strokeWidth={2.5}
+                strokeLinecap="round"
+              />
+            ))}
+            <circle cx={50} cy={50} r={34} fill={style.cap1} />
+            <circle cx={46} cy={44} r={30} fill={style.cap0} />
+            <circle cx={50} cy={50} r={34} fill="none" stroke="rgba(0,0,0,.45)" strokeWidth={2} />
+            <line
+              x1={50}
+              y1={48}
+              x2={50}
+              y2={20}
+              stroke={style.pointer}
+              strokeWidth={6}
+              strokeLinecap="round"
+              transform={`rotate(${angle} 50 50)`}
+            />
+          </>
+        )}
       </svg>
       <span className="k-label" title={param.name}>{param.name}</span>
       {editing && (

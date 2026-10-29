@@ -3,6 +3,53 @@
 Versions are **X.Y.Z**: X = a major feature release, Y = a functional release
 within a version, Z = an iterative release (typos, labels and similar).
 
+## 1.2.0: released 29 October 2026 as `pm.1.2.0`
+
+The pedalboard stops pretending to be made of wood and metal. Every block is
+a card now, on both the board and the phone, and the things that were only
+ever a label — the FX loop's two ends — became things you can pick up.
+
+**The board and the phone wear one skin.** A card has a flat dark field, a
+key colour on its border and its name, a value arc or a bar for every knob,
+and a rectangular ACTIVE switch instead of a footswitch. Three controls live
+in its header: key colour (sixteen of them), dial or bar, and a lock that
+freezes the look and the values but deliberately not the position or the
+on/off — a locked block is still part of a chain you reorder and still
+something you stomp on. The phone card carries the same three and opens its
+controls in place rather than pushing a second screen.
+
+**One grey, one slider.** Labels, module chips, chain numbers, value names,
+info chips and tool icons were drawn in four different greys that were all
+trying to be the same thing. They are one colour now, and **Label
+Brightness** in any card's colour popover moves it across the whole board.
+Hairlines and surfaces stay out of it: a 1px divider at label brightness
+reads as a drawn box rather than an edge.
+
+**The FX loop is a thing you move.** Solid triangles in the palette's own
+colours, up for the signal leaving and down for it coming back. On the board
+they sit above each line of cards and drag onto any block. On the phone they
+are half-width markers with a grip and an EDIT, and drag along the chain. In
+the loop panel the labels and the markers finally have a band each — eleven
+names and eleven drop targets never fitted one row, which is why the old
+arrows were so hard to hit. The target went from 11px to 30px.
+
+**PATCHES, LOOP, DRUMS and DEVICE wear the skin too.** Rack ears and their
+screws are gone, headings take the cards' weight, the beige buttons are dark
+with an accent wash, and the DEVICE screen's three patch knobs wear the
+board's value arc.
+
+**SAVE SETTINGS / LOAD SETTINGS.** Everything the editor remembers about you
+rather than about a patch lives in this browser, because the GP-200 patch
+format has no field for it — which is exactly what keeps an exported `.prst`
+byte-identical to what the Valeton software reads. The cost was that a phone
+and a desktop kept separate settings and clearing site data wiped them with
+no warning. Two buttons beside SAVE LOG are the way out. Import merges rather
+than replaces, refuses anything outside the editor's own storage, and refuses
+a profile from a newer build whole rather than half-applying it.
+
+**Gone:** the phone's old tap-through editor screen. The card opens its
+controls in place, so nothing routed to it any more.
+
 ## 1.1.1: released 25 October 2026 as `pm.1.1.1`
 
 The release the project starts from. `pm.1.1.0` went out the day before and

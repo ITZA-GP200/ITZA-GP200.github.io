@@ -7,6 +7,9 @@ import { getBodySpec } from '@/components/board/boardPalette';
 import { formatValue } from '@/components/board/paramValue';
 import type { PedalArtEntry } from '@/components/board/pedalManifest';
 import { PedalArt } from './PedalArt';
+import { PedalControls } from '@/components/board/PedalControls';
+import { PedalSkinTools } from '@/components/board/PedalSkinTools';
+import { DEFAULT_KEY, type BlockSkin, type ControlStyle } from '@/core/boardSkin';
 
 interface ChainRowProps {
   slot: EffectSlot;
@@ -18,12 +21,27 @@ interface ChainRowProps {
   chainLength: number;
   art?: PedalArtEntry;
   onToggle: () => void;
-  onOpen: () => void;
   onMove: (from: number, to: number) => void;
   /** grip pointer-down starts a drag */
   onDragHandleDown: (index: number, e: PointerEvent) => void;
   /** true while this row is the one being dragged */
   dragging: boolean;
+  /* ── ITZA skin (fork) ────────────────────────────────────────────────── */
+  /** Draw as an ITZA card, with its controls opening in place. */
+  skinned?: boolean;
+  blockSkin?: BlockSkin;
+  controlStyle?: ControlStyle;
+  /** Controls are showing below the card's head. */
+  expanded?: boolean;
+  onToggleExpand?: () => void;
+  onParamChange?: (paramIdx: number, value: number) => void;
+  /** open the effect browser for this block (the board's name button) */
+  onOpenPicker?: () => void;
+  /** key colour / control style / lock, as the board's card header carries */
+  onSkinChange?: (change: BlockSkin) => void;
+  /** Board-wide label grey, as a lightness percentage. */
+  labelLum?: number;
+  onLabelLumChange?: (lum: number) => void;
 }
 
 /** The first two knob params, as "Drive 62 · Tone 40" , a glance-level summary. */
@@ -56,10 +74,19 @@ export function ChainRow({
   chainLength,
   art,
   onToggle,
-  onOpen,
   onMove,
   onDragHandleDown,
   dragging,
+  skinned = false,
+  blockSkin = {},
+  controlStyle = 'dial',
+  expanded = false,
+  onToggleExpand,
+  onParamChange,
+  onOpenPicker,
+  onSkinChange,
+  labelLum,
+  onLabelLumChange,
 }: ChainRowProps) {
   const effectName = getEffectName(slot.effectId);
   // module identity is the physical block, never the effectId (slot 5 is always CAB)
@@ -67,7 +94,11 @@ export function ChainRow({
   const spec = art?.colors ?? getBodySpec(moduleName);
   const summary = summarize(slot.effectId, slot.params);
 
+  const locked = skinned && blockSkin.locked === true;
+  const keyColor = blockSkin.color ?? DEFAULT_KEY[moduleName] ?? spec.body;
+
   const vars = {
+    ...(skinned ? { '--key': keyColor } : {}),
     '--body': spec.body,
     '--body-deep': spec.bodyDeep,
     '--ink': spec.ink,
@@ -90,7 +121,8 @@ export function ChainRow({
     // data-drag-row sits on the card, not the <li> that wraps it: the card is
     // what GSAP transforms, and the cable in the gap below has to stay put.
     <div
-      className={`m-pedal-card${slot.enabled ? '' : ' bypassed'}${dragging ? ' dragging' : ''}`}
+      className={`m-pedal-card${slot.enabled ? '' : ' bypassed'}${dragging ? ' dragging' : ''}`
+        + `${skinned ? ' m-pk' : ''}${expanded ? ' expanded' : ''}`}
       style={vars}
       data-drag-row=""
     >
@@ -104,8 +136,21 @@ export function ChainRow({
         <span className="m-grip-dots" aria-hidden="true" />
       </button>
 
-      <button type="button" className="m-card-main" onClick={onOpen}>
-        <span className="m-card-pos">{displayIndex + 1}</span>
+      {/* The body opens the effect browser. It used to push a second screen
+          to edit the block; the card opens its own controls in place now, so
+          a tap on the name can mean the one thing the board's name button
+          means. */}
+      <button
+        type="button"
+        className="m-card-main"
+        aria-label={skinned ? `Change ${moduleName} effect: ${effectName}` : undefined}
+        onClick={onOpenPicker}
+      >
+        {/* Unskinned, the position sits beside the name. Skinned, it moves
+            down to the chip line, as the board's "#3" sits beside the module
+            — which is also what gives the 19px name back the width it needs on
+            a 375px screen, now that three tools share its row. */}
+        {!skinned && <span className="m-card-pos">{displayIndex + 1}</span>}
         {/* Fixed box, so eleven cards of wildly different shapes — a tall
             stompbox, a wide amp head — still line up as one list. The artwork
             is letterboxed inside it by pedals.css. */}
@@ -114,8 +159,11 @@ export function ChainRow({
             most of the column on a 320px screen — "Green OD" came out as
             "Gr…" — and the chip pairs more naturally with the values anyway. */}
         <span className="m-card-text">
-          <span className="m-card-name">{effectName}</span>
+          <span className="m-card-name" style={skinned ? { color: keyColor } : undefined}>
+            {effectName}
+          </span>
           <span className="m-card-bottom">
+            {skinned && <span className="m-card-pos">#{displayIndex + 1}</span>}
             <span className="m-card-module">{moduleName}</span>
             {summary && <span className="m-card-summary">{summary}</span>}
           </span>
@@ -123,6 +171,20 @@ export function ChainRow({
       </button>
 
       <span className="m-card-led" aria-hidden="true" />
+
+      {/* The same three per-block controls the board's card header carries,
+          with the same behaviour — there is no phone-only subset to learn. */}
+      {skinned && onSkinChange && (
+        <PedalSkinTools
+          moduleName={moduleName}
+          skin={blockSkin}
+          style={controlStyle}
+          keyColor={keyColor}
+          onChange={onSkinChange}
+          labelLum={labelLum}
+          onLabelLumChange={onLabelLumChange}
+        />
+      )}
 
       <button
         type="button"
@@ -134,6 +196,38 @@ export function ChainRow({
       >
         <span className="m-switch-knob" aria-hidden="true" />
       </button>
+
+      {/* The opposite end from the grip: one handle drags the block, the other
+          opens its controls. Neither is the card itself, so tapping the card
+          can go on meaning "change this effect". */}
+      {skinned && onToggleExpand && (
+        <button
+          type="button"
+          className="m-expand"
+          aria-expanded={expanded}
+          aria-label={`${effectName} controls`}
+          onClick={onToggleExpand}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
+      )}
+
+      {skinned && expanded && onParamChange && (
+        <div className="m-card-controls">
+          <PedalControls
+            slot={slot}
+            effectName={effectName}
+            spec={spec}
+            knobInk={spec.ink}
+            onParamChange={onParamChange}
+            locked={locked}
+            arc
+            bars={controlStyle === 'bar'}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import {
   stepValue,
 } from '@/components/board/paramValue';
 import { KNOB_VIEWBOX, knobAngle, tickPaths } from '@/components/board/knobGeometry';
+import { KnobArc } from '@/components/board/KnobArc';
 
 interface MobileKnobProps {
   param: KnobParam;
@@ -24,6 +25,12 @@ interface MobileKnobProps {
   disabled?: boolean;
   /** its Sync switch is on: the knob picks a note value (core/tempoSync.ts) */
   synced?: boolean;
+  /**
+   * ITZA skin (fork): draw the board's value arc instead of a capped knob.
+   * Only the face changes — the horizontal drag, the dead zone, the double
+   * tap and the focus rail are untouched, exactly as PedalKnob does it.
+   */
+  arc?: boolean;
 }
 
 /** Pixels of horizontal drag for a full min→max sweep. */
@@ -62,6 +69,7 @@ export function MobileKnob({
   onFocus,
   disabled = false,
   synced = false,
+  arc = false,
 }: MobileKnobProps) {
   const style = KNOB_STYLES[knobStyle];
   const [dragging, setDragging] = useState(false);
@@ -150,34 +158,40 @@ export function MobileKnob({
           }
         }}
       >
-        {tickPaths().map((tick) => (
-          <path
-            key={tick}
-            d={tick}
-            stroke={ink}
-            strokeOpacity={0.35}
-            strokeWidth={2.5}
-            strokeLinecap="round"
-          />
-        ))}
-        <circle cx={50} cy={50} r={34} fill={style.cap1} />
-        <circle cx={46} cy={44} r={30} fill={style.cap0} />
-        <circle cx={50} cy={50} r={34} fill="none" stroke="rgba(0,0,0,.45)" strokeWidth={2} />
-        <line
-          x1={50}
-          y1={48}
-          x2={50}
-          y2={20}
-          stroke={style.pointer}
-          strokeWidth={6}
-          strokeLinecap="round"
-          transform={`rotate(${angle} 50 50)`}
-        />
+        {arc ? (
+          <KnobArc value={value} param={param} readout={readout} />
+        ) : (
+          <>
+            {tickPaths().map((tick) => (
+              <path
+                key={tick}
+                d={tick}
+                stroke={ink}
+                strokeOpacity={0.35}
+                strokeWidth={2.5}
+                strokeLinecap="round"
+              />
+            ))}
+            <circle cx={50} cy={50} r={34} fill={style.cap1} />
+            <circle cx={46} cy={44} r={30} fill={style.cap0} />
+            <circle cx={50} cy={50} r={34} fill="none" stroke="rgba(0,0,0,.45)" strokeWidth={2} />
+            <line
+              x1={50}
+              y1={48}
+              x2={50}
+              y2={20}
+              stroke={style.pointer}
+              strokeWidth={6}
+              strokeLinecap="round"
+              transform={`rotate(${angle} 50 50)`}
+            />
+          </>
+        )}
       </svg>
       <span className="m-knob-label" title={param.name}>
         {param.name}
       </span>
-      <span className="m-knob-value">{readout}</span>
+      {!arc && <span className="m-knob-value">{readout}</span>}
     </div>
   );
 }
