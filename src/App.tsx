@@ -83,6 +83,7 @@ import { SysExCodec } from '@/core/SysExCodec';
 import { track } from '@/core/analytics';
 import { buildSupportLog, supportLogFilename } from '@/core/supportLog';
 import { loadStubbornValues } from '@/core/stubbornValues';
+import { buildProfile, importProfile, profileFilename, serializeProfile } from '@/core/profile';
 import {
   clampLabelLum,
   clearStyleOverrides,
@@ -1250,6 +1251,37 @@ function App() {
     // their own domain anyway.
   }
 
+  /** SAVE SETTINGS: this browser's own preferences, as a file to carry away. */
+  function handleSaveSettings() {
+    const profile = buildProfile(
+      __APP_VERSION__ ? `${__APP_VERSION__.label} (${__APP_VERSION__.commit})` : null,
+    );
+    const count = Object.keys(profile.settings).length;
+    downloadText(serializeProfile(profile), profileFilename());
+    setLoadNote(count === 0
+      ? 'Nothing to save yet: this browser has no settings stored.'
+      : `Settings saved: ${count} setting${count === 1 ? '' : 's'}.`);
+  }
+
+  /**
+   * LOAD SETTINGS. Almost everything here is read once at mount — the board
+   * skin, the brightness, the refused knobs — so writing storage alone would
+   * leave the screen showing the old values until something happened to
+   * re-read them. A reload is the honest way to apply the whole file at once,
+   * and it is why this asks first.
+   */
+  async function handleLoadSettings(file: File) {
+    const result = importProfile(await file.text());
+    if (!result.ok) {
+      setLoadNote(result.error ?? 'That settings file could not be read.');
+      return;
+    }
+    const skipped = result.skipped.length > 0 ? `, ${result.skipped.length} skipped` : '';
+    setLoadNote(`Settings loaded: ${result.applied.length} applied${skipped}. Reloading…`);
+    // Let the message paint before the page goes.
+    setTimeout(() => window.location.reload(), 600);
+  }
+
   const undoDevice: UndoDevice = {
     pullPreset: midiDevice.pullPreset,
     writePresetToSlot: midiDevice.writePresetToSlot,
@@ -1746,6 +1778,8 @@ function App() {
         onRenameSlot={recordedRename}
         onRefreshNames={handleReloadAll}
         onSaveLog={handleSaveLog}
+        onSaveSettings={handleSaveSettings}
+        onLoadSettings={handleLoadSettings}
         onImportFile={handleFile}
         onExportRequest={() => setShowExportDialog(true)}
         userIrNames={midiDevice.userIrNames}
