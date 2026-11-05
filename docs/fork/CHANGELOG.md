@@ -24,12 +24,21 @@ a name is exactly as likely to fit at 130% as at 100%; past about 136% two
 columns stop fitting a card, every card drops to one control per row and the
 board stops fitting the screen. The slider cannot reach that.
 
-**Every row is the same height.** A card's height used to follow its control
-count, so a six-knob AMP sat taller than a one-knob GATE and the two rows of
-the chain never lined up. They are measured now and levelled to the tallest,
-with the slack going to each card's control area. It holds however the chain
-wraps, and it re-measures rather than ratchets, so a shorter effect shrinks
-the board back down.
+**Every row is the same height** — when the screen can afford it. A card's
+height used to follow its control count, so a six-knob AMP sat taller than a
+one-knob GATE and the two rows of the chain never lined up. They are measured
+now and levelled to the tallest, with the slack going to each card's control
+area. It holds however the chain wraps, and it re-measures rather than
+ratchets, so a shorter effect shrinks the board back down.
+
+Levelling raises every row to the tallest, and what that costs depends on how
+the chain happens to divide. With dials the rows are within a few pixels of
+each other and it is free. Switch the board to bars and one row holds the
+six-bar EQ while the other holds the short blocks, so the short row grows by
+about 110px — on a shallow window, enough to push the whole board past the
+point where it still fits. Seeing the whole board beats seeing it levelled,
+so the board gives the levelling up rather than start scrolling, and takes it
+back as soon as there is room.
 
 ## 1.2.0: released 29 October 2026 as `pm.1.2.0`
 

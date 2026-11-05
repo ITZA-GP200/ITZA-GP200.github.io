@@ -1,5 +1,6 @@
 import { getEffectParams } from '@/core/effectParams';
 import { getEffectsByModule, getSlotModule } from '@/core/effectNames';
+import { styleFor, type BoardSkin, type ControlStyle } from '@/core/boardSkin';
 
 /** Knob-type params for an effect, the density that drives enclosure width. */
 function knobCount(effectId: number): number {
@@ -49,4 +50,30 @@ export function isWideSlot(slotIndex: number): boolean {
  */
 export function pedalIsWide(slotIndex: number, effectId: number): boolean {
   return isWideSlot(slotIndex) && isWidePedal(effectId);
+}
+
+/**
+ * A key that changes whenever something OTHER than the chain changes how tall
+ * a card is — the board's fit (useBoardFit) re-runs on it.
+ *
+ * It exists because levelling the rows pins a MINIMUM height on every bay, so
+ * a change that makes cards SHORTER leaves the observed box exactly as it was
+ * and the ResizeObserver never fires. Without this the board stays at the size
+ * it grew to: drag Label Size up and back down, or switch the board to bars
+ * and back, and nothing would release it.
+ *
+ * Height comes from the type size and from how the controls stack, so those
+ * are what it tracks: a bar card is much taller than the same block as dials,
+ * and the style can be set board-wide or overridden on one block.
+ *
+ * Anything added later that changes a card's height belongs in here.
+ */
+export function boardHeightKey(
+  slotIndexes: readonly number[],
+  skin: BoardSkin,
+  boardStyle: ControlStyle,
+  labelSize: number,
+): string {
+  const styles = slotIndexes.map((slotIndex) => styleFor(skin, slotIndex, boardStyle)[0]).join('');
+  return `${labelSize}|${styles}`;
 }

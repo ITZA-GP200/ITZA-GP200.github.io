@@ -100,7 +100,8 @@ export function equalizeRows(rows: HTMLElement, zoom = 1) {
  *                 board). Off for upstream's enclosures, which are meant to be
  *                 their own sizes.
  * @param layoutKey anything else that changes a card's height without changing
- *                 the chain — today, the Label Size setting.
+ *                 the chain — the Label Size setting, and the dial/bar control
+ *                 style, board-wide or per block.
  *
  *                 It cannot be left to the ResizeObserver, and this is the one
  *                 case where that is true: equalising pins a MINIMUM height on
@@ -133,33 +134,35 @@ export function useBoardFit(
 
     let frame = 0;
 
-    // Set the scale, equalise the lines AT that scale, and report the height
-    // the board then occupies. The two have to move together: the budget below
-    // is spent on the equalised board, and the equalisation is only correct at
-    // the scale it was measured at (see equalizeRows).
-    const apply = (zoom: number) => {
+    // Set the scale, level the lines AT that scale, and report the height the
+    // board then occupies. The two have to move together: the budget below is
+    // spent on the levelled board, and the levelling is only correct at the
+    // scale it was measured at (see equalizeRows).
+    const apply = (zoom: number, level: boolean) => {
       if (zoom >= 1) rows.style.removeProperty('zoom');
       else rows.style.zoom = String(zoom);
-      if (equalize) equalizeRows(rows, zoom >= 1 ? 1 : zoom);
+      if (level) equalizeRows(rows, zoom >= 1 ? 1 : zoom);
+      else rows.style.removeProperty(BAY_HEIGHT_VAR);
       return rows.getBoundingClientRect().height;
     };
 
-    const fit = () => {
-      frame = 0;
+    /** Scale the board down until it fits, and say whether it managed to. */
+    const search = (level: boolean) => {
       // Measure the unscaled board first: everything else in the stage (its
       // padding, the chassis frame, the floating deck) keeps its size when the
       // row shrinks, so that chrome comes off the height budget once and stays
       // off it.
-      const naturalHeight = apply(1);
+      const naturalHeight = apply(1, level);
       const available = stage.clientHeight - (stage.scrollHeight - naturalHeight);
-      if (available <= 0 || naturalHeight <= available) return;
+      if (available <= 0) return { fits: false, measurable: false };
+      if (naturalHeight <= available) return { fits: true, measurable: true };
 
       // Largest scale whose *laid-out* height still fits.
       let low = MIN_ZOOM;
       let high = 1;
       for (let i = 0; i < STEPS; i++) {
         const mid = (low + high) / 2;
-        if (apply(mid) <= available) low = mid;
+        if (apply(mid, level) <= available) low = mid;
         else high = mid;
       }
 
@@ -168,7 +171,34 @@ export function useBoardFit(
       // it was just fitted inside.
       let next = Math.max(MIN_ZOOM, Math.floor(low * 100) / 100);
       if (next > NO_OP_ZOOM) next = 1;
-      apply(next);
+      return { fits: apply(next, level) <= available, measurable: true };
+    };
+
+    const fit = () => {
+      frame = 0;
+      if (!equalize) {
+        search(false);
+        return;
+      }
+
+      // Level the lines if the stage can afford it, and give it up if it
+      // cannot. Levelling raises every line to the tallest, and what that
+      // costs depends entirely on how the chain happens to divide: with dials
+      // the lines are within ~15px of each other and it is free, but switch
+      // the board to bars and one line holds the six-bar EQ while the other
+      // holds the short blocks, so the short line grows by ~110px. On a
+      // shallow window that is the difference between the zoom search landing
+      // comfortably and bottoming out at MIN_ZOOM with the board still too
+      // tall — at which point the stage scrolls, the chain re-wraps lopsided
+      // (8 cards then 3), and the bottom row is cut off.
+      //
+      // Seeing the whole board beats seeing it levelled, so the fallback is
+      // the 1.2.0 behaviour: lines hug their own tallest card. It settles in
+      // one pass either way — a later tick re-measures from the same natural
+      // heights and reaches the same verdict.
+      const levelled = search(true);
+      if (levelled.fits || !levelled.measurable) return;
+      search(false);
     };
 
     const schedule = () => {
