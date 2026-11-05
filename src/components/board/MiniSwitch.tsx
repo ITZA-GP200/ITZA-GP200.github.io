@@ -1,4 +1,5 @@
 import type { ComboxParam, SwitchParam } from '@/core/effectParams';
+import { labelClass } from './paramValue';
 
 interface MiniSwitchProps {
   param: SwitchParam;
@@ -22,7 +23,7 @@ export function MiniSwitch({ param, value, onChange, pedalName }: MiniSwitchProp
         aria-label={`${pedalName} ${param.name}`}
         onClick={() => onChange(next ? next.id : on ? 0 : 1)}
       />
-      <span className="k-label">{param.name}</span>
+      <span className={labelClass(param.name)}>{param.name}</span>
     </div>
   );
 }
@@ -49,7 +50,7 @@ export function ComboSelect({ param, value, onChange, pedalName }: ComboSelectPr
           </option>
         ))}
       </select>
-      <span className="k-label">{param.name}</span>
+      <span className={labelClass(param.name)}>{param.name}</span>
     </div>
   );
 }

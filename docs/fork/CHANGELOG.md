@@ -3,6 +3,34 @@
 Versions are **X.Y.Z**: X = a major feature release, Y = a functional release
 within a version, Z = an iterative release (typos, labels and similar).
 
+## 1.3.0: released 4 November 2026 as `pm.1.3.0`
+
+Three refinements to the card board, all of them about reading it from where
+you actually stand: at a mic, looking down.
+
+**Control labels read in CAPS.** The param names only. Readings keep the case
+their unit is written in, because "500MS" reads as a typo — and so do the EQ
+bands, whose *names* are readings: "1.6kHz" stays as written while VOLUME
+beside it shouts. The case is drawn by CSS, so the text a screen reader
+announces is unchanged.
+
+**Label Size**, under Label Brightness in any card's colour popover. The two
+are the same question asked twice — can you read this from there — so they
+live together, and both cover the whole board rather than one pedal. 80% to
+130%, and it rides along in the exported settings file.
+
+The ceiling is measured, not picked. A label's column grows with the type, so
+a name is exactly as likely to fit at 130% as at 100%; past about 136% two
+columns stop fitting a card, every card drops to one control per row and the
+board stops fitting the screen. The slider cannot reach that.
+
+**Every row is the same height.** A card's height used to follow its control
+count, so a six-knob AMP sat taller than a one-knob GATE and the two rows of
+the chain never lined up. They are measured now and levelled to the tallest,
+with the slack going to each card's control area. It holds however the chain
+wraps, and it re-measures rather than ratchets, so a shorter effect shrinks
+the board back down.
+
 ## 1.2.0: released 29 October 2026 as `pm.1.2.0`
 
 The pedalboard stops pretending to be made of wood and metal. Every block is

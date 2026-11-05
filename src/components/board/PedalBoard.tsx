@@ -14,6 +14,7 @@ import {
   blockSkin,
   keyColorFor,
   LABEL_LUM_DEFAULT,
+  LABEL_SIZE_DEFAULT,
   styleFor,
   type BlockSkin,
   type BoardSkin,
@@ -109,6 +110,9 @@ export interface PedalBoardProps {
   /** Board-wide label grey, as a lightness percentage. */
   labelLum?: number;
   onLabelLumChange?: (lum: number) => void;
+  /** Board-wide label size, as a percentage of the skin's own size. */
+  labelSize?: number;
+  onLabelSizeChange?: (size: number) => void;
   /** FX-loop routing mode: 0 = parallel, 1 = serial. */
   onFxModeChange: (mode: number) => void;
   /** Per-patch style tag (index into PATCH_STYLES). */
@@ -262,8 +266,14 @@ export function PedalBoard({
   onBoardStyleChange,
   labelLum = LABEL_LUM_DEFAULT,
   onLabelLumChange,
+  labelSize = LABEL_SIZE_DEFAULT,
+  onLabelSizeChange,
 }: PedalBoardProps) {
   const artIndex = usePedalManifest();
+  // The fork's card board, as opposed to upstream's enclosures. It is the
+  // presence of the skin callback that says so: without it there is nothing to
+  // change a card's colour or style with, so there are no cards.
+  const skinned = Boolean(onBlockSkinChange);
 
   // Below 720px the row stops wrapping and becomes one swiped line (see
   // useSingleRowBoard): wrapping a phone-width viewport buries the chain under
@@ -332,7 +342,12 @@ export function PedalBoard({
   const { scopeRef, capture } = useFlipReorder(orderKey);
   // …and shrink the rows to whatever the window actually leaves for them. Off
   // for the single-row board, which is meant to be swiped at full size.
-  const { stageRef } = useBoardFit(scopeRef, orderKey, !singleRow);
+  //
+  // The skinned board also asks for one height per line: cards are a uniform
+  // width already, and two rows of different heights read as a mistake rather
+  // than as information. Upstream's enclosures stay their own sizes, because
+  // there the height IS the pedal.
+  const { stageRef } = useBoardFit(scopeRef, orderKey, !singleRow, skinned, String(labelSize));
 
   // Flipping the stage lights runs an electric flicker: the lamp sputters and
   // the board catches the flash. One timer for both, owned here because the
@@ -429,7 +444,7 @@ export function PedalBoard({
           isPinned={pinnedSlot === slot.slotIndex}
           showMoveButtons={touch}
           chainLength={preset.effects.length}
-          skinned={Boolean(onBlockSkinChange)}
+          skinned={skinned}
           blockSkin={blockSkin(boardSkin, slot.slotIndex)}
           controlStyle={styleFor(boardSkin, slot.slotIndex, boardStyle)}
           onSkinChange={
@@ -437,6 +452,8 @@ export function PedalBoard({
           }
           labelLum={labelLum}
           onLabelLumChange={onLabelLumChange}
+          labelSize={labelSize}
+          onLabelSizeChange={onLabelSizeChange}
           // Loop positions are 1..11 chain positions, so position N is the
           // Nth block in the CURRENT order — index, never slotIndex, or a
           // reordered chain would mark the wrong card.
@@ -454,9 +471,16 @@ export function PedalBoard({
   return (
     <div
       className={`board-view${flickering ? ' flickering' : ''}`}
-      data-skin={onBlockSkinChange ? 'itza' : undefined}
+      data-skin={skinned ? 'itza' : undefined}
       data-chrome={chromeOpen ? 'open' : 'closed'}
-      style={{ '--pk-label-l': `${labelLum}%` } as CSSProperties}
+      style={
+        {
+          '--pk-label-l': `${labelLum}%`,
+          // Unitless: the skin multiplies its own px sizes by this, so one
+          // property scales every control label without restating any of them.
+          '--pk-label-size': String(labelSize),
+        } as CSSProperties
+      }
     >
       <BoardTopBar
         boardStyle={boardStyle}

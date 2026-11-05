@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import type { KnobParam } from '@/core/effectParams';
-import { clampSnap, formatValue, stepValue } from './paramValue';
+import { clampSnap, formatValue, labelClass, stepValue } from './paramValue';
 
 interface PedalFaderProps {
   param: KnobParam;
@@ -66,7 +66,7 @@ export function PedalFader({ param, value, onChange, pedalName }: PedalFaderProp
       >
         <span className="f-cap" style={{ bottom: `${pct * TRAVEL_PX}px` }} />
       </div>
-      <span className="k-label" title={param.name}>{param.name}</span>
+      <span className={labelClass(param.name)} title={param.name}>{param.name}</span>
       <span className="k-value">{formatValue(value, param)}</span>
     </div>
   );

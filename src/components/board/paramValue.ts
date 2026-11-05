@@ -65,3 +65,32 @@ export function parseEntry(text: string, param: KnobParam): number | null {
   if (!Number.isFinite(parsed)) return null;
   return clampSnap(parsed, param);
 }
+
+/**
+ * Whether a param's NAME is really a unit reading rather than a word.
+ *
+ * The EQ bands are called "125Hz", "1.6kHz", "4kHz"; the skin sets control
+ * labels in caps, which turns those into "125HZ" and "1.6KHZ" — a unit written
+ * in the wrong case reads as a typo, and these are the one place a name
+ * carries one. A leading digit is the whole test, because that is exactly what
+ * separates a reading from a word: no param in effectParams.ts begins with a
+ * digit unless it is a frequency.
+ *
+ * It decides a CSS class, not the text, so the name a screen reader announces
+ * and the name in the source are untouched either way.
+ */
+export function isUnitName(name: string): boolean {
+  return /^\d/.test(name);
+}
+
+/**
+ * The class a control label is drawn with: its own, plus `as-written` when the
+ * name is a unit reading the skin must not uppercase (see isUnitName).
+ *
+ * Shared because four controls draw the same label — the dial, the fader, the
+ * switch and the bar — and a rule that only three of them obeyed would show up
+ * as one EQ band shouting at the others.
+ */
+export function labelClass(name: string, base = 'k-label'): string {
+  return isUnitName(name) ? `${base} as-written` : base;
+}

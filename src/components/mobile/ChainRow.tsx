@@ -42,6 +42,9 @@ interface ChainRowProps {
   /** Board-wide label grey, as a lightness percentage. */
   labelLum?: number;
   onLabelLumChange?: (lum: number) => void;
+  /** Board-wide label size, as a percentage of the skin's own size. */
+  labelSize?: number;
+  onLabelSizeChange?: (size: number) => void;
 }
 
 /** The first two knob params, as "Drive 62 · Tone 40" , a glance-level summary. */
@@ -87,6 +90,8 @@ export function ChainRow({
   onSkinChange,
   labelLum,
   onLabelLumChange,
+  labelSize,
+  onLabelSizeChange,
 }: ChainRowProps) {
   const effectName = getEffectName(slot.effectId);
   // module identity is the physical block, never the effectId (slot 5 is always CAB)
@@ -183,6 +188,8 @@ export function ChainRow({
           onChange={onSkinChange}
           labelLum={labelLum}
           onLabelLumChange={onLabelLumChange}
+          labelSize={labelSize}
+          onLabelSizeChange={onLabelSizeChange}
         />
       )}
 

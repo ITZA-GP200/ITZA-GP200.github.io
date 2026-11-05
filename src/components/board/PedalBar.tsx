@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import type { KnobParam } from '@/core/effectParams';
-import { clampSnap, formatValue, stepValue } from './paramValue';
+import { clampSnap, formatValue, labelClass, stepValue } from './paramValue';
 
 interface PedalBarProps {
   param: KnobParam;
@@ -66,7 +66,9 @@ export function PedalBar({ param, value, onChange, pedalName }: PedalBarProps) {
       }}
     >
       <span className="pb-head">
-        <span className="pb-name" title={param.name}>{param.name}</span>
+        <span className={labelClass(param.name, 'pb-name')} title={param.name}>
+          {param.name}
+        </span>
         <span className="pb-value">{formatValue(value, param)}</span>
       </span>
       <span className="pb-track">

@@ -95,9 +95,32 @@ export const LABEL_LUM_DEFAULT = 57;
 export const LABEL_LUM_MIN = 28;
 export const LABEL_LUM_MAX = 88;
 
+/**
+ * Label size: the scale, in percent, applied to every control label on a card
+ * — the knob and switch names, and a bar's name and reading.
+ *
+ * Board-wide and stored beside the brightness for the same reason: it is a
+ * legibility setting. 100 is the size the skin shipped with, so an existing
+ * board looks untouched until the slider is moved.
+ *
+ * The ceiling is measured, not guessed. A label's column grows with the type
+ * (skin-itza.css), and a card is 216px wide with 14px of padding each side and
+ * a 10px gutter, so two columns stop fitting at 64px * k * 2 + 10 > 188 —
+ * k = 1.36. Past that a card drops to ONE control per row: every card doubles
+ * in height, the board no longer fits the stage at the minimum zoom, and the
+ * stage falls back to scrolling. 130 keeps a clear margin under that cliff.
+ *
+ * The floor is where 13px stops being readable at arm's length on a board
+ * sitting on the floor.
+ */
+export const LABEL_SIZE_DEFAULT = 100;
+export const LABEL_SIZE_MIN = 80;
+export const LABEL_SIZE_MAX = 130;
+
 const STORAGE_KEY = 'gp200:boardSkin';
 const STYLE_KEY = 'gp200:boardStyle';
 const LABEL_LUM_KEY = 'gp200:labelLum';
+const LABEL_SIZE_KEY = 'gp200:labelSize';
 
 /** Clamp to the slider's range, falling back to the default for junk input. */
 export function clampLabelLum(value: unknown): number {
@@ -118,6 +141,30 @@ export function loadLabelLum(): number {
 export function saveLabelLum(lum: number): void {
   try {
     localStorage.setItem(LABEL_LUM_KEY, String(clampLabelLum(lum)));
+  } catch {
+    // Storage unavailable: the choice just won't survive a reload.
+  }
+}
+
+/** Clamp to the slider's range, falling back to the default for junk input. */
+export function clampLabelSize(value: unknown): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return LABEL_SIZE_DEFAULT;
+  return Math.min(LABEL_SIZE_MAX, Math.max(LABEL_SIZE_MIN, Math.round(n)));
+}
+
+export function loadLabelSize(): number {
+  try {
+    const raw = localStorage.getItem(LABEL_SIZE_KEY);
+    return raw === null ? LABEL_SIZE_DEFAULT : clampLabelSize(raw);
+  } catch {
+    return LABEL_SIZE_DEFAULT;
+  }
+}
+
+export function saveLabelSize(size: number): void {
+  try {
+    localStorage.setItem(LABEL_SIZE_KEY, String(clampLabelSize(size)));
   } catch {
     // Storage unavailable: the choice just won't survive a reload.
   }

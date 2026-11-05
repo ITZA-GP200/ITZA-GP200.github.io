@@ -7,7 +7,7 @@ import {
 } from 'react';
 import type { KnobParam } from '@/core/effectParams';
 import { KNOB_STYLES, type BodySpec } from './boardPalette';
-import { entryText, formatValue, snapValue, stepValue } from './paramValue';
+import { entryText, formatValue, labelClass, snapValue, stepValue } from './paramValue';
 import { KNOB_VIEWBOX, knobAngle, tickPaths } from './knobGeometry';
 import { KnobArc } from './KnobArc';
 
@@ -269,7 +269,7 @@ export function PedalKnob({
           </>
         )}
       </svg>
-      <span className="k-label" title={param.name}>{param.name}</span>
+      <span className={labelClass(param.name)} title={param.name}>{param.name}</span>
       {editing && (
         <ValueEntry
           className="k-entry"
