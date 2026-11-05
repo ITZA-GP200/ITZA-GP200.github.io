@@ -705,18 +705,24 @@
   cursor: ns-resize;
   touch-action: none;
   user-select: none;
-  padding: 1px 0;
+  padding: 0;
 }
 .pbar:focus-visible {
   outline: 2px solid var(--key);
   outline-offset: 3px;
   border-radius: 3px;
 }
+/* line-height is deliberate, not a default. A bar is name, reading and track
+   stacked, so every pixel of leading is paid eleven times over and then again
+   by the zoom: a card tall enough to push the board past the stage makes the
+   fit scale the WHOLE board down, and every other pedal's controls shrink
+   because one pedal was switched to bars. */
 .pb-head {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   gap: 8px;
+  line-height: 1.15;
   font-size: calc(15px * var(--pk-label-k, 1));
 }
 .pb-name {
@@ -733,7 +739,7 @@
 .pb-track {
   display: block;
   height: 8px;
-  margin-top: 5px;
+  margin-top: 3px;
   border-radius: 2px;
   background: #2f2f34;
   overflow: hidden;
@@ -750,8 +756,20 @@
 }
 /* Bars fill the card, so they stack rather than wrap into columns. */
 .board-view[data-skin='itza'] .pedal.pk .controls:has(.pbar) {
-  gap: 9px 0;
+  gap: 6px 10px;
   align-content: flex-start;
+}
+/* …except in a wide bay, where they go two across.
+   A wide bay belongs to a knob-heavy module (boardLayout's isWideSlot), which
+   is exactly where stacking hurt: the six-band EQ became six full-width bars,
+   roughly 90px taller than the same block drawn as dials. That one card was
+   enough to push the board past the stage, and the fit answered by scaling
+   the whole board down — switch one pedal to bars and every other pedal's
+   controls got smaller. Two across costs nothing in legibility at 330px and
+   keeps a bar card no taller than the dial card it replaced, so the board
+   height does not move and neither does the zoom. */
+.board-view[data-skin='itza'] .pedal-bay.wide .pedal.pk .controls:has(.pbar) .pbar {
+  flex: 0 0 calc(50% - 5px);
 }
 
 /* ── the whole card drags, wherever the hand shows ──
@@ -1345,6 +1363,26 @@
    attribute, so it outranks that media query wherever it applies. */
 .board-view[data-skin='itza'] .board-row {
   padding-top: calc(var(--pk-fx-lift) + 3px);
+  row-gap: calc(var(--pk-fx-lift) + 19px);
+}
+/* …but only ABOVE THE BOARD. When the chain was one wrapping row this padding
+   applied once, to the top, and the row-gap handled every line after it. With
+   the chain split into real rows each one would take the padding again and
+   stack it on the gap above — 24px of height per extra row, bought for
+   nothing, since the gap already clears that row's markers. Paid for in the
+   fit: it was enough to push the zoom search off 0.84 and start shrinking
+   every control on the board. */
+.board-view[data-skin='itza'] .board-rows:not(.single) .board-row + .board-row {
+  padding-top: 0;
+}
+/* The chain is split into fixed rows (PedalBoard's cardRows), so the space
+   between them is now the gap between two row ELEMENTS as well as the row-gap
+   above, which still applies if a row has to wrap inside itself on a narrow
+   window. Same measurement from the same lift either way. CableLayer is
+   absolutely positioned, so making this a column does not move it. */
+.board-view[data-skin='itza'] .board-rows:not(.single) {
+  display: flex;
+  flex-direction: column;
   row-gap: calc(var(--pk-fx-lift) + 19px);
 }
 

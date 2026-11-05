@@ -20,7 +20,7 @@ import {
   type BoardSkin,
   type ControlStyle,
 } from '@/core/boardSkin';
-import { boardHeightKey, isWideSlot } from './boardLayout';
+import { boardHeightKey, isWideSlot, splitChainRows } from './boardLayout';
 import { useFlipReorder } from './useFlipReorder';
 import { useBoardFit } from './useBoardFit';
 import { FxLoopArrows } from '@/components/FxLoopArrows';
@@ -44,6 +44,16 @@ import type { LooperTriggerMap } from '@/core/looperTriggers';
 import type { LearnNotice } from '@/hooks/useLooperTriggers';
 import type { PanelId } from '@/core/analyticsEvents';
 import type { ThemeName } from '@/hooks/useTheme';
+/**
+ * How many rows the card board splits the chain into.
+ *
+ * Two, because eleven blocks at 216px will not sit on one line on any screen
+ * anyone has, and three rows of four leaves the board short and wide. The
+ * split is by COUNT and never moves, which is the whole point: a card that
+ * grows taller must not change row (see cardRows).
+ */
+const MAX_BOARD_ROWS = 2;
+
 import { lookupPedalArt, usePedalManifest } from './pedalManifest';
 import { Pedal } from './Pedal';
 import { EffectPicker } from './EffectPicker';
@@ -347,6 +357,16 @@ export function PedalBoard({
   // width already, and two rows of different heights read as a mistake rather
   // than as information. Upstream's enclosures stay their own sizes, because
   // there the height IS the pedal.
+  // The chain in fixed rows: as even a split as eleven blocks allow, so the
+  // two rows are balanced and no card ever changes row because its own height
+  // changed. One row on the single-row board, and on upstream's, which keeps
+  // its one wrapping line.
+  const cardRows = useMemo(() => {
+    const cells = preset.effects.map((slot, index) => ({ slot, index }));
+    if (!skinned || singleRow) return [cells];
+    return splitChainRows(cells, MAX_BOARD_ROWS);
+  }, [preset.effects, skinned, singleRow]);
+
   // Everything OTHER than the chain that changes how tall a card is; see
   // boardHeightKey for why the fit cannot be left to notice these on its own.
   const heightKey = boardHeightKey(
@@ -547,20 +567,39 @@ export function PedalBoard({
                 orderKey={`${orderKey}|${singleRow ? 1 : 2}`}
                 hidden={dragIndex !== null}
               />
-              {/* One row in chain order that *wraps*: the chain stacks onto as
-                  many lines as the window needs instead of running off the
-                  right edge, and useBoardFit scales it so those lines fit the
-                  stage. Rows are no longer split in JS , where a line breaks is
-                  a layout outcome, which is also how CableLayer decides between
-                  a same-line bezier and a labeled stub pair.
-                  Below 720px (.single) the row goes back to nowrap and is
+              {/* The card board splits the chain into FIXED rows; upstream's
+                  board keeps one wrapping row.
+
+                  Where a line breaks used to be a layout outcome, which is how
+                  CableLayer tells a same-line bezier from a labeled stub pair.
+                  That is wrong for cards: a card's height follows its control
+                  count, so switching one block to bars made the board taller,
+                  the zoom search shrank it, more cards then fitted a line, and
+                  the chain re-wrapped underneath the user — switch the EQ to
+                  bars and it would jump from the second row to the first. The
+                  rows changing height to fit bars is expected; pedals moving
+                  between rows while you work is not.
+
+                  So the split is decided once from the chain length and does
+                  not move. The rows still wrap inside themselves, so a window
+                  too narrow for a whole row degrades the way it always did
+                  rather than overflowing. Cables are hidden under this skin,
+                  so CableLayer's line-break reasoning has nothing to draw.
+
+                  Below 720px (.single) it goes back to one nowrap line that is
                   swiped horizontally: wrapping on a phone buries the chain
                   under many short lines. */}
-              <div className="board-row">
-                <span className="flow-badge" aria-hidden="true">IN ›</span>
-                {preset.effects.map((slot, i) => renderPedal(slot, i))}
-                <span className="flow-badge" aria-hidden="true">› OUT</span>
-              </div>
+              {cardRows.map((row, rowIndex) => (
+                <div className="board-row" key={`row-${rowIndex}`}>
+                  {rowIndex === 0 && (
+                    <span className="flow-badge" aria-hidden="true">IN ›</span>
+                  )}
+                  {row.map(({ slot, index }) => renderPedal(slot, index))}
+                  {rowIndex === cardRows.length - 1 && (
+                    <span className="flow-badge" aria-hidden="true">› OUT</span>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         </section>

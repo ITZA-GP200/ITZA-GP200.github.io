@@ -3,6 +3,38 @@
 Versions are **X.Y.Z**: X = a major feature release, Y = a functional release
 within a version, Z = an iterative release (typos, labels and similar).
 
+## 1.3.1: released 4 November 2026 as `pm.1.3.1`
+
+Switching one pedal between dials and bars rearranged the whole board. Three
+separate faults, all introduced in 1.3.0 and all now fixed.
+
+**Pedals no longer change row.** The chain is split into fixed rows, decided
+from its length and nothing else. Where a line broke used to be a layout
+outcome, which is right for enclosures that are all one size and wrong for
+cards: a card's height follows its control count, so switching the EQ to bars
+made the board taller, the fit scaled it down, more cards then fitted a line
+and the chain re-wrapped — the EQ jumped from the second row to the first for
+no reason the user caused. Rows changing height to make room for bars is
+expected; pedals changing row while you work is not.
+
+**Nothing else shrinks when one pedal changes.** The board is scaled by a
+single zoom to keep all of it on screen, so one card growing taller shrank
+every other pedal's controls with it. A bar card was about 90px taller than
+the same block drawn as dials, and 1.3.0 had spent the headroom that used to
+hide it — levelling the rows cost ~18px, and splitting the chain into real
+rows repeated a 24px padding that had only ever applied once, at the top.
+
+Bars now cost LESS height than the dials they replace: tighter leading and
+track spacing, and in the wide bays — the knob-heavy modules, where six
+stacked bars did the damage — they sit two across. The board cannot grow when
+a pedal switches to bars, so the fit has nothing to react to and nothing
+moves.
+
+**The levelling gives way rather than overflow.** Where the two rows still
+cannot both be raised to the tallest without pushing the board past the
+screen, the board keeps its rows at their own heights instead of scrolling,
+and takes the levelling back as soon as there is room.
+
 ## 1.3.0: released 4 November 2026 as `pm.1.3.0`
 
 Three refinements to the card board, all of them about reading it from where
