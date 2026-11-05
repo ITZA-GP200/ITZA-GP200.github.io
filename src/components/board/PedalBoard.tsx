@@ -20,7 +20,7 @@ import {
   type BoardSkin,
   type ControlStyle,
 } from '@/core/boardSkin';
-import { isWideSlot } from './boardLayout';
+import { boardHeightKey, isWideSlot } from './boardLayout';
 import { useFlipReorder } from './useFlipReorder';
 import { useBoardFit } from './useBoardFit';
 import { FxLoopArrows } from '@/components/FxLoopArrows';
@@ -347,7 +347,15 @@ export function PedalBoard({
   // width already, and two rows of different heights read as a mistake rather
   // than as information. Upstream's enclosures stay their own sizes, because
   // there the height IS the pedal.
-  const { stageRef } = useBoardFit(scopeRef, orderKey, !singleRow, skinned, String(labelSize));
+  // Everything OTHER than the chain that changes how tall a card is; see
+  // boardHeightKey for why the fit cannot be left to notice these on its own.
+  const heightKey = boardHeightKey(
+    preset.effects.map((slot) => slot.slotIndex),
+    boardSkin,
+    boardStyle,
+    labelSize,
+  );
+  const { stageRef } = useBoardFit(scopeRef, orderKey, !singleRow, skinned, heightKey);
 
   // Flipping the stage lights runs an electric flicker: the lamp sputters and
   // the board catches the flash. One timer for both, owned here because the
