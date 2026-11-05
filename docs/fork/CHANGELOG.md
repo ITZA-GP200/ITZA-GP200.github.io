@@ -3,6 +3,40 @@
 Versions are **X.Y.Z**: X = a major feature release, Y = a functional release
 within a version, Z = an iterative release (typos, labels and similar).
 
+## 1.3.2: released 5 November 2026 as `pm.1.3.2`
+
+More of the bar board, found by using it.
+
+**One bar per row**, on every block but the graphic EQ, which keeps two
+across because six full-width bars make a card half again as tall as anything
+beside it. 1.3.1 split them by bay width, which meant a module counted as
+knob-heavy because one of its effects is — so GREEN OD, TWEEDY, DETUNE, PURE
+and ROOM were split too, for three bars each. It goes by the effect's own
+control count now.
+
+**A control label is a control label.** The names on bars were inheriting the
+card's body face at 15px while the names under dials were JetBrains Mono 800
+at 13px, so the same parameter looked like a different kind of thing
+depending on which control it was wearing. They are now identical in face,
+size, weight, tracking and colour, and both move together under Label Size.
+
+**The control deck stays on the floor.** It was `position: sticky`, which
+only reaches the bottom when the content is tall enough to push it there — so
+it rode up the screen whenever the board got shorter, which switching to bars
+does. The board takes the slack instead.
+
+**Switching styles no longer depends on having reloaded.** Changing a control
+style used to give a different board from opening the app already in that
+style — smaller, not filling the screen. The board is at the largest scale
+that fits, by the same rule however it got there.
+
+A consequence worth stating: bar cards are the more compact of the two
+controls, so an all-bars board sits at a larger scale than an all-dials one
+and everything on it reads bigger. They can only be the same size if bars
+reserve the room dials would need, and that reservation has to re-derive what
+the browser works out from flex and font metrics — which the Label Size
+slider already perturbs. Filling the screen was the better trade.
+
 ## 1.3.1: released 4 November 2026 as `pm.1.3.1`
 
 Switching one pedal between dials and bars rearranged the whole board. Three

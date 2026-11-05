@@ -100,8 +100,7 @@ export function equalizeRows(rows: HTMLElement, zoom = 1) {
  *                 board). Off for upstream's enclosures, which are meant to be
  *                 their own sizes.
  * @param layoutKey anything else that changes a card's height without changing
- *                 the chain — the Label Size setting, and the dial/bar control
- *                 style, board-wide or per block.
+ *                 the chain — today, the Label Size setting.
  *
  *                 It cannot be left to the ResizeObserver, and this is the one
  *                 case where that is true: equalising pins a MINIMUM height on
@@ -119,6 +118,7 @@ export function useBoardFit(
   enabled: boolean,
   equalize = false,
   layoutKey = '',
+  styleKey = '',
 ) {
   const stageRef = useRef<HTMLElement | null>(null);
 
@@ -146,14 +146,50 @@ export function useBoardFit(
       return rows.getBoundingClientRect().height;
     };
 
-    /** Scale the board down until it fits, and say whether it managed to. */
+    /**
+     * The height the rows are allowed to fill.
+     *
+     * Two ways to find it, because the two boards are laid out differently.
+     * The card board's stage is a flex column so the control deck is PUSHED
+     * to the bottom instead of merely sticking to it — which means the stage
+     * never scrolls when the board is short, its scrollHeight equals its
+     * clientHeight, and the subtraction below would report "it all fits" at
+     * any size. There the budget is the box the rows were handed: the deck
+     * area's content height, which flex-shrink has already clamped to
+     * whatever the control deck left over.
+     *
+     * Upstream's stage is an ordinary scrolling block, so the budget is the
+     * stage less everything in it that is not the rows — its padding, the
+     * chassis frame, the control deck — which comes off the total once and
+     * stays off it.
+     */
+    const budget = (naturalHeight: number) => {
+      const host = rows.closest('.board-deck');
+      if (host instanceof HTMLElement && getComputedStyle(stage).display === 'flex') {
+        const box = getComputedStyle(host);
+        return host.clientHeight - parseFloat(box.paddingTop) - parseFloat(box.paddingBottom);
+      }
+      return stage.clientHeight - (stage.scrollHeight - naturalHeight);
+    };
+
+    /**
+     * Scale the board down until it fits, and say whether it managed to.
+     *
+     * Stateless on purpose. An earlier version remembered the scale the board
+     * had before a control style changed and refused to go above it, so that
+     * switching to bars — the more compact control — could not enlarge
+     * everything. It made the board depend on how it got here: a live switch
+     * to bars came out smaller than the same board reloaded in bars, and the
+     * rows no longer filled the screen. The board is always at the largest
+     * scale that fits, whatever route it took to this layout.
+     */
     const search = (level: boolean) => {
       // Measure the unscaled board first: everything else in the stage (its
       // padding, the chassis frame, the floating deck) keeps its size when the
       // row shrinks, so that chrome comes off the height budget once and stays
       // off it.
       const naturalHeight = apply(1, level);
-      const available = stage.clientHeight - (stage.scrollHeight - naturalHeight);
+      const available = budget(naturalHeight);
       if (available <= 0) return { fits: false, measurable: false };
       if (naturalHeight <= available) return { fits: true, measurable: true };
 
@@ -221,7 +257,7 @@ export function useBoardFit(
       rows.style.removeProperty('zoom');
       rows.style.removeProperty(BAY_HEIGHT_VAR);
     };
-  }, [rowsRef, orderKey, enabled, equalize, layoutKey]);
+  }, [rowsRef, orderKey, enabled, equalize, layoutKey, styleKey]);
 
   return { stageRef };
 }
