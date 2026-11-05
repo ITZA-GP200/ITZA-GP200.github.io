@@ -77,3 +77,25 @@ export function boardHeightKey(
   const styles = slotIndexes.map((slotIndex) => styleFor(skin, slotIndex, boardStyle)[0]).join('');
   return `${labelSize}|${styles}`;
 }
+
+/**
+ * Split the chain into fixed rows, as evenly as its length allows.
+ *
+ * By COUNT, never by what fits. Where a line broke used to be a layout
+ * outcome, which is right for enclosures that are all one size and wrong for
+ * cards: a card's height follows its control count, so switching one block to
+ * bars made the board taller, the zoom search shrank it to fit, more cards
+ * then fitted a line, and the chain re-wrapped underneath the user — the EQ
+ * would jump from the second row to the first for no reason the user caused.
+ *
+ * Rows changing height to make room for bars is expected. Pedals changing row
+ * while you work is not, so the split is decided from the length alone and
+ * nothing about a card can move it.
+ */
+export function splitChainRows<T>(cells: readonly T[], maxRows: number): T[][] {
+  if (cells.length === 0) return [[]];
+  const perRow = Math.ceil(cells.length / maxRows);
+  const rows: T[][] = [];
+  for (let at = 0; at < cells.length; at += perRow) rows.push(cells.slice(at, at + perRow));
+  return rows;
+}
