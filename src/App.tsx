@@ -86,14 +86,17 @@ import { loadStubbornValues } from '@/core/stubbornValues';
 import { buildProfile, importProfile, profileFilename, serializeProfile } from '@/core/profile';
 import {
   clampLabelLum,
+  clampLabelSize,
   clearStyleOverrides,
   isLocked,
   loadBoardSkin,
   loadBoardStyle,
   loadLabelLum,
+  loadLabelSize,
   saveBoardSkin,
   saveBoardStyle,
   saveLabelLum,
+  saveLabelSize,
   withBlock,
   type BlockSkin,
   type ControlStyle,
@@ -278,6 +281,9 @@ function App() {
   // One grey for every label on the board, at this lightness. Board-wide: a
   // legibility setting, not a per-pedal one.
   const [labelLum, setLabelLum] = useState<number>(loadLabelLum);
+  // And how big, as a percentage of the skin's own sizes. Same reasoning: a
+  // legibility setting for the whole board, not a decision about one pedal.
+  const [labelSize, setLabelSize] = useState<number>(loadLabelSize);
   // PROTECT 64: bank 64 set aside for the app (see core/protectBank.ts).
   const [bank64Protected, setBank64Protected] = useState(loadBankProtected);
   // When the last SAVE 64 in this browser was made (ISO), for RESTORE's menu.
@@ -1538,11 +1544,20 @@ function App() {
     saveLabelLum(next);
   }
 
+  /** The colour popover's Label Size slider: one scale, whole board. */
+  function handleLabelSize(size: number) {
+    const next = clampLabelSize(size);
+    setLabelSize(next);
+    saveLabelSize(next);
+  }
+
   const boardProps: PedalBoardProps = {
     boardSkin,
     boardStyle,
     labelLum,
     onLabelLumChange: handleLabelLum,
+    labelSize,
+    onLabelSizeChange: handleLabelSize,
     onBlockSkinChange: handleBlockSkinChange,
     onBoardStyleChange: handleBoardStyle,
     preset: preset,

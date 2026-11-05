@@ -10,6 +10,7 @@ import {
   FX_SEND_COLOR,
   keyColorFor,
   LABEL_LUM_DEFAULT,
+  LABEL_SIZE_DEFAULT,
 } from '@/core/boardSkin';
 import { usePedalManifest } from '@/components/board/pedalManifest';
 import { LooperPanel } from '@/components/board/LooperPanel';
@@ -134,6 +135,8 @@ export default function MobileShell({
   onBoardStyleChange,
   labelLum = LABEL_LUM_DEFAULT,
   onLabelLumChange,
+  labelSize = LABEL_SIZE_DEFAULT,
+  onLabelSizeChange,
 }: PedalBoardProps) {
   const [tab, setTab] = useState<MobileTab>('chain');
   // Which block's effect browser is open, from a tap on a chain card. The
@@ -205,6 +208,9 @@ export default function MobileShell({
       data-skin={onBlockSkinChange ? 'itza' : undefined}
       style={{
         '--pk-label-l': `${labelLum}%`,
+        // Unitless: the skin multiplies its own px sizes by this, so one
+        // property scales every control label without restating any of them.
+        '--pk-label-size': String(labelSize),
         // The drop line is drawn by a row's ::after, which cannot read a
         // colour from the marker being dragged — so both live on the shell.
         '--fx-send': FX_SEND_COLOR,
@@ -245,6 +251,8 @@ export default function MobileShell({
             }
             labelLum={labelLum}
             onLabelLumChange={onLabelLumChange}
+            labelSize={labelSize}
+            onLabelSizeChange={onLabelSizeChange}
           />
         )}
 

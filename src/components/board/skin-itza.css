@@ -40,6 +40,39 @@
 .mobile-view {
   --pk-label: hsl(240 4% var(--pk-label-l, 57%));
   --pk-label-dim: hsl(240 4% max(20%, calc(var(--pk-label-l, 57%) - 13%)));
+  /* Label Size, as a plain multiplier. The slider publishes --pk-label-size as
+     a percentage NUMBER (no unit) on the shell, so each label keeps stating the
+     size the skin designed it at and multiplies by this — one property scales
+     the lot, and the relative sizes between a knob label and a bar's head stay
+     as drawn. Default 1, so an un-set board is the size it always was. */
+  --pk-label-k: calc(var(--pk-label-size, 100) / 100);
+}
+
+/* ── control labels read in CAPS ──
+   The param names only: a name is a word and reads faster shouting, which is
+   the point on a board glanced at from standing height. Readings are NOT in
+   here — "125Hz" and "500ms" carry their units in the case the unit is
+   written in, and "125HZ" reads as a typo.
+
+   Deliberately no extra tracking. Uppercase usually wants some, because the
+   letterforms are all cap-height with no ascenders to separate them — but
+   these are set in JetBrains Mono, where every glyph already sits on the same
+   advance with the sidebearings built in. Tracking here bought nothing and
+   cost 0.045em a character, which pushed the longest label (THRESHOLD, which
+   already fills its 64px gauge column) a further 5px past it. */
+.board-view[data-skin='itza'] .pedal.pk .k-label,
+.mobile-view .m-pedal-card.m-pk .k-label,
+.pbar .pb-name {
+  text-transform: uppercase;
+}
+/* …except the EQ bands, whose NAMES are unit readings: "1.6kHz" shouted back
+   as "1.6KHZ" reads as a typo, same as a reading would. The components decide
+   this, not the stylesheet, because "starts with a digit" is not something a
+   selector can ask (see paramValue's isUnitName). */
+.board-view[data-skin='itza'] .pedal.pk .k-label.as-written,
+.mobile-view .m-pedal-card.m-pk .k-label.as-written,
+.pbar .pb-name.as-written {
+  text-transform: none;
 }
 
 /* ── the card ──
@@ -346,8 +379,19 @@
    The knob keeps all its behaviour and swaps its SVG for a value arc
    (PedalKnob `arc`). `currentColor` is what the arc fills with, so the key
    colour reaches it without the component knowing about the skin. */
+/* The column widens with the label, so the type and the room it has scale
+   together: a label is exactly as likely to fit at 170% as at 100%, rather
+   than spilling further over its neighbour with every notch. The gauge itself
+   does not grow — this is a label-size control, not a control-size one — it
+   just sits centred in a wider column. max(1, …) pins the floor at today's
+   64px, so a board that has never touched the slider is untouched.
+
+   Wide enough and the card fits one column instead of two, which is the
+   honest consequence of asking for big type on a 216px card. Rows stay level
+   through it, because they are equalised from measurement (useBoardFit). */
 .board-view[data-skin='itza'] .pedal.pk .knob {
-  width: 64px;
+  width: calc(64px * max(1, var(--pk-label-k, 1)));
+  max-width: 100%;
   color: var(--key);
 }
 .board-view[data-skin='itza'] .pedal.pk .knob svg {
@@ -355,12 +399,12 @@
   height: 62px;
 }
 .board-view[data-skin='itza'] .pedal.pk .k-label {
-  font-size: 14px;
+  font-size: calc(14px * var(--pk-label-k, 1));
   color: var(--pk-label);
   white-space: normal;
   line-height: 1.15;
   text-align: center;
-  max-width: 64px;
+  max-width: calc(64px * max(1, var(--pk-label-k, 1)));
 }
 /* On a dial the reading lives inside the arc, so the one underneath would say
    it twice. Bars carry their own and are not touched by this. */
@@ -410,7 +454,7 @@
   gap: 12px 10px;
 }
 .board-view[data-skin='itza'] .pedal.pk .k-label {
-  font-size: 13px;
+  font-size: calc(13px * var(--pk-label-k, 1));
   white-space: normal;
   line-height: 1.15;
   text-align: center;
@@ -425,15 +469,27 @@
   box-shadow: none;
 }
 
-/* ── one height for every card ──
+/* ── one height for every card, and one height for every row ──
    Bays stretch so a row of cards lines up; the control area takes the slack,
-   so a one-knob block has air rather than a short card. */
+   so a one-knob block has air rather than a short card.
+
+   --pk-bay-h is the tallest card on the board, measured by useBoardFit and
+   published on .board-rows. It equalises the *lines*: every bay is at least
+   that tall, so the two rows the chain wraps onto match whatever is in them.
+   A card's height follows its control count — a 6-knob AMP is genuinely
+   taller than a 1-knob GATE, and a block switched to bars is taller again —
+   and a card board has no reason to show that. The cost is air inside the
+   sparse cards, which is the right trade for a grid.
+
+   The fallback is 0, not a number: with no measurement (the prerender, a test,
+   upstream's board) this rule does nothing at all. */
 .board-view[data-skin='itza'] .board-row,
 .board-view[data-skin='itza'] .pedal-row {
   align-items: stretch;
 }
 .board-view[data-skin='itza'] .pedal-bay {
   align-items: stretch;
+  min-height: var(--pk-bay-h, 0);
 }
 .board-view[data-skin='itza'] .pedal.pk {
   height: 100%;
@@ -661,7 +717,7 @@
   justify-content: space-between;
   align-items: baseline;
   gap: 8px;
-  font-size: 15px;
+  font-size: calc(15px * var(--pk-label-k, 1));
 }
 .pb-name {
   color: var(--pk-label);
@@ -1004,7 +1060,8 @@
   border-top: 1px solid #2f2f34;
 }
 .mobile-view .m-pedal-card.m-pk .m-card-controls .knob {
-  width: 72px;
+  width: calc(72px * max(1, var(--pk-label-k, 1)));
+  max-width: 100%;
   color: var(--key);
   --knob-glow: color-mix(in srgb, var(--key) 62%, transparent);
   --knob-glow-soft: color-mix(in srgb, var(--key) 30%, transparent);
@@ -1017,16 +1074,16 @@
   display: none;
 }
 .mobile-view .m-pedal-card.m-pk .m-card-controls .k-label {
-  font-size: 14px;
+  font-size: calc(14px * var(--pk-label-k, 1));
   color: var(--pk-label);
   white-space: normal;
   line-height: 1.15;
   text-align: center;
-  max-width: 72px;
+  max-width: calc(72px * max(1, var(--pk-label-k, 1)));
 }
 .mobile-view .m-pedal-card.m-pk .m-card-controls .pbar {
   flex: 0 0 100%;
-  font-size: 15px;
+  font-size: calc(15px * var(--pk-label-k, 1));
 }
 /* Bars fill the card, so they stack rather than wrap into columns — and
    because they run the full width of what contains them, the inset has to

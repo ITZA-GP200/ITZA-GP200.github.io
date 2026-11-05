@@ -38,16 +38,86 @@ const STEPS = 5;
  * measurement — laid-out height is monotonic in the scale, which is all a
  * binary search needs.
  *
+/**
+ * The custom property the skin's bays read for their minimum height. Set on
+ * `.board-rows` so one value covers every bay on every line.
+ */
+const BAY_HEIGHT_VAR = '--pk-bay-h';
+
+/** Slack added to the measured height, to absorb sub-pixel rounding. */
+const SUBPIXEL_CUSHION_PX = 2;
+
+/**
+ * Give every bay the height of the tallest card on the board, so the lines the
+ * chain wraps onto are all one height.
+ *
+ * Why a measurement and not a reserved number: a card's height follows how
+ * many control rows it has, and that is not knowable in CSS — a block set to
+ * bars stacks one per row, a six-knob card in a wide bay takes two, and the
+ * Label Size slider can add a wrapped line to every label at once. The old
+ * per-module reservation (bayMinHeight) is exactly what this replaces, and it
+ * is what left ~140px of dead air above short pedals.
+ *
+ * A per-bay minimum is what makes it hold: it equalises the lines *however
+ * they break*, so it does not care how many lines the chain is on, or that the
+ * zoom search below keeps changing where they break. Reset-then-measure makes
+ * it idempotent — each pass reads the natural height rather than the one it
+ * just imposed, so a shorter effect shrinks the board back instead of being
+ * pinned tall.
+ *
+ * Bays already stretch to their own line's height (.board-row align-items) and
+ * the card fills its bay (.pedal.pk height:100%), so the tallest bay IS the
+ * tallest card, and the slack inside each card goes to its control area.
+ *
+ * It has to be told the zoom, and it has to run at the zoom the board ends up
+ * at. A card's height is NOT a fixed number of CSS pixels across zooms:
+ * `zoom` scales layout, the scaled type is rounded to device pixels, and a
+ * label that took one line at 13px can take two at 10.8px. Measuring once at
+ * 1 and applying the result at 0.83 came out 9px short for exactly that
+ * reason — so the fit's `apply` calls this at every candidate scale instead.
+ *
+ * @param zoom the scale `rows` is currently drawn at, divided back out of the
+ *             client rects so the property is written in CSS pixels
+ */
+export function equalizeRows(rows: HTMLElement, zoom = 1) {
+  rows.style.removeProperty(BAY_HEIGHT_VAR);
+  const bays = rows.querySelectorAll<HTMLElement>('.pedal-bay');
+  let tallest = 0;
+  bays.forEach((bay) => {
+    tallest = Math.max(tallest, bay.getBoundingClientRect().height / zoom);
+  });
+  if (tallest <= 0) return;
+  rows.style.setProperty(BAY_HEIGHT_VAR, `${Math.ceil(tallest) + SUBPIXEL_CUSHION_PX}px`);
+}
+
+/**
  * @param rowsRef  the `.board-rows` element (also useFlipReorder's scope)
  * @param orderKey re-fit when the chain changes: swapping an effect changes a
  *                 pedal's height, and reordering changes where lines break
  * @param enabled  off for the single-row (phone/small-tablet) board, which is
  *                 meant to be swiped through at full size
+ * @param equalize one height for every wrapped line (the ITZA skin's card
+ *                 board). Off for upstream's enclosures, which are meant to be
+ *                 their own sizes.
+ * @param layoutKey anything else that changes a card's height without changing
+ *                 the chain — today, the Label Size setting.
+ *
+ *                 It cannot be left to the ResizeObserver, and this is the one
+ *                 case where that is true: equalising pins a MINIMUM height on
+ *                 every bay, so when the labels get smaller the cards shrink
+ *                 inside bays that do not, the observed box never changes, and
+ *                 nothing re-fits. The board would stay stuck at the size it
+ *                 grew to and dragging the slider back down would not release
+ *                 it. Re-running the effect does: the cleanup drops both the
+ *                 zoom and the minimum, and the fresh fit measures from
+ *                 nothing.
  */
 export function useBoardFit(
   rowsRef: RefObject<HTMLDivElement | null>,
   orderKey: string,
   enabled: boolean,
+  equalize = false,
+  layoutKey = '',
 ) {
   const stageRef = useRef<HTMLElement | null>(null);
 
@@ -57,14 +127,20 @@ export function useBoardFit(
     if (!rows || !stage) return;
     if (!enabled) {
       rows.style.removeProperty('zoom');
+      rows.style.removeProperty(BAY_HEIGHT_VAR);
       return;
     }
 
     let frame = 0;
 
+    // Set the scale, equalise the lines AT that scale, and report the height
+    // the board then occupies. The two have to move together: the budget below
+    // is spent on the equalised board, and the equalisation is only correct at
+    // the scale it was measured at (see equalizeRows).
     const apply = (zoom: number) => {
       if (zoom >= 1) rows.style.removeProperty('zoom');
       else rows.style.zoom = String(zoom);
+      if (equalize) equalizeRows(rows, zoom >= 1 ? 1 : zoom);
       return rows.getBoundingClientRect().height;
     };
 
@@ -113,8 +189,9 @@ export function useBoardFit(
       observer.disconnect();
       window.removeEventListener('resize', schedule);
       rows.style.removeProperty('zoom');
+      rows.style.removeProperty(BAY_HEIGHT_VAR);
     };
-  }, [rowsRef, orderKey, enabled]);
+  }, [rowsRef, orderKey, enabled, equalize, layoutKey]);
 
   return { stageRef };
 }

@@ -3,6 +3,9 @@ import {
   LABEL_LUM_DEFAULT,
   LABEL_LUM_MAX,
   LABEL_LUM_MIN,
+  LABEL_SIZE_DEFAULT,
+  LABEL_SIZE_MAX,
+  LABEL_SIZE_MIN,
   SKIN_PALETTE,
   type BlockSkin,
   type ControlStyle,
@@ -21,6 +24,9 @@ interface PedalSkinToolsProps {
   /** Board-wide label grey, as a lightness percentage. */
   labelLum?: number;
   onLabelLumChange?: (lum: number) => void;
+  /** Board-wide label size, as a percentage of the skin's own size. */
+  labelSize?: number;
+  onLabelSizeChange?: (size: number) => void;
 }
 
 const Locked = () => (
@@ -50,10 +56,13 @@ export function PedalSkinTools({
   onChange,
   labelLum = LABEL_LUM_DEFAULT,
   onLabelLumChange,
+  labelSize = LABEL_SIZE_DEFAULT,
+  onLabelSizeChange,
 }: PedalSkinToolsProps) {
   const [picking, setPicking] = useState(false);
   const wrap = useRef<HTMLSpanElement>(null);
   const lumInput = useRef<HTMLInputElement>(null);
+  const sizeInput = useRef<HTMLInputElement>(null);
   const locked = skin.locked === true;
 
   // The wheel turns the brightness, as it turns every other control in this
@@ -61,16 +70,24 @@ export function PedalSkinTools({
   // registered passively, so preventDefault there is ignored and the popover
   // scrolls out from under the pointer instead.
   useEffect(() => {
-    const el = lumInput.current;
-    if (!el || !onLabelLumChange) return;
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      const step = e.shiftKey ? 1 : 3;
-      onLabelLumChange(labelLum + (e.deltaY < 0 ? step : -step));
-    };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, [labelLum, onLabelLumChange, picking]);
+    const sliders: [HTMLInputElement | null, number, ((n: number) => void) | undefined, number, number][] = [
+      [lumInput.current, labelLum, onLabelLumChange, 1, 3],
+      // Size moves in whole steps of its own scale, not of a lightness: one
+      // notch is a visible change rather than a sub-pixel one.
+      [sizeInput.current, labelSize, onLabelSizeChange, 1, 5],
+    ];
+    const detach = sliders.map(([el, value, onChange, fineStep, coarseStep]) => {
+      if (!el || !onChange) return () => {};
+      const onWheel = (e: WheelEvent) => {
+        e.preventDefault();
+        const step = e.shiftKey ? fineStep : coarseStep;
+        onChange(value + (e.deltaY < 0 ? step : -step));
+      };
+      el.addEventListener('wheel', onWheel, { passive: false });
+      return () => el.removeEventListener('wheel', onWheel);
+    });
+    return () => detach.forEach((off) => off());
+  }, [labelLum, onLabelLumChange, labelSize, onLabelSizeChange, picking]);
 
   // Close the palette on an outside click or Escape, like any other popover.
   useEffect(() => {
@@ -136,6 +153,26 @@ export function PedalSkinTools({
                 value={labelLum}
                 style={{ accentColor: keyColor }}
                 onChange={(e) => onLabelLumChange(Number(e.currentTarget.value))}
+              />
+            </label>
+          )}
+          {/* Size, directly under brightness, because they are the same
+              decision asked twice: can you read the labels from where you are
+              standing. Labels wrap rather than overflow their gauge, so the top
+              of this range makes cards taller — which the board absorbs, since
+              every row is one height (useBoardFit). */}
+          {onLabelSizeChange && (
+            <label className="pk-lum">
+              <span className="pk-lum-label">LABEL SIZE · ALL PEDALS</span>
+              <input
+                ref={sizeInput}
+                type="range"
+                min={LABEL_SIZE_MIN}
+                max={LABEL_SIZE_MAX}
+                step={5}
+                value={labelSize}
+                style={{ accentColor: keyColor }}
+                onChange={(e) => onLabelSizeChange(Number(e.currentTarget.value))}
               />
             </label>
           )}

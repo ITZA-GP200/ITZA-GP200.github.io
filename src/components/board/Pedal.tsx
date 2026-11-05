@@ -54,6 +54,9 @@ export interface PedalProps {
   /** Board-wide label grey, as a lightness percentage. */
   labelLum?: number;
   onLabelLumChange?: (lum: number) => void;
+  /** Board-wide label size, as a percentage of the skin's own size. */
+  labelSize?: number;
+  onLabelSizeChange?: (size: number) => void;
   /** The FX loop leaves the chain at this block (fxLoopSend). */
   fxSend?: boolean;
   /** The FX loop comes back at this block (fxLoopReturn). */
@@ -83,6 +86,8 @@ export function Pedal({
   onSkinChange,
   labelLum,
   onLabelLumChange,
+  labelSize,
+  onLabelSizeChange,
   fxSend = false,
   fxReturn = false,
   fxMove,
@@ -276,6 +281,8 @@ export function Pedal({
           onChange={onSkinChange}
           labelLum={labelLum}
           onLabelLumChange={onLabelLumChange}
+          labelSize={labelSize}
+          onLabelSizeChange={onLabelSizeChange}
         />
       )}
       <button

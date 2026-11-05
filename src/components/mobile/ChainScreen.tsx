@@ -30,6 +30,9 @@ interface ChainScreenProps {
   /** Board-wide label grey, as a lightness percentage. */
   labelLum?: number;
   onLabelLumChange?: (lum: number) => void;
+  /** Board-wide label size, as a percentage of the skin's own size. */
+  labelSize?: number;
+  onLabelSizeChange?: (size: number) => void;
 }
 
 /**
@@ -61,6 +64,8 @@ export function ChainScreen({
   onFxPositionChange,
   labelLum,
   onLabelLumChange,
+  labelSize,
+  onLabelSizeChange,
 }: ChainScreenProps) {
   // Which cards have their controls open, by block position so the set
   // survives a reorder.
@@ -132,6 +137,8 @@ export function ChainScreen({
               }
               labelLum={labelLum}
               onLabelLumChange={onLabelLumChange}
+              labelSize={labelSize}
+              onLabelSizeChange={onLabelSizeChange}
               slot={slot}
               index={position}
               displayIndex={displayPosition(position, drag.from, drag.target)}
