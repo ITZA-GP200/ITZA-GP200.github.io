@@ -13,9 +13,26 @@
    ════════════════════════════════════════════════════════════════════════ */
 
 /* ── the field ──
-   No stage surface, no gloss, no cables: a plain dark field the cards sit on. */
+   No stage surface, no gloss, no cables: a plain dark field the cards sit on.
+
+   A column, so the deck is PUSHED to the bottom rather than merely sticking
+   to it. `position: sticky; bottom: 12px` only reaches the bottom of the
+   scrollport when the content is tall enough to push it there — so the deck
+   rode up the screen whenever the board got shorter, which switching to bars
+   now does. The board area takes the slack instead and the deck stays put. */
 .board-view[data-skin='itza'] .stage {
   background: #1a1a1c;
+  display: flex;
+  flex-direction: column;
+}
+.board-view[data-skin='itza'] .stage > .board-deck {
+  flex: 1 1 auto;
+  /* The rows sit in the middle of whatever room is left, rather than hugging
+     the top with a gap under them. */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
 }
 .board-view[data-skin='itza'] .cables-svg,
 .board-view[data-skin='itza'] .stage-flicker {
@@ -723,17 +740,32 @@
   align-items: baseline;
   gap: 8px;
   line-height: 1.15;
-  font-size: calc(15px * var(--pk-label-k, 1));
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: calc(13px * var(--pk-label-k, 1));
 }
+/* A control label is a control label. Switching a block between dials and
+   bars changes how the VALUE is drawn, never how the name is written, so
+   this restates .k-label exactly — the same face, size, weight and tracking,
+   and the same one grey. It used to inherit the card's body face at 15px,
+   which made the same parameter look like a different kind of thing
+   depending on which control it was wearing.
+
+   Both sizes are the same multiple of --pk-label-k, so the Label Size slider
+   keeps them in step. */
 .pb-name {
+  font-weight: 800;
+  letter-spacing: 0.04em;
   color: var(--pk-label);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* The reading stays louder than its label, as it is on a dial, where it sits
+   large inside the arc while the name is small underneath. */
 .pb-value {
+  font-size: calc(15px * var(--pk-label-k, 1));
+  font-weight: 700;
   color: #f0f0f3;
-  font-weight: 500;
   flex: none;
 }
 .pb-track {
@@ -759,16 +791,17 @@
   gap: 6px 10px;
   align-content: flex-start;
 }
-/* …except in a wide bay, where they go two across.
-   A wide bay belongs to a knob-heavy module (boardLayout's isWideSlot), which
-   is exactly where stacking hurt: the six-band EQ became six full-width bars,
-   roughly 90px taller than the same block drawn as dials. That one card was
-   enough to push the board past the stage, and the fit answered by scaling
-   the whole board down — switch one pedal to bars and every other pedal's
-   controls got smaller. Two across costs nothing in legibility at 330px and
-   keeps a bar card no taller than the dial card it replaced, so the board
-   height does not move and neither does the zoom. */
-.board-view[data-skin='itza'] .pedal-bay.wide .pedal.pk .controls:has(.pbar) .pbar {
+/* …except on the blocks with enough bars to need it, which in practice means
+   the graphic EQ (boardLayout's barsGoTwoAcross). Six full-width bars made a
+   card half again as tall as anything beside it, which pushed the board past
+   the stage; the fit answered by scaling the WHOLE board down, so switching
+   one pedal to bars shrank every other pedal's controls. Two across at 330px
+   costs nothing in legibility and keeps that card no taller than the dial
+   card it replaced.
+
+   Everything else keeps one bar per row, which is the clearer read: a block
+   with three bars has the room, and splitting it bought nothing. */
+.board-view[data-skin='itza'] .pedal.pk .controls.bars-2up:has(.pbar) .pbar {
   flex: 0 0 calc(50% - 5px);
 }
 

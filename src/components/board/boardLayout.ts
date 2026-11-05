@@ -68,14 +68,24 @@ export function pedalIsWide(slotIndex: number, effectId: number): boolean {
  *
  * Anything added later that changes a card's height belongs in here.
  */
-export function boardHeightKey(
+export function boardHeightKey(labelSize: number): string {
+  return String(labelSize);
+}
+
+/**
+ * Which control each block is drawn with, as a key.
+ *
+ * Kept apart from boardHeightKey because the two are allowed different
+ * things. A label-size change may resize the board; a control-style change
+ * may only ever make it smaller, never bigger (see useBoardFit's ceiling) —
+ * switching the board to bars must not grow every label on it.
+ */
+export function boardStyleKey(
   slotIndexes: readonly number[],
   skin: BoardSkin,
   boardStyle: ControlStyle,
-  labelSize: number,
 ): string {
-  const styles = slotIndexes.map((slotIndex) => styleFor(skin, slotIndex, boardStyle)[0]).join('');
-  return `${labelSize}|${styles}`;
+  return slotIndexes.map((slotIndex) => styleFor(skin, slotIndex, boardStyle)[0]).join('');
 }
 
 /**
@@ -98,4 +108,27 @@ export function splitChainRows<T>(cells: readonly T[], maxRows: number): T[][] {
   const rows: T[][] = [];
   for (let at = 0; at < cells.length; at += perRow) rows.push(cells.slice(at, at + perRow));
   return rows;
+}
+
+/**
+ * The fewest bars that are worth splitting into two columns.
+ *
+ * Six is the graphic EQ's band count, and the EQ is the one block where a
+ * single column is genuinely unreadable: six full-width bars stack into a
+ * card half again as tall as anything beside it. Every other block has three
+ * or four, where one bar per row is the clearer read and costs nothing — so
+ * the threshold sits above them and below the EQ.
+ */
+const TWO_COLUMN_BAR_MIN = 5;
+
+/**
+ * Whether an effect's bars are drawn two across instead of one per row.
+ *
+ * By the effect's own control count, not by its bay width: a wide bay means
+ * the MODULE has a knob-heavy effect somewhere in it, which caught the
+ * three-bar blocks (GREEN OD, TWEEDY, DETUNE, PURE, ROOM) and split them for
+ * no reason.
+ */
+export function barsGoTwoAcross(effectId: number): boolean {
+  return knobCount(effectId) >= TWO_COLUMN_BAR_MIN;
 }

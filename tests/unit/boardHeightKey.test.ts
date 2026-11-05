@@ -1,58 +1,57 @@
 import { describe, expect, it } from 'vitest';
-import { boardHeightKey } from '@/components/board/boardLayout';
+import { boardHeightKey, boardStyleKey } from '@/components/board/boardLayout';
 import type { BoardSkin } from '@/core/boardSkin';
 
 const SLOTS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 /**
- * The key the board's fit re-runs on.
+ * The two keys the board's fit watches, and why they are two and not one.
  *
- * This is not cosmetic bookkeeping. Levelling the rows pins a MINIMUM height
- * on every bay, so anything that makes cards SHORTER leaves the observed box
- * unchanged and the ResizeObserver stays silent — the board would hold the
- * size it grew to and dragging the setting back would not release it. Every
- * input that moves a card's height has to be in here.
+ * Levelling the rows pins a MINIMUM height on every bay, so anything that
+ * makes cards shorter leaves the observed box unchanged and the
+ * ResizeObserver stays silent — the board would hold the size it grew to.
+ * Both keys exist to re-run the fit over that.
+ *
+ * They are kept apart because the fit treats them differently: a label-size
+ * change may resize the board, a control-style change may only ever make it
+ * smaller. Bars are the more compact control, so letting a style change raise
+ * the scale would mean switching the board to bars grew every label on it.
  */
 describe('boardHeightKey', () => {
   it('changes with the label size', () => {
-    const a = boardHeightKey(SLOTS, {}, 'dial', 100);
-    const b = boardHeightKey(SLOTS, {}, 'dial', 130);
-    expect(a).not.toBe(b);
+    expect(boardHeightKey(100)).not.toBe(boardHeightKey(130));
   });
 
+  it('carries nothing else, so a style change cannot masquerade as a resize', () => {
+    expect(boardHeightKey(100)).toBe('100');
+  });
+});
+
+describe('boardStyleKey', () => {
   it('changes with the board-wide control style', () => {
-    // a bar card is much taller than the same block drawn as dials
-    expect(boardHeightKey(SLOTS, {}, 'dial', 100)).not.toBe(
-      boardHeightKey(SLOTS, {}, 'bar', 100),
-    );
+    expect(boardStyleKey(SLOTS, {}, 'dial')).not.toBe(boardStyleKey(SLOTS, {}, 'bar'));
   });
 
   it('changes when one single block overrides the style', () => {
     // the case that is easy to miss: the board setting has not moved
-    const plain = boardHeightKey(SLOTS, {}, 'dial', 100);
     const oneBar: BoardSkin = { 6: { style: 'bar' } };
-    expect(boardHeightKey(SLOTS, oneBar, 'dial', 100)).not.toBe(plain);
-  });
-
-  it('is stable for changes that cannot move a card height', () => {
-    // colour and lock are not height; re-fitting on them would be churn
-    const plain = boardHeightKey(SLOTS, {}, 'dial', 100);
-    const painted: BoardSkin = { 2: { color: '#ff5c5c' }, 4: { locked: true } };
-    expect(boardHeightKey(SLOTS, painted, 'dial', 100)).toBe(plain);
+    expect(boardStyleKey(SLOTS, oneBar, 'dial')).not.toBe(boardStyleKey(SLOTS, {}, 'dial'));
   });
 
   it('distinguishes which block was overridden, not just how many', () => {
     const first: BoardSkin = { 0: { style: 'bar' } };
     const last: BoardSkin = { 10: { style: 'bar' } };
-    expect(boardHeightKey(SLOTS, first, 'dial', 100)).not.toBe(
-      boardHeightKey(SLOTS, last, 'dial', 100),
-    );
+    expect(boardStyleKey(SLOTS, first, 'dial')).not.toBe(boardStyleKey(SLOTS, last, 'dial'));
+  });
+
+  it('is stable for changes that cannot move a card height', () => {
+    // colour and lock are not height; re-fitting on them would be churn
+    const painted: BoardSkin = { 2: { color: '#ff5c5c' }, 4: { locked: true } };
+    expect(boardStyleKey(SLOTS, painted, 'dial')).toBe(boardStyleKey(SLOTS, {}, 'dial'));
   });
 
   it('reads an override that matches the board as no change at all', () => {
     const redundant: BoardSkin = { 3: { style: 'dial' } };
-    expect(boardHeightKey(SLOTS, redundant, 'dial', 100)).toBe(
-      boardHeightKey(SLOTS, {}, 'dial', 100),
-    );
+    expect(boardStyleKey(SLOTS, redundant, 'dial')).toBe(boardStyleKey(SLOTS, {}, 'dial'));
   });
 });

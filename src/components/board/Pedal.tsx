@@ -9,7 +9,7 @@ import type { EffectSlot } from '@/core/types';
 import { getEffectName, getSlotModule } from '@/core/effectNames';
 import { EFFECT_DESCRIPTIONS } from '@/core/effectDescriptions';
 import { getBodySpec } from './boardPalette';
-import { pedalIsWide } from './boardLayout';
+import { barsGoTwoAcross, pedalIsWide } from './boardLayout';
 import { type PedalArtEntry } from './pedalManifest';
 import { ModuleGlyph } from './ModuleGlyph';
 import { PedalControls } from './PedalControls';
@@ -316,7 +316,9 @@ export function Pedal({
 
       {/* knob/switch drags must never start a pedal drag */}
       <div
-        className={`controls${panel ? ' amp-panel' : ''}`}
+        className={`controls${panel ? ' amp-panel' : ''}${
+          barsGoTwoAcross(slot.effectId) ? ' bars-2up' : ''
+        }`}
         draggable
         onDragStart={(e) => {
           e.preventDefault();
